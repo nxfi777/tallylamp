@@ -23,7 +23,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
     "chrome-devtools-mcp": "1.8.0",
-    "cookie": "^1.0.2",
+    "cookie": "^2.0.1",
     "express": "^4.21.2",
     "ws": "^8.18.3",
     "zod": "^3.24.4"
