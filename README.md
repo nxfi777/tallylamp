@@ -46,11 +46,16 @@ That Claude Code command is taken from current Claude Code docs. This repo's
 automated tests speak Streamable HTTP with a bearer token; they do not launch
 Claude Code itself.
 
-Docker:
+Docker (local image, same as the Railway Dockerfile — Railway does not use Compose):
 
 ```bash
 export ADMIN_SECRET="$(openssl rand -hex 32)"
-docker compose up --build
+docker build -t tallylamp .
+docker run --rm -p 8080:8080 \
+  -e ADMIN_SECRET \
+  -e TALLYLAMP_PUBLIC_URL=http://127.0.0.1:8080 \
+  -v tallylamp-data:/data \
+  tallylamp
 ```
 
 ## Railway
