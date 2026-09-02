@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+.git
+.tmp
+*.sqlite
+graphify-out
+.env
+tests
+docs

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+.tmp/
+.DS_Store
+.env
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+coverage/
+graphify-out/
+.railway/README.md

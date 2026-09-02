@@ -1,0 +1,21 @@
+services:
+  tallylamp:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      ADMIN_SECRET: "${ADMIN_SECRET:-}"
+      TALLYLAMP_PUBLIC_URL: "${TALLYLAMP_PUBLIC_URL:-http://127.0.0.1:8080}"
+      TALLYLAMP_DATA_DIR: /data
+      TALLYLAMP_MAX_BROWSERS: "4"
+      TALLYLAMP_SANDBOX: auto
+      TALLYLAMP_XVFB: "1"
+    volumes:
+      - tallylamp-data:/data
+    shm_size: "2gb"
+    init: true
+
+volumes:
+  tallylamp-data:

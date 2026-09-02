@@ -1,0 +1,42 @@
+{
+  "name": "tallylamp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Persistent headed browsers for AI agents, with a human watch-and-takeover control plane.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "tallylamp": "./bin/tallylamp.mjs"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "tsx --test --test-concurrency=1 tests/auth.test.ts tests/metadata.test.ts tests/ssrf.test.ts tests/names.test.ts tests/ownership.test.ts tests/takeover.test.ts tests/mcp.test.ts tests/isolation.test.ts tests/persistence.test.ts",
+    "test:realism": "tsx --test tests/realism.test.ts",
+    "test:all": "tsx --test --test-concurrency=1 tests/**/*.test.ts",
+    "lint": "tsc --noEmit",
+    "openapi": "node dist/api/openapi-dump.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "chrome-devtools-mcp": "1.8.0",
+    "cookie": "^1.0.2",
+    "express": "^4.21.2",
+    "ws": "^8.18.3",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/cookie": "^0.6.0",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.10",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
