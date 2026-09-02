@@ -100,7 +100,7 @@ export const LIFECYCLE_TOOLS: Tool[] = [
 function chromeDevtoolsBin(): string {
   const pkg = require.resolve("chrome-devtools-mcp/package.json");
   const dir = path.dirname(pkg);
-  return path.join(dir, "build", "src", "index.js");
+  return path.join(dir, "build", "src", "bin", "chrome-devtools-mcp.js");
 }
 
 type Session = {
