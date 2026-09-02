@@ -423,7 +423,7 @@ async function refresh() {
 async function render() {
   const r = route();
   if (r.name === "login") return loginView();
-  const ok = state.me || await refresh();
+  const ok = await refresh();
   if (!ok) return loginView();
   if (r.name === "browser") return browserView(r.id);
   if (r.name === "agents") return agentsView();
@@ -438,6 +438,14 @@ void render();
 if (window.EventSource) {
   try {
     const es = new EventSource("/api/v1/events");
-    es.onmessage = () => { void refresh().then(() => { if (route().name === "home") void render(); }); };
+    let timer = 0;
+    es.onmessage = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void refresh().then(() => {
+          if (route().name === "home") void homeView();
+        });
+      }, 1500);
+    };
   } catch { /* ignore */ }
 }
