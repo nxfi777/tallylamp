@@ -1,0 +1,34 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+        env:
+          TALLYLAMP_FAKE_CHROME: "1"
+
+  realism:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb chromium
+      - run: npm ci
+      - run: npm run test:realism
+        env:
+          TALLYLAMP_CHROME_BIN: /usr/bin/chromium
+          TALLYLAMP_XVFB: "1"

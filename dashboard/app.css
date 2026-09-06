@@ -1,0 +1,688 @@
+/*
+ * Two themes, three states. An explicit choice is stamped on <html> as data-theme and must win
+ * in BOTH directions, so the dark tokens are applied by two selectors: the media query (for
+ * "follow the system", which stamps nothing) guarded against an explicit light, and the
+ * attribute on its own. Light is the base, so no token is ever left undefined.
+ *
+ * Every pair either theme renders is measured — see the ratios beside each token. The -text
+ * sibling carries words, the plain token fills a shape; one mid-tone cannot do both, and which
+ * of the pair is lighter flips between the themes.
+ */
+:root {
+  color-scheme: light;
+
+  /* Near-zero chroma. The dashboard's job is to frame live browser screenshots, and a tinted
+     shell competes with them; every hue below is reserved for meaning. */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f5f4f2;
+  --line: #e6e3e0;
+  /* WCAG 1.4.11 wants 3:1 for the boundary that identifies a control; --line is a divider and
+     sits deliberately below that. --line-strong: 3.20 on --surface. */
+  --line-strong: #8d8986;
+  --text: #171514;         /* 19.87 on --bg */
+  --muted: #615c58;        /* 6.34 on --bg */
+
+  /* The one high-contrast fill. Solid near-black in light, solid near-white in dark — the
+     page's single loudest element, so there is never a question which action is the main one. */
+  --primary: #1c1a19;
+  --primary-fg: #faf9f8;   /* 15.649 on --primary */
+
+  /* The lamp is the identity, not a status. It was sharing the danger red with the LIVE
+     badge, which made the logo read as "something is live". Amber, and its own token. */
+  --lamp: #b8770c;
+  --tally: #c4302b;        /* danger fill — white on it 5.51 */
+  --tally-text: #a32521;   /* danger label — 7.44 on --bg */
+  --info-text: #1d5fa4;    /* links — 6.94 on --bg */
+  --ok: #136c43;           /* white on it 6.42 */
+  --human: #9a3412;        /* takeover fill — white on it 8.10 */
+  --warn: #7a5c00;         /* 6.36 on --bg */
+  /* Drawn outside the control with a background-coloured gap between the two, so it only ever
+     has to beat the page and surfaces — never the fill it surrounds. */
+  --focus: #1c1a19;
+  --ring-gap: #ffffff;
+
+  --stage-bg: #f5f4f2;     /* letterbox around the live frame */
+  --thumb-bg: #f5f4f2;
+  --nav-bg: #faf9f8;
+  --scrim: rgba(23, 21, 20, 0.45);
+  --hover: rgba(23, 21, 20, 0.04);
+
+  /* Chips that sit ON a live browser frame. The backdrop there is whatever the agent is looking
+     at, not the theme, so these are identical in both: measured on the #0b0b0d chip —
+     text 18.44, live 7.31, human 8.06, idle 7.94. */
+  --chip: #0b0b0d;
+  --chip-text: #fafafa;
+  --chip-muted: #a1a1aa;
+  --chip-live: #f47174;
+  --chip-human: #e8935f;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  /* Borders carry the structure. A card that needs a drop shadow to separate from the page is
+     a card whose border is not doing its job. */
+  --shadow: 0 1px 2px rgba(23, 21, 20, 0.05);
+  --shadow-pop: 0 10px 30px rgba(23, 21, 20, 0.12);
+
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Follow the system, unless the operator has explicitly asked for light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #191818;
+    --surface: #201f21;
+    --surface-2: #292828;
+    --line: #343333;
+    --line-strong: #7a7573;  /* 3.32 on --bg */
+    --text: #f4f2f0;         /* 15.58 on --bg */
+    --muted: #a9a5a1;        /* 7.30 on --bg */
+    --primary: #f4f2f0;
+    --primary-fg: #191818;   /* 17.40 on --primary */
+    --lamp: #f5a623;
+    --tally: #d93a33;        /* white on it 4.55 */
+    --tally-text: #f58079;   /* 6.28 on --bg */
+    --info-text: #84b7e8;    /* 8.03 on --bg */
+    --ok: #2f8256;           /* white on it 5.15 */
+    --human: #c2560c;        /* white on it 5.06 */
+    --warn: #d0a24a;         /* 7.58 on --bg */
+    --focus: #a9a5a1;
+    --ring-gap: #191818;
+    --stage-bg: #191818;
+    --thumb-bg: #1d1c1e;
+    --nav-bg: #141313;
+    --scrim: rgba(0, 0, 0, 0.7);
+    --hover: rgba(250, 250, 250, 0.06);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* And the explicit choice, which must also beat a light system preference. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #191818;
+  --surface: #201f21;
+  --surface-2: #292828;
+  --line: #343333;
+  --line-strong: #7a7573;
+  --text: #f4f2f0;
+  --muted: #a9a5a1;
+  --primary: #f4f2f0;
+  --primary-fg: #191818;
+  --lamp: #f5a623;
+  --tally: #d93a33;
+  --tally-text: #f58079;
+  --info-text: #84b7e8;
+  --ok: #2f8256;
+  --human: #c2560c;
+  --warn: #d0a24a;
+  --focus: #a9a5a1;
+  --ring-gap: #191818;
+  --stage-bg: #191818;
+  --thumb-bg: #1d1c1e;
+  --nav-bg: #141313;
+  --scrim: rgba(0, 0, 0, 0.7);
+  --hover: rgba(250, 250, 250, 0.06);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%;
+  background: var(--bg); color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* The app root had no height at all, so every `min-height: 100%` below it — on .app and on
+   .login — resolved against an indefinite height and did nothing. The login card sat at the
+   top of the window, and the nav column stopped short of the bottom on short pages. A definite
+   height here is what makes those percentages resolve; .main already scrolls its own overflow. */
+#app { height: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--info-text); text-decoration: none; }
+button { cursor: pointer; }
+
+/* There was no focus rule at all: keyboard navigation was invisible. */
+:focus-visible {
+  outline: none;
+  /* Two rings: a background-coloured gap, then the ring itself. The gap means the ring never
+     has to out-contrast the fill it surrounds — only the page behind it. */
+  box-shadow: 0 0 0 2px var(--ring-gap), 0 0 0 4px var(--focus);
+  border-radius: var(--radius-sm);
+}
+
+.skip {
+  position: absolute; left: 0.5rem; top: -3rem; z-index: 60;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: 6px;
+  padding: 0.5rem 0.8rem;
+  transition: top 0.12s ease-out;
+}
+.skip:focus { top: 0.5rem; }
+#main:focus { outline: none; }
+@media (prefers-reduced-motion: reduce) { .skip { transition: none; } }
+
+/* Not display:none. This is an aria-live region, and a node removed from the rendered tree is
+   a node the screen reader is not watching when the message finally arrives. */
+.flash:empty { visibility: hidden; height: 0; margin: 0; }
+.flash { margin-bottom: 0.8rem; }
+
+.app { min-height: 100%; display: grid; grid-template-columns: 220px 1fr; }
+.nav {
+  border-right: 1px solid var(--line);
+  background: var(--nav-bg);
+  padding: 1.25rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.brand {
+  display: flex; align-items: center; gap: 0.65rem;
+  font-weight: 600; letter-spacing: -0.014em; font-size: 0.95rem;
+  padding: 0.2rem 0.4rem 1.1rem;
+}
+/* The mark is a pilot lamp: a lens held between two bezel arcs. It replaces a plain 12px circle.
+   Three things about it are load-bearing and should not be "tidied":
+
+   1. 16px, not 12px. The mark's ink is 16.5 x 18.8 on a 24 grid, so it covers less of its box than
+      a solid disc does. At 12px the bezel arcs render at 0.85px and go to mush; at 16px they land
+      at 1.13px, which is where the opening at the top and bottom still survives as real pixels and
+      the mark reads as a bezel rather than a ring.
+   2. drop-shadow, not box-shadow. The mark is not a rectangle. box-shadow glows the span's BOX,
+      which would put a soft square behind a round mark. drop-shadow follows the rendered alpha.
+   3. The arcs sit on an ellipse of ry/rx = 1.216, so the mark is taller than wide with the gaps at
+      12 and 6 o'clock. Flatten that toward a circle, shorten the sweep, or thicken the strokes and
+      it becomes a pupil in a lid -- an eye, on a product that watches browsers and not people.
+      Whoever redraws this: keep ry/rx >= 1.2 and the sweep at 144 degrees.
+
+   State is carried by the SHAPE of the middle -- nothing, a filled lens, an upright caret -- not by
+   colour, so it survives greyscale, colour blindness and a monochrome README. Colour reinforces it
+   and never carries it alone. The shape is chosen in app.js by lamp(); this only sets the colour. */
+.lamp {
+  width: 16px; height: 16px; flex: none;
+  /* Its own token, not the danger red. The mark used to share a colour with the LIVE badge,
+     so the logo read as a status light rather than as the product. */
+  color: var(--lamp);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--lamp) 50%, transparent));
+}
+.lamp svg { display: block; width: 100%; height: 100%; }
+.lamp.idle { color: var(--line-strong); filter: none; }
+.lamp.ok { color: var(--ok); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ok) 55%, transparent)); }
+.lamp.human { color: var(--human); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--human) 55%, transparent)); }
+.nav a, .nav button.link {
+  display: block; padding: 0.4rem 0.6rem; border-radius: var(--radius-sm);
+  color: var(--muted); background: none; border: 0; text-align: left; width: 100%;
+  font-size: 0.875rem; font-weight: 500;
+}
+.nav a:hover, .nav button.link:hover { background: var(--hover); color: var(--text); }
+.nav a.active { background: var(--surface-2); color: var(--text); }
+.nav .spacer { flex: 1; }
+.nav .theme { font-size: 0.85rem; }
+.main { padding: 1.25rem 1.5rem 2rem; overflow: auto; }
+.top {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 1rem; margin-bottom: 1.1rem; flex-wrap: wrap;
+}
+h1 { font-size: 1.5rem; margin: 0; font-weight: 600; letter-spacing: -0.021em; }
+/* The UA default for h2 is 1.5rem, which is larger than this h1 — the heading levels were
+   rendering upside down anywhere a section heading appeared. */
+h2 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.5rem; letter-spacing: -0.014em; }
+.sub { color: var(--muted); font-size: 0.875rem; margin-top: 0.3rem; }
+
+/* Fleet capacity, drawn. One segment per running slot. */
+.meter-wrap { display: flex; align-items: center; gap: 0.6rem; }
+.meter { display: flex; gap: 3px; }
+.meter .slot {
+  width: 18px; height: 4px; border-radius: 2px;
+  background: var(--line);
+}
+.meter .slot.on { background: var(--text); }
+.meter-label { color: var(--muted); font-size: 0.875rem; }
+
+/* Remaining capacity as empty tiles, matching the height of a real card's frame. */
+.ghost {
+  aspect-ratio: 16/10;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: none;
+  display: grid; place-items: center; gap: 0.4rem;
+  align-content: center;
+  color: var(--muted); font-size: 0.875rem; font-weight: 500;
+  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+}
+button.ghost { cursor: pointer; width: 100%; font-family: inherit; }
+button.ghost:hover { border-color: var(--text); color: var(--text); background: var(--hover); }
+.ghost-plus { font-size: 1.5rem; line-height: 1; font-weight: 400; }
+@media (prefers-reduced-motion: reduce) { .ghost { transition: none; } }
+.row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+input, select {
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  padding: 0 0.65rem; min-height: 32px;
+  font-size: 0.875rem;
+}
+input::placeholder { color: var(--muted); }
+.btn {
+  background: transparent; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 0 0.75rem;
+  min-height: 32px;
+  font-size: 0.875rem; font-weight: 500;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background-color 0.1s ease, border-color 0.1s ease, opacity 0.1s ease;
+}
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+@media (pointer: coarse) {
+  .btn, .nav a, .nav button.link { min-height: 44px; display: inline-flex; align-items: center; }
+}
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); font-weight: 500; }
+/* One white button per page. A grid of cards each shouting a primary action is three shouts and
+   no hierarchy, so the card's main action is the quieter filled variant. */
+.btn.secondary { background: var(--surface-2); border-color: var(--line); color: var(--text); }
+.btn.secondary:hover { background: var(--line); }
+.btn.primary:hover { opacity: 0.9; border-color: var(--primary); }
+.btn.danger { background: transparent; border-color: var(--tally-text); color: var(--tally-text); }
+.btn.danger:hover { background: var(--tally); color: #fff; border-color: var(--tally); }
+/* `margin-left: auto` was doing nothing: .row is sized to its content, so there is no free
+   space for it to absorb, and Delete sat the same 8px from Restart as every routine button.
+   Separate it with real distance and a rule you can see. */
+.top .row .btn.danger { margin-left: 1.4rem; position: relative; }
+.top .row .btn.danger::before {
+  content: ""; position: absolute; left: -0.75rem; top: 50%; transform: translateY(-50%);
+  width: 1px; height: 20px; background: var(--line-strong);
+}
+.btn.human { background: var(--human); border-color: var(--human); color: #fff; }
+.btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.9rem;
+}
+/* A column, so the action row can be pushed to the bottom. This was always wrong — a purpose
+   that wraps to two lines puts one card's Watch button ~25px below its neighbour's — but the
+   grid was split by project, so it only showed inside a project holding more than one browser
+   and was invisible in the single-browser projects that made up most of the page. Flattening
+   put every card next to every other one. The grid stretches a row to a common height anyway;
+   this just spends the shorter card's slack below its buttons instead of above them. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: border-color 0.12s ease;
+  display: flex; flex-direction: column;
+}
+.thumb {
+  flex: none;
+  aspect-ratio: 16/10;
+  background: var(--thumb-bg);
+  display: grid; place-items: center;
+  color: var(--muted); font-size: 0.8rem;
+  position: relative;
+}
+/* Take the frame out of flow. In flow its own proportions set the row height, which beat the
+   16/10 above and made card heights ragged across the grid — every browser streams whatever
+   viewport it happens to have. */
+.thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.badge {
+  position: absolute; top: 8px; right: 8px;
+  font: 500 0.7rem var(--mono);
+  padding: 0.15rem 0.4rem; border-radius: 999px;
+  /* Opaque, not translucent. This badge sits on top of a live screenshot, so at 0.8 alpha the
+     real backdrop was whatever the agent happened to be looking at — measured 3.76:1 for LIVE
+     and 3.00:1 for HUMAN over a white page, both below AA. */
+  background: var(--chip);
+  color: var(--chip-text);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge.live { color: var(--chip-live); }
+.badge.human { color: var(--chip-human); }
+.badge.idle { color: var(--chip-muted); }
+.body { padding: 0.8rem 0.9rem 0.95rem; flex: 1; display: flex; flex-direction: column; }
+.body h3 { margin: 0 0 0.3rem; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.011em; }
+/* The project, back on the card now that it is not a section heading. Clamped to one line on
+   purpose: a metadata value is legal up to 400 characters, and .card has no height cap, so a
+   wrapped project name drags its whole grid row taller and re-ragged the row this change was
+   made to straighten. No text-transform either — .group-h could uppercase a project safely
+   only because it was one heading; as free text per card, uppercasing mangles Greek (μ→Μ is a
+   different letter). */
+.card-project {
+  color: var(--muted); font-size: 0.75rem; font-weight: 500;
+  margin: 0 0 0.15rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.meta { color: var(--muted); font-size: 0.8125rem; line-height: 1.5; display: grid; gap: 0.15rem; }
+.meta .purpose { color: var(--text); }
+.meta .url { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-pills { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.55rem; }
+.site-pill {
+  display: inline-flex; align-items: center; min-height: 22px;
+  padding: 0.12rem 0.42rem; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--text); background: var(--surface-2); font-size: 0.72rem;
+}
+.site-pill.expected { color: var(--muted); border-style: dashed; }
+.site-pill.needs_sign_in { color: var(--warn); }
+.site-pill.more-sites { color: var(--muted); }
+.who { margin-top: 0.55rem; font-size: 0.75rem; color: var(--muted); }
+/* auto, not 0.7rem: the margin absorbs the card's spare height so the buttons sit on the
+   floor. padding-top keeps the 0.7rem minimum when there is no spare height to absorb. */
+.actions { display: flex; gap: 0.4rem; margin-top: auto; padding-top: 0.7rem; }
+.actions .more { margin-left: auto; padding-inline: 0.6rem; line-height: 1; }
+
+.menu {
+  position: fixed; z-index: 200; min-width: 190px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0.3rem;
+  box-shadow: var(--shadow);
+}
+.menu-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: 0; border-radius: 5px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--hover); box-shadow: none; }
+.menu-item.danger { color: var(--tally-text); }
+.menu-item.danger:hover, .menu-item.danger:focus-visible { background: var(--tally); color: #fff; }
+.menu-sep { height: 1px; background: var(--line); margin: 0.3rem 0.2rem; }
+@media (pointer: coarse) { .menu-item { min-height: 40px; } }
+.login {
+  min-height: 100%; display: grid; place-items: center;
+}
+.login-box {
+  width: min(420px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.6rem;
+  box-shadow: var(--shadow);
+}
+.login-box h1 { margin-bottom: 0.3rem; }
+.login-box form { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 1rem; }
+.login-box input { padding: 0.65rem 0.7rem; }
+.table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.table th, .table td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); }
+.table th { color: var(--muted); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.02em; }
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; }
+/* Tab strip, address row, then the frame — the order of a browser window, because that is
+   what the operator is looking at. Chrome's own strip is browser UI and Page.startScreencast
+   only captures page content, so it can never appear in the stream; this is the dashboard's. */
+.stagewrap { display: flex; flex-direction: column; min-width: 0; }
+.tabstrip {
+  display: flex; gap: 2px; align-items: stretch;
+  /* Fixed height and no wrapping. A strip whose height grows with the tab count moves the
+     stage, which changes the size the stage asks Chrome for — a second oscillation source. */
+  height: 34px; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin;
+  background: var(--surface-2); border: 1px solid var(--line); border-bottom: none;
+  border-radius: 10px 10px 0 0; padding: 4px 4px 0;
+}
+.tabstrip .sub { padding: 0.35rem 0.5rem; font-size: 0.78rem; }
+.tab {
+  flex: 0 1 190px; min-width: 60px; max-width: 190px;
+  display: flex; align-items: center; gap: 0.3rem;
+  padding: 0 0.4rem 0 0.6rem; border: 1px solid transparent; border-bottom: none;
+  border-radius: 7px 7px 0 0; background: none; color: var(--muted);
+  font-size: 0.78rem; text-align: left; white-space: nowrap; overflow: hidden;
+}
+.tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tab { cursor: default; }
+.tab.live { cursor: pointer; }
+.tab.live:hover { background: var(--surface); color: var(--text); }
+.tab.on { background: var(--surface); color: var(--text); border-color: var(--line); }
+.tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* The close affordance appears on the tab you are pointing at or the one you are on, so a
+   strip of six tabs is not six crosses competing with six titles. */
+.tab-x {
+  flex: none; width: 18px; height: 18px; border: 0; border-radius: 4px;
+  background: none; color: var(--muted);
+  display: grid; place-items: center; cursor: pointer; opacity: 0;
+}
+.tab-x .icon { width: 11px; height: 11px; }
+.tab:hover .tab-x, .tab.on .tab-x, .tab-x:focus-visible, .tab:focus-within .tab-x { opacity: 1; }
+.tab-x:hover { background: var(--line); color: var(--text); }
+.tab-new {
+  flex: none; width: 28px; margin-left: 2px; border: 0; background: none;
+  color: var(--muted); border-radius: 7px 7px 0 0; cursor: pointer;
+  display: grid; place-items: center;
+}
+.tab-new .icon { width: 13px; height: 13px; }
+.tab-new:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.tab-new:disabled { opacity: 0.35; cursor: default; }
+.urlrow {
+  display: flex; align-items: center; gap: 0.3rem;
+  padding: 0.3rem 0.4rem;
+  background: var(--surface-2); border: 1px solid var(--line); border-bottom: none;
+  font-size: 0.78rem;
+}
+.icon { display: block; width: 15px; height: 15px; }
+.icon svg { width: 100%; height: 100%; display: block; }
+.navbtn {
+  flex: none; width: 27px; height: 25px; padding: 0;
+  display: grid; place-items: center;
+}
+.navbtn:disabled { opacity: 0.35; cursor: default; }
+.urlinput {
+  flex: 1; min-width: 0; margin: 0;
+  padding: 0.3rem 0.6rem; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); color: var(--text);
+  font-family: var(--mono); font-size: 0.78rem;
+  text-overflow: ellipsis;
+}
+.urlinput:focus { outline: 2px solid var(--focus); outline-offset: -1px; border-color: var(--focus); }
+.urlinput:read-only { background: var(--surface-2); color: var(--muted); }
+.stage {
+  background: var(--stage-bg); border: 1px solid var(--line);
+  border-radius: 0 0 10px 10px; overflow: hidden;
+  position: relative;
+  /* A fixed box, not one the stream sizes. The frame used to set the height, so the page
+     jumped when the first frame landed and a tall remote viewport pushed the sidebar off
+     the screen. Letterbox inside a stable box instead — and, now that the stage is what the
+     remote window is sized to, so that measuring it can never be a function of the frame. */
+  height: clamp(320px, calc(100vh - 320px), 900px);
+}
+/* Fullscreen keeps the strip and the address row: they are how you change tab and how you
+   leave. The stage takes everything else, and the ResizeObserver asks Chrome for that size,
+   so fullscreen is 1:1 too. */
+.stagewrap:fullscreen { background: var(--bg); padding: 0; }
+.stagewrap:fullscreen .tabstrip { border-radius: 0; }
+.stagewrap:fullscreen .stage { height: calc(100vh - 68px); border-radius: 0; max-height: none; }
+/* contain, never cover: cropping a browser you are about to click in would hide the button
+   you came for. */
+.stage img, .stage canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: contain; display: block;
+}
+.stage img:focus-visible, .stage canvas:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.stage-status {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: var(--muted); font-size: 0.85rem;
+  z-index: 1;
+  padding: 1rem; text-align: center;
+}
+/* An author `display` beats the UA stylesheet's `[hidden] { display: none }`, so without this
+   the connecting/error overlay stayed in the page once it had nothing to say — invisible, and
+   covering the whole frame with a click target. */
+.stage-status[hidden] { display: none; }
+.stage .bar {
+  /* Bottom, not top: at 1:1 this bar sits on live page pixels, and page content is
+     top-aligned far more often than bottom-aligned. */
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  /* The frame is positioned now, and it comes after this bar in the DOM, so without a stacking
+     order it would paint straight over the mode label. */
+  z-index: 2;
+  /* The bar covers a ~35px band of the remote page. Without this it ate every click there. */
+  pointer-events: none;
+  background: none;
+  font-size: 0.8rem;
+}
+.stage .bar button { pointer-events: auto; }
+/* An opaque chip rather than a fade. The gradient ended at transparent and the text sits at
+   its midpoint, so over a light page the label was washed out to unreadable. */
+.stage .bar > * > span, .stage .bar > span, .stage .bar .mono {
+  background: var(--chip);
+  color: var(--chip-text);
+  padding: 0.2rem 0.45rem;
+  border-radius: 5px;
+}
+.stage .bar .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage .bar-left { display: flex; align-items: center; gap: 0.6rem; flex: none; }
+.stage .bar .mode { text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+/* A frame nobody is updating any more. Dimming it is the difference between "live" and "the
+   last thing we saw", which the viewer previously left the operator to guess. */
+.stage img.stale, .stage canvas.stale { opacity: 0.35; filter: grayscale(0.6); }
+.stage-status-inner { display: grid; gap: 0.6rem; justify-items: center; max-width: 34ch; }
+.stage-status.err { color: var(--chip-text); background: rgba(5, 7, 10, 0.86); }
+.stage .bar .btn.tiny {
+  background: var(--chip); color: var(--chip-text); border-color: var(--chip-muted);
+}
+.btn.tiny { min-height: 0; padding: 0.15rem 0.5rem; font-size: 0.75rem; border-radius: 5px; }
+.side { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem; }
+.side h2 { font-size: 1rem; margin: 1.1rem 0 0; }
+.kv { display: grid; grid-template-columns: 110px 1fr; gap: 0.35rem 0.6rem; font-size: 0.85rem; }
+.kv dt { color: var(--muted); }
+/* Prose stops being readable somewhere past 75 characters a line. On the security page these
+   ran the full width of the window — a 150-character measure. */
+.main > p, .main > .kv { max-width: 60ch; }
+.sub { max-width: 78ch; }
+.banner { max-width: 92ch; }
+.mono { font-family: var(--mono); font-size: 0.8rem; letter-spacing: -0.01em; }
+.warn { color: var(--warn); }
+.ok { color: var(--ok); }
+.err { color: var(--tally-text); }
+.timeline { list-style: none; padding: 0; margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--muted); }
+.timeline li { padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
+.filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.group-h { margin: 1.2rem 0 0.5rem; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
+code { font-family: var(--mono); font-size: 0.82em; background: var(--surface-2); padding: 0.1rem 0.3rem; border-radius: 4px; }
+pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflow: auto; font-family: var(--mono); font-size: 0.78rem; }
+.banner {
+  border: 1px solid var(--line); background: var(--surface-2); padding: 0.6rem 0.8rem;
+  border-radius: 8px; margin-bottom: 0.8rem; font-size: 0.9rem;
+}
+/* One idea per line. As a single paragraph this said four things at once and read as none. */
+.banner p { margin: 0; max-width: 76ch; }
+.banner p + p { margin-top: 0.35rem; color: var(--muted); }
+.banner.watch { border-left: 3px solid var(--ok); }
+.banner.control { border-left: 3px solid var(--human); }
+/* Amber, not the takeover orange and not the danger red: someone is waiting on you is an
+   attention state, not a failure and not a person holding the keyboard. Reusing --human here
+   would have given two different meanings the same stripe. */
+.banner.asks { border-left: 3px solid var(--warn); }
+.asks-h { font-size: 0.95rem; margin: 0 0 0.15rem; }
+/* One row per request, and the rule between them rather than a card each: three nested cards
+   inside a panel is three borders saying the same thing. */
+.ask {
+  display: flex; gap: 0.75rem; align-items: center; justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 0.6rem 0; border-top: 1px solid var(--line);
+}
+.ask:first-of-type { margin-top: 0.5rem; }
+.ask-what { min-width: 18ch; flex: 1 1 26ch; }
+.ask .sub { margin-top: 0.15rem; }
+/* Actions stay together and stay to the right of the text they act on, so the pointer travels
+   once per decision rather than hunting between two columns. */
+.ask .row { flex: 0 0 auto; }
+/* Grant is the action the operator opened this panel to take, so it keeps the filled
+   treatment and Deny gives up its border until you are on it. Deny keeps the full 32px
+   target, though -- quieter is not the same as harder to hit, and it is the safe choice
+   of the two. */
+.ask .btn.deny { color: var(--muted); border-color: transparent; }
+.ask .btn.deny:hover, .ask .btn.deny:focus-visible { color: var(--text); border-color: var(--line); }
+
+.lending .loans, .tunnels .loans { list-style: none; margin: 0.4rem 0 0.7rem; padding: 0; font-size: 0.85rem; }
+.lending .loans li, .tunnels .loans li {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.25rem 0; border-bottom: 1px solid var(--line);
+}
+.lend-toggle { margin-top: 0.6rem; gap: 0.45rem; }
+/* The label is part of the target, not a caption beside it: a 13px checkbox on its own is
+   the smallest thing on the page to hit. */
+.lend-toggle label { font-size: 0.85rem; cursor: pointer; }
+/* The default control paints itself the OS accent -- a bright system blue in a palette that
+   is otherwise monochrome plus one amber. accent-color puts it back in the system. */
+.lend-toggle input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--text); }
+.site-list { list-style: none; margin: 0.4rem 0 0.7rem; padding: 0; }
+.site-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  padding: 0.45rem 0; border-bottom: 1px solid var(--line);
+}
+.site-main { display: grid; gap: 0.08rem; min-width: 0; }
+.site-main strong { font-size: 0.85rem; font-weight: 600; }
+.site-main .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-main .sub { font-size: 0.75rem; }
+.site-actions { flex: none; }
+.site-add { margin: 0.45rem 0; }
+@media (pointer: coarse) {
+  .lend-toggle input { width: 22px; height: 22px; }
+}
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  /* Wrap rather than scroll sideways. As a scroller this nav overflowed (527px of items in
+     485px) and pushed Log out off the edge. */
+  .nav { flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); }
+  .nav .spacer { display: none; }
+  /* `.nav .logout` used to sit here too and never applied: `.nav button.link` above is more
+     specific and kept it displayed. Log out now stays on purpose — an operator on a tablet
+     still has to be able to end their session. */
+  .nav a, .nav button.link { width: auto; }
+  .brand { padding: 0.2rem 0.6rem 0.2rem 0.4rem; }
+  .detail { grid-template-columns: 1fr; }
+  .stage { height: clamp(240px, 56vh, 560px); }
+  .site-list li { align-items: flex-start; flex-direction: column; }
+}
+
+/* Doherty: a navigation that outlasts ~400ms says so, instead of showing dead air. */
+body.busy::before {
+  content: ""; position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 50;
+  /* background-size defaulted to auto, which makes the gradient exactly as wide as the bar —
+     so sliding background-position by a viewport width moved it clean off the element and the
+     indicator was blank for most of every cycle. Give the gradient its own width to travel. */
+  background-image: linear-gradient(90deg, transparent, var(--text), transparent);
+  background-size: 45vw 100%;
+  background-repeat: no-repeat;
+  background-position: -45vw 0;
+  animation: sweep 1.1s linear infinite;
+}
+@keyframes sweep { from { background-position: -45vw 0; } to { background-position: 100vw 0; } }
+@media (prefers-reduced-motion: reduce) {
+  body.busy::before { animation: none; background-image: none; background-color: var(--text); }
+}
+
+/* A credential shown exactly once needs to be selectable, copyable and dismissible. */
+.modal {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+  background: var(--scrim);
+}
+.modal-box {
+  width: min(560px, 92vw); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: 12px;
+  padding: 1.2rem; box-shadow: var(--shadow);
+}
+.modal-box h2 { margin: 0 0 0.3rem; font-size: 1.05rem; }
+.token {
+  width: 100%; margin: 0.7rem 0; resize: vertical;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: 6px; padding: 0.6rem;
+  font-family: var(--mono); font-size: 0.8rem;
+}
+.group-h { font-weight: 500; }
+.login-box label { color: var(--muted); font-size: 0.85rem; }
+.modal-box form { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 1rem; }
+.modal-box form label { color: var(--muted); font-size: 0.85rem; margin-top: 0.6rem; }
+.modal-box .field-hint { font-size: 0.78rem; margin-top: 0.15rem; }
+.modal-box .cmd-label { margin: 0.9rem 0 0; }
+.modal-box .modal-foot { margin-top: 1rem; align-items: center; }
+.modal-box .token { margin: 0.5rem 0 0.6rem; }
