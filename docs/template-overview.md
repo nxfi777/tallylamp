@@ -1,7 +1,5 @@
 # Deploy and host Tallylamp on Railway
 
-Listing draft. Template validation and marketplace publication are pending.
-
 Give your AI agent a browser you can watch and take over.
 
 Tallylamp runs Chrome on your server and keeps its profile between sessions.
@@ -13,11 +11,11 @@ infrastructure used by your deployment.
 
 ## What you deploy
 
-One Dockerfile service with Chrome, Xvfb, and Node.js, plus a persistent volume
+One prebuilt container with Chrome, Xvfb, and Node.js, plus a persistent volume
 at `/data`. The volume holds browser profiles and the SQLite database.
 The service provides an authenticated dashboard and an MCP endpoint at `/mcp`.
 
-The planned template generates a unique `ADMIN_SECRET` for each deployment.
+The template generates a unique `ADMIN_SECRET` for each deployment.
 After deploying, copy that value from your service's Railway variables, open
 the public domain, and use it to sign into the dashboard.
 
@@ -35,6 +33,16 @@ Ask your agent to create a browser and open a site. Choose **Watch** in the
 dashboard to see it, **Take control** to use it yourself, and **Return to agent**
 when you're done. Tallylamp blocks agent actions that change the browser while
 you have control.
+
+## Updates are your choice
+
+The template uses the public `ghcr.io/nxfi777/tallylamp:0.1.1` image, pinned
+to its digest. Automatic image updates are disabled. Pushing source code or
+publishing a new release does not upgrade your deployment.
+
+To upgrade, read the release notes, back up your `/data` volume, then change
+the image reference in Railway to the new release's digest and deploy it.
+Redeploying the existing digest keeps the same application version.
 
 ## What to expect
 

@@ -1,12 +1,13 @@
 # Tallylamp launch plan
 
-Prepared 6 September 2026. This plan tracks the work needed for a public release. The website and marketplace template still need to be built,
-tested, and published.
+Updated 7 September 2026. The repository and the 0.1.1 container image are public.
+The staged Railway template passed fresh-install and profile-persistence checks.
+Its settings still need to be applied in Railway's template editor before
+marketplace publication. The website remains to be built.
 
 ## Repository decision
 
-Keep one main open-source repository. Decide which history can be public before
-publishing it. The runtime,
+Keep one main open-source repository. The runtime,
 Dockerfile, public deployment configuration, tests, and documentation belong here.
 A second cleaned copy would need every bug fix and release kept in sync.
 
@@ -24,14 +25,16 @@ GitHub environment settings. If a deploy workflow is added later, restrict it to
 the canonical repository and intended branch. Pull requests should run tests.
 See [GitHub deployment environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
 
-The 6 September history review covered 49 commits across all fetched refs.
-Gitleaks found no credentials, but an older `.env.example` contains the live
-personal deployment hostname. Historical commits also retain the former root
-instruction files and author names and email addresses. Removing files in a new
-commit leaves their earlier versions in history. Decide whether those records
-can be public before publishing the history. No history rewrite has been made.
-GitHub deployment and check metadata was not accessible anonymously and remains
-unverified; it can contain links outside the Git file history.
+The 6 September history review covered 49 commits. Gitleaks found no credentials.
+The main branch was then replaced with a single initial release commit, with the
+old repository backed up outside this checkout. Normal development history resumes
+from that point. GitHub's 36 deployment records and two empty environments were
+removed separately. Old pull-request refs can retain commits outside the main
+branch, and future Railway deployments can create new GitHub metadata.
+
+Public distribution uses versioned GHCR images. Publishing a release runs tests
+before pushing the image; the template pins its digest and disables automatic
+image upgrades. Operators choose when to change versions.
 
 ## Positioning
 
@@ -71,7 +74,7 @@ a setup time or monthly bill until a fresh install has been measured.
    The user guide now matches that command instead of the README's old
    `npx tallylamp` example. Open-source licensing does not require npm publication;
    a published CLI can be a later convenience.
-3. Create a clean Railway test project from the public source. Apply the settings
+3. Create a clean Railway test project from the public release image. Apply the settings
    in `docs/railway.md`: one service, `/data` volume, port 8080, healthcheck, a
    generated secret in the template, and an initial cap of two browsers. Verify
    the IaC configuration with Railway; its checked-in description alone is not

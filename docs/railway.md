@@ -1,13 +1,16 @@
 # Railway
 
-Deploy Tallylamp as one Dockerfile service with a volume mounted at `/data`.
+Deploy Tallylamp from its public GHCR image with a volume mounted at `/data`.
 The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Deploy the repository using its Dockerfile.
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.1.1`. The Railway
+   template supplies these settings, pins the image digest, and leaves automatic
+   image updates disabled.
 2. Attach a volume at `/data`.
-3. Set **`ADMIN_SECRET`** only (`openssl rand -hex 32`). Do not paste `.env.example`.
+3. Set **`ADMIN_SECRET`** (`openssl rand -hex 32`); the template generates it for you.
+   Do not paste `.env.example`. Start with `TALLYLAMP_MAX_BROWSERS=2`.
 4. Set the healthcheck to `/healthz` with a 120-second timeout.
 5. Generate a public domain on port **8080**.
 6. Open the URL and log in.
@@ -18,11 +21,12 @@ The volume keeps browser profiles and the database across redeploys.
 
 | Setting | Value |
 |---|---|
-| Builder | Dockerfile |
+| Source | Public GHCR image, pinned to a release digest |
+| Automatic image updates | Disabled |
 | Healthcheck | `/healthz` |
 | Timeout | 120s recommended (startup healthcheck) |
 | Volume mount | `/data` |
-| Start | `node dist/index.js` (entrypoint already does this) |
+| Start command | Leave unset; keep the image's entrypoint |
 | Replicas | 1 |
 
 ## Required and inferred variables
@@ -95,8 +99,9 @@ copying the whole file into Railway can override deployment defaults.
 a published marketplace template. The listing copy is in
 [template-overview.md](template-overview.md).
 
-Create the template from a clean test project connected to the public repository.
-Use the Dockerfile, one replica, a `/data` volume, an HTTP domain on port `8080`,
+Create the template from a clean test project using the public release image.
+Pin its digest and set `source.autoUpdates.type` to `disabled`. Keep the image's
+entrypoint, one replica, a `/data` volume, an HTTP domain on port `8080`,
 and a `/healthz` healthcheck with a 120-second timeout. Set these template variables:
 
 | Variable | Template value |
@@ -122,6 +127,35 @@ use the dashboard. [CLI reference](https://docs.railway.com/cli/templates).
 Deploy an unpublished copy into a fresh project before publishing. Verify login,
 an agent connection, watch/takeover/return, and profile persistence after a redeploy.
 Then publish and add its real deploy URL to the README and website.
+
+## Releasing and upgrading
+
+The current release is [0.1.1](https://github.com/nxfi777/tallylamp/releases/tag/v0.1.1)
+for Linux amd64. To pin the tested artifact, use this image reference:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:2326b4961e1c84228538a8b8b8b91fe3f1fb749115924f8f4152ebf8418ae268
+```
+
+Release validation covered anonymous registry access, dashboard login, MCP
+navigation, OAuth discovery, viewer frames, takeover and return, token revocation,
+and cookies and local storage across browser stops and a Railway redeploy.
+Two template installations generated different dashboard passwords. These were
+API and container checks; they do not certify every external MCP client.
+
+The `release image` workflow runs when a GitHub release is published. It checks
+that the `vX.Y.Z` tag matches `package.json`, builds a Linux amd64 image, and tests
+the application and headed Chrome before pushing to GHCR. Normal commits and
+pull requests run CI without publishing an image. Release tags are never replaced
+once an image has been published, and the workflow refuses an existing image
+version. There is no floating `latest` tag.
+
+An operator upgrades by reading the release notes, backing up `/data`, and
+changing Railway's image reference to the new release digest. Keep automatic
+image updates disabled. A source push or a new release leaves existing template
+deployments on their chosen digest. Redeploys interrupt active browsers; the
+volume keeps their profiles. Before reverting an image, check whether the newer
+release changed the database format and restore a compatible backup if needed.
 
 ## Platform notes
 

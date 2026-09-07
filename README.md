@@ -36,40 +36,44 @@ identify or block automation. It does not bypass CAPTCHAs.
 
 ### Railway
 
-Deploy this repository as one service using the root Dockerfile:
+Deploy `ghcr.io/nxfi777/tallylamp:0.1.1` as an image service:
 
 1. Attach a volume at `/data` to keep browser profiles and the database.
 2. Set `ADMIN_SECRET` to a long random value. Generate one with
    `openssl rand -hex 32` and save it as your dashboard password.
 3. Set the healthcheck path to `/healthz` and its timeout to 120 seconds.
 4. Generate a public domain targeting port `8080`.
-5. Open the domain, log in, and [connect an agent](#connect-an-agent).
+5. Keep automatic image updates disabled.
+6. Open the domain, log in, and [connect an agent](#connect-an-agent).
 
 Tallylamp infers its public URL from Railway's domain. Leave
 `TALLYLAMP_DATA_DIR` unset in Railway variables and keep `.env.example` for local
-use. The default cap is four browsers; start with fewer if memory is limited.
+use. Set `TALLYLAMP_MAX_BROWSERS=2` as a starting cap; the app default is four.
 Budget roughly 1–2 GB per active Chrome, plus the server, and measure your workload.
 
 [Railway setup, variables, and deployment limits](docs/railway.md).
 
 ### Docker
 
-Run these commands from a clone of this repository:
+Run the published Linux amd64 image:
 
 ```bash
 export ADMIN_SECRET="$(openssl rand -hex 32)"
 # Save ADMIN_SECRET in your password manager before closing this shell.
-docker build -t tallylamp .
-docker run --rm -p 127.0.0.1:8080:8080 \
+docker run --rm --platform linux/amd64 -p 127.0.0.1:8080:8080 \
   -e ADMIN_SECRET \
   -e TALLYLAMP_PUBLIC_URL=http://127.0.0.1:8080 \
   -v tallylamp-data:/data \
-  tallylamp
+  ghcr.io/nxfi777/tallylamp:0.1.1
 ```
 
 Open <http://127.0.0.1:8080> and log in with that secret. This command binds to
 your local machine. For a remote host, put the service behind HTTPS and set
 `TALLYLAMP_PUBLIC_URL` to its public origin.
+
+For a native ARM build or local changes, clone the repository and run
+`docker build -t tallylamp .`, then use `tallylamp` as the image name and omit
+`--platform linux/amd64`.
 
 ## Connect an agent
 
