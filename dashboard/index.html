@@ -32,21 +32,9 @@
         /* private mode, or storage disabled: fall through to the system preference */
       }
     </script>
-    <!-- Two icons, so the lamp does not vanish into a light or dark browser tab strip. -->
-    <!--
-      The pilot lamp: a lens held between two bezel arcs, same geometry as .lamp in app.css.
-      Two encoding rules bite inside a data URI in an attribute: a literal # ends the URL, so every
-      colour is written %23, and the arc parameters are comma-separated rather than space-separated
-      so the whole value survives as one attribute.
-
-      Each build uses --tally-text, not --tally. This is a favicon, seen at 16px, where the bezel
-      arcs are about one pixel wide -- and the fill reds (c92a2f / d92b31) are chosen to carry white
-      text on top of them, not to be thin strokes on a page. The palette already defines the
-      readable siblings for that job: a51d22 is 7.44 on white, f47174 is 6.28 on the dark ground.
-      Use the fill reds here and the arcs fade out, leaving the plain dot this mark replaced.
-    -->
-    <link rel="icon" media="(prefers-color-scheme: light)" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' fill='%23ffffff'/><g fill='none' stroke='%23b8770c' stroke-width='1.9' stroke-linecap='round'><path d='M14.29,3.44a7.4,9,0,0,1,0,17.12'/><path d='M9.71,3.44a7.4,9,0,0,0,0,17.12'/></g><circle cx='12' cy='12' r='3.3' fill='%23b8770c'/></svg>" />
-    <link rel="icon" media="(prefers-color-scheme: dark)" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' fill='%23191818'/><g fill='none' stroke='%23f5a623' stroke-width='1.9' stroke-linecap='round'><path d='M14.29,3.44a7.4,9,0,0,1,0,17.12'/><path d='M9.71,3.44a7.4,9,0,0,0,0,17.12'/></g><circle cx='12' cy='12' r='3.3' fill='%23f5a623'/></svg>" />
+    <!-- Rounded backgrounds keep the lamp legible on both browser tab themes. -->
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon-light.svg" />
+    <link rel="icon" type="image/svg+xml" sizes="any" media="(prefers-color-scheme: dark)" href="/favicon-dark.svg" />
   </head>
   <body>
     <div id="app"></div>
