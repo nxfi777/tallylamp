@@ -56,6 +56,13 @@ async function tool(name, args = {}, allowError = false) {
   return result;
 }
 
+function examplePageId(result) {
+  const listing = result.content.filter(c => c.type === "text").map(c => c.text).join("\n");
+  const pageId = Number(listing.match(/(?:^|\n)(\d+):[^\n]*https:\/\/example\.com(?:\/|\))/m)?.[1]);
+  assert.ok(Number.isFinite(pageId), `Expected example.com in page listing: ${listing}`);
+  return pageId;
+}
+
 for (let attempt = 0; ; attempt++) {
   try {
     assert.equal((await request("/healthz", { anonymous: true })).response.status, 200);
@@ -84,9 +91,7 @@ try {
   browserId = JSON.parse(browser.content.find(c => c.type === "text").text).browserId;
   assert.ok(browserId);
   const page = await tool("new_page", { url: "https://example.com" });
-  const listing = page.content.filter(c => c.type === "text").map(c => c.text).join("\n");
-  const pageId = Number(listing.match(/(?:^|\n)(\d+):[^\n]*https:\/\/example\.com(?:\/|\))/m)?.[1]);
-  assert.ok(Number.isFinite(pageId), `Expected example.com in page listing: ${listing}`);
+  const pageId = examplePageId(page);
   const ua = await tool("evaluate_script", { pageId, function: "() => ({ua: navigator.userAgent, webdriver: navigator.webdriver})" });
   const surface = JSON.stringify(ua.content);
   assert.ok(!surface.includes("HeadlessChrome"), "Chrome must be headed");
@@ -112,8 +117,8 @@ try {
   await tool("evaluate_script", { pageId, function: "() => { localStorage.setItem('release-check', 'saved'); document.cookie = 'release_check=saved; Max-Age=86400; Secure; SameSite=Lax'; return true; }" });
   await tool("tallylamp_stop_browser", { browserId });
   await tool("tallylamp_use_browser", { browserId });
-  await tool("new_page", { url: "https://example.com" });
-  const saved = await tool("evaluate_script", { function: "() => ({stored: localStorage.getItem('release-check'), cookie: document.cookie})" });
+  const restartedPageId = examplePageId(await tool("new_page", { url: "https://example.com" }));
+  const saved = await tool("evaluate_script", { pageId: restartedPageId, function: "() => ({stored: localStorage.getItem('release-check'), cookie: document.cookie})" });
   const stored = saved.content.filter(c => c.type === "text").map(c => c.text).join("\n");
   assert.ok(/"stored":\s*"saved"/.test(stored) && stored.includes('release_check=saved'), `Profile data was lost on stop: ${stored}`);
   console.log("PASS: cookies and local storage survive an immediate browser stop/start");
