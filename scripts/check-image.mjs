@@ -85,7 +85,7 @@ try {
   assert.ok(browserId);
   const page = await tool("new_page", { url: "https://example.com" });
   const listing = page.content.filter(c => c.type === "text").map(c => c.text).join("\n");
-  const pageId = Number(listing.match(/(?:^|\n)(\d+):\s*https:\/\/example\.com/m)?.[1]);
+  const pageId = Number(listing.match(/(?:^|\n)(\d+):[^\n]*https:\/\/example\.com(?:\/|\))/m)?.[1]);
   assert.ok(Number.isFinite(pageId), `Expected example.com in page listing: ${listing}`);
   const ua = await tool("evaluate_script", { pageId, function: "() => ({ua: navigator.userAgent, webdriver: navigator.webdriver})" });
   const surface = JSON.stringify(ua.content);
