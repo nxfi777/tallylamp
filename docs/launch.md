@@ -1,9 +1,8 @@
 # Tallylamp launch plan
 
 Updated 7 September 2026. The repository and the 0.1.1 container image are public.
-The staged Railway template passed fresh-install and profile-persistence checks.
-Its settings still need to be applied in Railway's template editor before
-marketplace publication. The website remains to be built.
+The [Railway template](https://railway.com/deploy/tallylamp) is published and
+passed fresh-install and profile-persistence checks. The website remains to be built.
 
 ## Repository decision
 

@@ -1,4 +1,4 @@
-# Deploy and host Tallylamp on Railway
+# Deploy and Host Tallylamp on Railway
 
 Give your AI agent a browser you can watch and take over.
 
@@ -9,7 +9,7 @@ to sign in or finish a verification step, then return control to the agent.
 Tallylamp is open source under the MIT license. You pay Railway for the
 infrastructure used by your deployment.
 
-## What you deploy
+## About Hosting Tallylamp
 
 One prebuilt container with Chrome, Xvfb, and Node.js, plus a persistent volume
 at `/data`. The volume holds browser profiles and the SQLite database.
@@ -18,6 +18,29 @@ The service provides an authenticated dashboard and an MCP endpoint at `/mcp`.
 The template generates a unique `ADMIN_SECRET` for each deployment.
 After deploying, copy that value from your service's Railway variables, open
 the public domain, and use it to sign into the dashboard.
+
+## Why Deploy Tallylamp on Railway?
+
+Railway provisions the service, HTTPS domain, and persistent volume in your
+workspace. The template supplies the healthcheck and a generated dashboard
+password. You choose when to upgrade the application.
+
+## Common Use Cases
+
+- Keep a browser profile ready for an agent's recurring tasks.
+- Take control to sign in, then let the agent continue.
+- Watch a browser session live to inspect what the agent is doing.
+
+## Dependencies for Tallylamp
+
+The public Linux amd64 image includes Node.js 22, Google Chrome, and Xvfb.
+SQLite runs in the same container; there is no separate database service to set up.
+
+### Deployment Dependencies
+
+- A Railway account with enough memory for the browsers you run.
+- A persistent volume mounted at `/data`, configured by the template.
+- The generated `ADMIN_SECRET` from your service's variables, used to sign in.
 
 ## Connect your agent
 

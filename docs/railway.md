@@ -1,6 +1,7 @@
 # Railway
 
-Deploy Tallylamp from its public GHCR image with a volume mounted at `/data`.
+Use the [Railway template](https://railway.com/deploy/tallylamp), or deploy
+Tallylamp from its public GHCR image with a volume mounted at `/data`.
 The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
@@ -95,9 +96,10 @@ copying the whole file into Railway can override deployment defaults.
 
 ## Publishing the template
 
-`.railway/railway.ts` describes the intended service and volume. It is not itself
-a published marketplace template. The listing copy is in
-[template-overview.md](template-overview.md).
+The published template is at [railway.com/deploy/tallylamp](https://railway.com/deploy/tallylamp).
+The listing copy is in [template-overview.md](template-overview.md), including
+Railway's required section headings. `.railway/railway.ts` is a separate project
+configuration example; it does not update the marketplace template.
 
 Create the template from a clean test project using the public release image.
 Pin its digest and set `source.autoUpdates.type` to `disabled`. Keep the image's

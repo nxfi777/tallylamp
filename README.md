@@ -36,19 +36,20 @@ identify or block automation. It does not bypass CAPTCHAs.
 
 ### Railway
 
-Deploy `ghcr.io/nxfi777/tallylamp:0.1.1` as an image service:
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tallylamp)
 
-1. Attach a volume at `/data` to keep browser profiles and the database.
-2. Set `ADMIN_SECRET` to a long random value. Generate one with
-   `openssl rand -hex 32` and save it as your dashboard password.
-3. Set the healthcheck path to `/healthz` and its timeout to 120 seconds.
-4. Generate a public domain targeting port `8080`.
-5. Keep automatic image updates disabled.
-6. Open the domain, log in, and [connect an agent](#connect-an-agent).
+The template sets up the public `0.1.1` image, a persistent `/data` volume,
+healthcheck, HTTPS domain, and a generated dashboard password. It pins the image
+digest and leaves automatic upgrades disabled.
+
+1. Deploy the template into your Railway workspace.
+2. Copy `ADMIN_SECRET` from the service's Railway variables and save it as your
+   dashboard password.
+3. Open the generated domain, log in, and [connect an agent](#connect-an-agent).
 
 Tallylamp infers its public URL from Railway's domain. Leave
 `TALLYLAMP_DATA_DIR` unset in Railway variables and keep `.env.example` for local
-use. Set `TALLYLAMP_MAX_BROWSERS=2` as a starting cap; the app default is four.
+use. The template starts with `TALLYLAMP_MAX_BROWSERS=2`; the app default is four.
 Budget roughly 1–2 GB per active Chrome, plus the server, and measure your workload.
 
 [Railway setup, variables, and deployment limits](docs/railway.md).
