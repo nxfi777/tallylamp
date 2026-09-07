@@ -5,6 +5,7 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import WebSocket from "ws";
 import { config } from "./config.js";
 import { log } from "./log.js";
 
@@ -287,14 +288,38 @@ export function killProcessTree(pid?: number): void {
   }
 }
 
+function exited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
+async function closeChrome(rt: ChromeRuntime, timeoutMs: number): Promise<void> {
+  const response = await fetch(`${rt.cdpUrl}/json/version`, { signal: AbortSignal.timeout(timeoutMs) });
+  const { webSocketDebuggerUrl } = await response.json() as { webSocketDebuggerUrl: string };
+  await new Promise<void>((resolve, reject) => {
+    const ws = new WebSocket(webSocketDebuggerUrl, { handshakeTimeout: timeoutMs });
+    const timer = setTimeout(() => { ws.terminate(); reject(new Error("Chrome close timed out")); }, timeoutMs);
+    ws.once("open", () => ws.send(JSON.stringify({ id: 1, method: "Browser.close" })));
+    ws.once("message", () => { clearTimeout(timer); ws.terminate(); resolve(); });
+    ws.once("close", () => { clearTimeout(timer); resolve(); });
+    ws.once("error", (error) => { clearTimeout(timer); reject(error); });
+  });
+}
+
 export async function stopRuntime(rt: ChromeRuntime, timeoutMs = config.shutdownTimeoutMs): Promise<void> {
-  killProcessTree(rt.chrome.pid);
-  if (rt.xvfb?.pid) killProcessTree(rt.xvfb.pid);
-  const start = Date.now();
-  while (rt.chrome.exitCode === null && Date.now() - start < timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  // Closing Chrome through CDP flushes cookies and profile storage. Killing its
+  // process group or display first can lose writes made just before a stop.
+  if (!exited(rt.chrome) && timeoutMs > 0) {
+    try {
+      await closeChrome(rt, Math.max(1, Math.min(1_000, Math.floor(timeoutMs / 3))));
+    } catch {
+      killProcessTree(rt.chrome.pid);
+    }
+  }
+  while (!exited(rt.chrome) && Date.now() < deadline) {
     await sleep(50);
   }
-  if (rt.chrome.exitCode === null && rt.chrome.pid) {
+  if (!exited(rt.chrome) && rt.chrome.pid) {
     try {
       process.kill(-rt.chrome.pid, "SIGKILL");
     } catch {
@@ -304,6 +329,8 @@ export async function stopRuntime(rt: ChromeRuntime, timeoutMs = config.shutdown
         /* ignore */
       }
     }
+    const killedDeadline = Date.now() + 1_000;
+    while (!exited(rt.chrome) && Date.now() < killedDeadline) await sleep(25);
   }
   if (rt.xvfb?.pid) {
     try {
@@ -312,6 +339,7 @@ export async function stopRuntime(rt: ChromeRuntime, timeoutMs = config.shutdown
       /* ignore */
     }
   }
+  if (!exited(rt.chrome)) throw new Error("Chrome did not exit; its profile remains locked");
   clearSingletonLocks(rt.profileDir);
 }
 

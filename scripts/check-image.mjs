@@ -108,6 +108,15 @@ try {
   assert.equal((await request(`/api/v1/browsers/${browserId}/control`, { method: "DELETE" })).response.status, 200);
   await tool("navigate_page", { pageId, url: "https://example.com" });
   console.log("PASS: live viewer frames, takeover blocks mutations, agent resumes");
+
+  await tool("evaluate_script", { pageId, function: "() => { localStorage.setItem('release-check', 'saved'); document.cookie = 'release_check=saved; Max-Age=86400; Secure; SameSite=Lax'; return true; }" });
+  await tool("tallylamp_stop_browser", { browserId });
+  await tool("tallylamp_use_browser", { browserId });
+  await tool("new_page", { url: "https://example.com" });
+  const saved = await tool("evaluate_script", { function: "() => ({stored: localStorage.getItem('release-check'), cookie: document.cookie})" });
+  const stored = saved.content.filter(c => c.type === "text").map(c => c.text).join("\n");
+  assert.ok(/"stored":\s*"saved"/.test(stored) && stored.includes('release_check=saved'), `Profile data was lost on stop: ${stored}`);
+  console.log("PASS: cookies and local storage survive an immediate browser stop/start");
 } finally {
   if (browserId) await request(`/api/v1/browsers/${browserId}`, { method: "DELETE" });
   if (agentId) {

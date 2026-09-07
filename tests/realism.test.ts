@@ -48,6 +48,47 @@ describe("browser realism differential", { skip: !chromeAvailable }, () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("persists newly written cookies and local storage through an immediate stop", async () => {
+    const { launchChrome, stopRuntime } = await import("../src/chrome.js");
+    const { CdpClient, browserWsUrl, evaluate } = await import("../src/cdp.js");
+    const { createServer } = await import("node:http");
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "tallylamp-persistence-"));
+    const server = createServer((_req, res) => res.end("Profile persistence test"));
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    let rt: Awaited<ReturnType<typeof launchChrome>> | undefined;
+    let cdp: InstanceType<typeof CdpClient> | undefined;
+    try {
+      for (const writing of [true, false]) {
+        rt = await launchChrome({ profileDir: dir, downloadDir: join(dir, "dl") });
+        cdp = new CdpClient(await browserWsUrl(rt.cdpUrl));
+        await cdp.connect();
+        await evaluate(cdp, `location.href = 'http://127.0.0.1:${port}/'`);
+        for (let attempt = 0; ; attempt++) {
+          if (await evaluate(cdp, `location.origin === 'http://127.0.0.1:${port}' && document.readyState === 'complete'`)) break;
+          assert.ok(attempt < 100, "test page did not load");
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        if (writing) {
+          await evaluate(cdp, `localStorage.setItem('saved', 'yes'); document.cookie = 'saved=yes; Max-Age=86400'; true`);
+        } else {
+          assert.deepEqual(await evaluate(cdp, `({saved: localStorage.getItem('saved'), cookie: document.cookie})`),
+            { saved: "yes", cookie: "saved=yes" });
+        }
+        await cdp.close(); cdp = undefined;
+        await stopRuntime(rt); rt = undefined;
+      }
+    } finally {
+      await cdp?.close();
+      if (rt) await stopRuntime(rt);
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("gpu flags", () => {
