@@ -102,6 +102,6 @@ export function sanitizeMetadata(input: unknown): BrowserMetadata {
   return out;
 }
 
-export const CREATE_BROWSER_TOOL_DESCRIPTION = `Create a headed persistent browser this agent can drive. When known, provide concise metadata describing your source, project and purpose. This is displayed to the user so they can understand why the browser exists. Metadata is optional. Do not include secrets, credentials, cookies, tokens or sensitive page content. Do not fabricate metadata when it is unknown.
+export const CREATE_BROWSER_TOOL_DESCRIPTION = `Create a headed persistent browser this agent can drive. First call tallylamp_list_browsers and prefer tallylamp_use_browser for an accessible browser matching the project, purpose, and intended account. Create a new one when no suitable browser exists or a separate session is needed. Profiles are saved automatically by default; no separate save step or template is needed to return to this browser. Respect an explicitly temporary-session request. When known, provide concise metadata describing your source, project and purpose. This is displayed to the user so they can understand why the browser exists. Metadata is optional. Do not include secrets, credentials, cookies, tokens or sensitive page content. Do not fabricate metadata when it is unknown.
 
 Example: { "persistent": true, "metadata": { "source": "claude-code", "project": "tallylamp", "purpose": "Verify dashboard takeover behavior" } }`;

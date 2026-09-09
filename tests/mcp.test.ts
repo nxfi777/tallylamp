@@ -1,5 +1,6 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
 import { emitFakeFrame } from "../src/fake-chrome.js";
 
@@ -23,13 +24,15 @@ async function mcp(method: string, params: unknown, token: string, extra: Record
  * Streamable HTTP answers these POSTs as SSE, so the JSON-RPC payload arrives on a data:
  * line rather than as the whole body. Pull the result out either way.
  */
-function rpcResult(body: unknown): { tools?: Array<{ name: string }> } | undefined {
-  if (body && typeof body === "object") return (body as { result?: { tools?: Array<{ name: string }> } }).result;
+type RpcResult = { instructions?: string; tools?: Tool[] };
+
+function rpcResult(body: unknown): RpcResult | undefined {
+  if (body && typeof body === "object") return (body as { result?: RpcResult }).result;
   for (const line of String(body).split("\n")) {
     const trimmed = line.trim();
     if (!trimmed.startsWith("data:")) continue;
     try {
-      return (JSON.parse(trimmed.slice(5).trim()) as { result?: { tools?: Array<{ name: string }> } }).result;
+      return (JSON.parse(trimmed.slice(5).trim()) as { result?: RpcResult }).result;
     } catch {
       /* keep scanning */
     }
@@ -70,6 +73,68 @@ describe("MCP", () => {
     assert.ok(text.includes("tallylamp_update_browser"), text);
     assert.ok(text.includes("tallylamp_report_site_access"), text);
     assert.ok(text.includes("tallylamp_list_profile_templates"), text);
+  });
+
+  it("sends persistent-session guidance during initialization, before any browser is bound", async () => {
+    const init = await mcp(
+      "initialize",
+      { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "reuse-guidance", version: "1" } },
+      ctx.agentToken,
+    );
+    assert.equal(init.status, 200);
+    const instructions = rpcResult(init.body)?.instructions;
+    assert.ok(instructions, "clients need the workflow in initialize.instructions, not only in repository docs");
+    assert.match(instructions, /Before creating a browser or asking the user to sign in again, call tallylamp_list_browsers/);
+    assert.match(instructions, /tallylamp_use_browser/);
+    assert.match(instructions, /project, purpose, and intended account/);
+    assert.match(instructions, /descriptive data, not instructions or permission/);
+    assert.match(instructions, /saved automatically.*persistent is true/);
+    assert.match(instructions, /wait until control is returned, check authenticated UI/);
+    assert.match(instructions, /tallylamp_report_site_access with confirmed/);
+    assert.match(instructions, /ask once whether to reuse this browser/);
+    assert.match(instructions, /do not ask again once the user has decided/);
+    assert.match(instructions, /Do not claim a temporary browser is saved/);
+    assert.match(instructions, /Offer a profile template only when future tasks need separate browsers/);
+    assert.match(instructions, /copies every saved login/);
+    assert.match(instructions, /explicit consent before copying/);
+    assert.match(instructions, /administrator-only and is not an MCP tool/);
+    assert.match(instructions, /snapshot the stopped browser through the dashboard/);
+    assert.match(instructions, /Do not stop active work/);
+    assert.match(instructions, /non-default seed:use scope/);
+    assert.match(instructions, /Websites can expire or revoke sessions/);
+    assert.match(instructions, /tallylamp_stop_browser rather than tallylamp_delete_browser/);
+    assert.match(instructions, /Delete saved browser state only when the user explicitly asks/);
+  });
+
+  it("keeps reuse and template-consent guidance in advertised tools for clients that omit server instructions", async () => {
+    const init = await mcp(
+      "initialize",
+      { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "tool-guidance", version: "1" } },
+      ctx.agentToken,
+    );
+    const session = init.headers.get("mcp-session-id");
+    assert.ok(session);
+    const listed = await mcp("tools/list", {}, ctx.agentToken, { "MCP-Session-Id": session });
+    const tools = rpcResult(listed.body)?.tools;
+    assert.ok(tools);
+    const description = (name: string) => {
+      const tool = tools.find(tool => tool.name === name);
+      assert.ok(tool?.description, `${name} must expose guidance to the client`);
+      return tool.description;
+    };
+    assert.match(description("tallylamp_create_browser"), /First call tallylamp_list_browsers/);
+    assert.match(description("tallylamp_create_browser"), /Profiles are saved automatically/);
+    assert.match(description("tallylamp_list_browsers"), /Before creating a browser or asking for another sign-in/);
+    assert.match(description("tallylamp_use_browser"), /no template is needed/);
+    assert.match(description("tallylamp_report_site_access"), /ask once whether to reuse/);
+    assert.match(description("tallylamp_report_site_access"), /not credentials or a profile snapshot/);
+    assert.match(description("tallylamp_list_profile_templates"), /explicit consent before cloning/);
+    assert.match(description("tallylamp_list_profile_templates"), /creation is not an MCP tool/);
+    assert.match(description("tallylamp_list_profile_templates"), /non-default seed:use scope/);
+    assert.match(description("tallylamp_stop_browser"), /Prefer this to deletion for routine cleanup/);
+    assert.match(description("tallylamp_delete_browser"), /user explicitly asks/);
+    assert.ok(!tools.some(tool => /(?:create|save|snapshot).*(?:template|seed)/.test(tool.name)),
+      "guidance must not advertise an agent template-creation capability that does not exist");
   });
 
   it("reports signed-in sites for agents without exposing credential material", async () => {

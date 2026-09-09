@@ -116,11 +116,24 @@ timestamp, and reporter. It contains no cookies or tokens.
 time it was observed: a website may have expired the session by the time another
 agent comes back to use it.
 
+There is no separate save step for a persistent profile. Reopen the same browser
+with `tallylamp_use_browser` for later work on the same project and account.
+MCP instructions ask agents to check for a suitable browser before creating one
+or requesting another sign-in. After a successful human sign-in and return of
+control, the agent should confirm access, record the site, and explain that the
+profile is saved. If future reuse is unclear, it should ask once whether you want
+to reuse that browser. A temporary-session choice still needs to be respected.
+For routine cleanup, stop a persistent browser rather than deleting its profile.
+
 ### Profile templates
 
-To reuse a profile, stop the browser, snapshot it, and clone the snapshot into
-new browsers. The API calls these templates seeds. Only an administrator can
-create a snapshot, and a running profile cannot be snapshotted.
+Reuse the same browser when you can; it does not need a template. When separate
+browsers need the same prepared setup, stop the source browser after active work
+is finished, snapshot it, and clone the snapshot into new browsers. The API calls
+these templates seeds. Only an administrator can create a snapshot, and a running
+profile cannot be snapshotted. There is no MCP tool for creating a template;
+an agent should offer the option, explain that it copies every saved login, ask
+for consent, and direct the administrator to the dashboard to create it.
 
 Cloning requires `seed:use` because the clone receives every login in the profile.
 A seed ID is not a secret or proof of permission. Some websites invalidate copied
