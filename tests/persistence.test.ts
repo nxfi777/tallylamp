@@ -16,7 +16,7 @@ describe("persistence", () => {
     const r = await json(`${ctx.url}/api/v1/browsers`, {
       method: "POST",
       headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "sticky", persistent: true, start: true }),
+      body: JSON.stringify({ name: "sticky", persistent: true, start: true, metadata: { project: "Research", purpose: "Saved logins" } }),
     });
     const id = (r.body as { browser: { id: string } }).browser.id;
     await json(`${ctx.url}/api/v1/browsers/${id}/stop`, { method: "POST", headers: { Cookie: ctx.cookie } });
@@ -24,6 +24,16 @@ describe("persistence", () => {
     const again = await json(`${ctx.url}/api/v1/browsers/${id}`, { headers: { Cookie: ctx.cookie } });
     assert.equal((again.body as { browser: { persistent: boolean; status: string } }).browser.persistent, true);
     assert.equal((again.body as { browser: { status: string } }).browser.status, "stopped");
+    const edited = await json(`${ctx.url}/api/v1/browsers/${id}`, {
+      method: "PATCH", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Saved research", metadata: { project: "Research", purpose: "Reusable references", task: "Design review" } }),
+    });
+    assert.equal(edited.status, 200);
+    const resumed = await json(`${ctx.url}/api/v1/browsers/${id}/start`, { method: "POST", headers: { Cookie: ctx.cookie } });
+    const browser = (resumed.body as { browser: { name: string; metadata: Record<string, string> } }).browser;
+    assert.equal(browser.name, "Saved research");
+    assert.deepEqual(browser.metadata, { project: "Research", purpose: "Reusable references", task: "Design review" });
+    await json(`${ctx.url}/api/v1/browsers/${id}/stop`, { method: "POST", headers: { Cookie: ctx.cookie } });
   });
 
   it("deleting removes the profile", async () => {

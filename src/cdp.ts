@@ -17,7 +17,7 @@ export class CdpClient {
   constructor(public readonly browserWsUrl: string) {}
 
   async connect(): Promise<void> {
-    this.ws = new WebSocket(this.browserWsUrl);
+    this.ws = new WebSocket(this.browserWsUrl, { handshakeTimeout: 8_000 });
     await new Promise<void>((resolve, reject) => {
       this.ws!.once("open", () => resolve());
       this.ws!.once("error", reject);

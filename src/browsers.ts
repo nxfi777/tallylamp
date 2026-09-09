@@ -16,6 +16,7 @@ import { startEgressProxy, type EgressProxy } from "./egress-proxy.js";
 import { dialTunnel, dropTunnelsFor } from "./tunnels.js";
 import { startFakeChrome } from "./fake-chrome.js";
 import { activeGrant, grantsFor } from "./lending.js";
+import { SiteDetector } from "./site-detection.js";
 import {
   deleteSiteAccessForBrowser,
   listSeedSiteAccess,
@@ -60,6 +61,7 @@ export type ControlState = {
 };
 
 export class BrowserManager {
+  private siteDetector = new SiteDetector();
   private runtimes = new Map<string, ChromeRuntime>();
   private windowContents = new Map<string, { width: number; height: number }>();
   private starting = new Map<string, Promise<ChromeRuntime>>();
@@ -487,6 +489,7 @@ export class BrowserManager {
     getDb().prepare(`DELETE FROM activity_events WHERE browser_id = ?`).run(id);
     getDb().prepare(`DELETE FROM browser_tunnels WHERE browser_id = ?`).run(id);
     deleteSiteAccessForBrowser(id);
+    this.siteDetector.forget(id);
     getDb().prepare(`DELETE FROM browsers WHERE id = ?`).run(id);
     rmSync(row.profile_path, { recursive: true, force: true });
     rmSync(downloadDir(id), { recursive: true, force: true });
@@ -649,6 +652,7 @@ export class BrowserManager {
     if (!rt) return;
     try {
       const pages = await listPages(rt.cdpUrl);
+      void this.siteDetector.scan(id, pages, () => this.runtimes.get(id) === rt);
       const page = pages.find((p) => p.type === "page") ?? pages[0];
       if (page) {
         getDb()

@@ -153,6 +153,13 @@ CREATE TABLE IF NOT EXISTS browser_site_access (
   UNIQUE(browser_id, origin)
 );
 
+-- Manual removals must survive detector and service restarts.
+CREATE TABLE IF NOT EXISTS browser_site_detection_dismissals (
+  browser_id TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  PRIMARY KEY(browser_id, origin)
+);
+
 -- The access manifest is frozen with the seed. A clone receives expected, never confirmed,
 -- because sites are free to invalidate a copied session even when every profile byte survived.
 CREATE TABLE IF NOT EXISTS seed_site_access (

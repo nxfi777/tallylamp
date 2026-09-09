@@ -85,14 +85,21 @@ export function listSiteAccess(browserId: string): SiteAccessView[] {
   return rows.map(view);
 }
 
+export function isSiteDetectionDismissed(browserId: string, origin: string): boolean {
+  return !!getDb().prepare(`SELECT 1 FROM browser_site_detection_dismissals WHERE browser_id = ? AND origin = ?`).get(browserId, origin);
+}
+
 export function reportSiteAccess(
   browserId: string,
   input: { origin: unknown; name?: unknown; state?: unknown },
-  principal: Principal,
+  principal: Principal | { type: "system"; id: "sign-in-detector" },
 ): SiteAccessView {
   const origin = normalizeSiteOrigin(input.origin);
   const name = cleanName(input.name, origin);
   const state = cleanState(input.state);
+  if (principal.type !== "system") {
+    getDb().prepare(`DELETE FROM browser_site_detection_dismissals WHERE browser_id = ? AND origin = ?`).run(browserId, origin);
+  }
   const at = nowIso();
   const existing = getDb()
     .prepare(`SELECT id, last_confirmed_at FROM browser_site_access WHERE browser_id = ? AND origin = ?`)
@@ -132,6 +139,7 @@ export function removeSiteAccess(browserId: string, siteId: string, principal: P
     .prepare(`SELECT origin FROM browser_site_access WHERE id = ? AND browser_id = ?`)
     .get(siteId, browserId) as { origin: string } | undefined;
   if (!row) return false;
+  getDb().prepare(`INSERT OR IGNORE INTO browser_site_detection_dismissals(browser_id, origin) VALUES (?, ?)`).run(browserId, row.origin);
   getDb().prepare(`DELETE FROM browser_site_access WHERE id = ? AND browser_id = ?`).run(siteId, browserId);
   audit({
     actorType: principal.type,
@@ -146,6 +154,7 @@ export function removeSiteAccess(browserId: string, siteId: string, principal: P
 }
 
 export function deleteSiteAccessForBrowser(browserId: string): void {
+  getDb().prepare(`DELETE FROM browser_site_detection_dismissals WHERE browser_id = ?`).run(browserId);
   getDb().prepare(`DELETE FROM browser_site_access WHERE browser_id = ?`).run(browserId);
 }
 

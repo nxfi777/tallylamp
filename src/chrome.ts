@@ -211,6 +211,9 @@ export async function launchChrome(opts: {
     `--download-default-directory=${opts.downloadDir}`,
     "--no-first-run",
     "--no-default-browser-check",
+    // Reopen saved tabs and session cookies rather than making a kept profile
+    // look like a fresh browser after every stop/start.
+    "--restore-last-session",
     // Chrome ships component extensions with background pages and spawns a renderer for
     // each. Measured: 7 renderers and ~1215 MB per browser without these, 5 and ~934 MB
     // with them. Deliberately NOT --renderer-process-limit (measured worse, and it
@@ -235,7 +238,7 @@ export async function launchChrome(opts: {
     // sibling CDP/viewer ports. Our process still talks to CDP directly.
     args.push("--proxy-bypass-list=<-loopback>");
   }
-  args.push("about:blank");
+  if (!existsSync(path.join(opts.profileDir, "Default", "Preferences"))) args.push("about:blank");
 
   const env = sanitizedChromeEnv({
     HOME: opts.profileDir,

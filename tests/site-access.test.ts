@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import { createAgent } from "../src/auth.js";
 import { normalizeSiteOrigin } from "../src/site-access.js";
 import { json, startTestServer, type TestCtx } from "./helpers.js";
+import { runInNewContext } from "node:vm";
+import { SIGN_IN_OBSERVATION, SiteDetector } from "../src/site-detection.js";
+import { WebSocketServer } from "ws";
+import { listSiteAccess, removeSiteAccess } from "../src/site-access.js";
+import { readFileSync } from "node:fs";
 
 let ctx: TestCtx;
 
@@ -17,6 +22,82 @@ describe("profile site inventory", () => {
     assert.equal(normalizeSiteOrigin("http://localhost:5173/callback"), "http://localhost:5173");
     assert.throws(() => normalizeSiteOrigin("file:///tmp/profile"), /http or https/);
     assert.throws(() => normalizeSiteOrigin("https://person:secret@example.com"), /credentials/);
+  });
+
+  it("detects only visible, explicit sign-out controls without reading storage", () => {
+    const observe = (label: string, visible = true, protocol = "https:") => runInNewContext(SIGN_IN_OBSERVATION, {
+      location: { protocol, origin: "https://example.com" },
+      document: {
+        get cookie() { throw new Error("must not read cookies"); },
+        querySelectorAll: () => [{ getClientRects: () => visible ? [{}] : [], getAttribute: () => null, innerText: label }],
+      },
+      getComputedStyle: () => ({ visibility: "visible", opacity: "1" }),
+    });
+    assert.equal(observe("Sign out").signedIn, true);
+    assert.equal(observe("Log out").signedIn, true);
+    for (const label of ["Sign in", "Profile", "Account", "How to log out", ""]) assert.equal(observe(label).signedIn, false);
+    assert.equal(observe("Sign out", false).signedIn, false);
+    assert.equal(observe("Sign out", true, "about:"), null);
+  });
+
+  it("prefills the manual form from the viewer's active tab, not the cached URL", async () => {
+    const source = readFileSync(new URL("../dashboard/app.js", import.meta.url), "utf8");
+    const functions = ["browserView", "siteAccessSection", "currentOrigin", "addSite"].map(name => {
+      const match = source.match(new RegExp(`^(?:async )?function ${name}\\([\\s\\S]*?^}`, "m"));
+      assert.ok(match, `missing dashboard function ${name}`);
+      return match[0];
+    }).join("\n");
+    const browser = { id: "test", name: "Research", status: "running", url: "https://stale.example", persistent: true, metadata: {}, provenance: {}, owner: {} };
+    let active: { onActiveTab: (tab: { url: string; title: string }) => void } | undefined;
+    let fields: Array<{ name: string; value?: string }> = [];
+    const sandbox = {
+      browser, URL, document: {}, state: { status: {} },
+      api: async () => ({ browser }),
+      h: (_tag: string, attrs: object, ...children: unknown[]) => ({ attrs, children, append() {}, replaceChildren() {} }),
+      principal: () => "Test", layout() {}, icon() {}, lendingSection() {}, tunnelSection() {},
+      ICON_BACK: [], ICON_FORWARD: [], ICON_RELOAD: [], ICON_FULLSCREEN: [], ICON_PLUS: [],
+      connectViewer: (...args: unknown[]) => { active = args[5] as typeof active; },
+      askFor: async (_title: string, values: typeof fields) => { fields = values; return null; },
+    };
+    await runInNewContext(`${functions}\n(async () => { await browserView('test'); })()`, sandbox);
+    assert.ok(active);
+    active.onActiveTab({ url: "https://mobbin.com/discover/apps/ios/latest", title: "Mobbin" });
+    await runInNewContext(`${functions}\naddSite(browser)`, sandbox);
+    assert.equal(fields.find(field => field.name === "origin")?.value, "https://mobbin.com");
+    assert.equal(fields.find(field => field.name === "name")?.value, "mobbin.com");
+    active.onActiveTab({ url: "about:blank", title: "" });
+    await runInNewContext(`${functions}\naddSite(browser)`, sandbox);
+    assert.equal(fields.find(field => field.name === "origin")?.value, "");
+  });
+
+  it("automatically records a signal once, with system provenance, and respects manual removal", async () => {
+    const created = await json(`${ctx.url}/api/v1/browsers`, {
+      method: "POST", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Detected sites", start: false }),
+    });
+    const id = (created.body as { browser: { id: string } }).browser.id;
+    const ws = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    await new Promise<void>(resolve => ws.once("listening", resolve));
+    ws.on("connection", client => client.on("message", raw => {
+      const message = JSON.parse(String(raw));
+      client.send(JSON.stringify({ id: message.id, result: { result: { value: { origin: "https://example.com", signedIn: true } } } }));
+    }));
+    try {
+      const detector = new SiteDetector();
+      const pages = [{ type: "page", url: "https://example.com/account", webSocketDebuggerUrl: `ws://127.0.0.1:${(ws.address() as { port: number }).port}` }];
+      await detector.scan(id, pages, () => true);
+      const sites = listSiteAccess(id);
+      assert.equal(sites.length, 1);
+      assert.equal(sites[0].reportedBy.type, "system");
+      assert.equal(sites[0].state, "confirmed");
+      removeSiteAccess(id, sites[0].id, { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] });
+      // A fresh detector simulates restarting the service, not just another poll.
+      await new SiteDetector().scan(id, pages, () => true);
+      assert.deepEqual(listSiteAccess(id), []);
+    } finally {
+      for (const client of ws.clients) client.terminate();
+      await new Promise<void>(resolve => ws.close(() => resolve()));
+    }
   });
 
   it("records, returns and updates signed-in sites with provenance", async () => {

@@ -67,17 +67,17 @@ describe("browser realism differential", { skip: !chromeAvailable }, () => {
         rt = await launchChrome({ profileDir: dir, downloadDir: join(dir, "dl") });
         cdp = new CdpClient(await browserWsUrl(rt.cdpUrl));
         await cdp.connect();
-        await evaluate(cdp, `location.href = 'http://127.0.0.1:${port}/'`);
+        if (writing) await evaluate(cdp, `location.href = 'http://127.0.0.1:${port}/'`);
         for (let attempt = 0; ; attempt++) {
           if (await evaluate(cdp, `location.origin === 'http://127.0.0.1:${port}' && document.readyState === 'complete'`)) break;
           assert.ok(attempt < 100, "test page did not load");
           await new Promise(resolve => setTimeout(resolve, 50));
         }
         if (writing) {
-          await evaluate(cdp, `localStorage.setItem('saved', 'yes'); document.cookie = 'saved=yes; Max-Age=86400'; true`);
+          await evaluate(cdp, `localStorage.setItem('saved', 'yes'); document.cookie = 'saved=yes; Max-Age=86400'; document.cookie = 'session=kept'; true`);
         } else {
-          assert.deepEqual(await evaluate(cdp, `({saved: localStorage.getItem('saved'), cookie: document.cookie})`),
-            { saved: "yes", cookie: "saved=yes" });
+          assert.deepEqual(await evaluate(cdp, `({saved: localStorage.getItem('saved'), cookies: document.cookie.split('; ').sort()})`),
+            { saved: "yes", cookies: ["saved=yes", "session=kept"] });
         }
         await cdp.close(); cdp = undefined;
         await stopRuntime(rt); rt = undefined;

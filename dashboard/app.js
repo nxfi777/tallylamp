@@ -323,7 +323,7 @@ function browserMenu(b) {
       : { label: "Take control", onSelect: () => takeControl(b.id) },
     "-",
     running
-      ? { label: "Stop & keep profile", onSelect: () => call(`/api/v1/browsers/${b.id}/stop`) }
+      ? { label: b.persistent ? "Stop & keep profile" : "Stop temporary browser", onSelect: () => call(`/api/v1/browsers/${b.id}/stop`) }
       : { label: "Start", onSelect: () => call(`/api/v1/browsers/${b.id}/start`) },
     running && { label: "Restart", onSelect: () => call(`/api/v1/browsers/${b.id}/restart`) },
     "-",
@@ -923,7 +923,7 @@ function siteAccessSection(b) {
               h("span", { class: "mono" }, site.origin),
               h("span", { class: "sub" },
                 site.state === "confirmed"
-                  ? `Confirmed ${site.lastConfirmedAt ? ago(site.lastConfirmedAt) : "recently"}`
+                  ? `${site.reportedBy?.type === "system" ? "Detected" : "Confirmed"} ${site.lastConfirmedAt ? ago(site.lastConfirmedAt) : "recently"}`
                   : site.state === "needs_sign_in"
                     ? "Sign-in needed"
                     : `Expected from a profile template${site.lastConfirmedAt ? ` · last confirmed ${ago(site.lastConfirmedAt)}` : ""}`,
@@ -938,10 +938,10 @@ function siteAccessSection(b) {
           )),
         )
       : h("div", { class: "sub" },
-          "No signed-in sites recorded. Take control, sign in, then record the current site so agents can find this profile."),
+          "No sign-ins detected yet. Sites with visible sign-out controls are recorded automatically. If a site is missed, record it below."),
     h("button", { class: "btn site-add", onClick: () => addSite(b) }, "Record signed-in site"),
     h("div", { class: "sub" },
-      "This list records what someone observed; it never contains cookies or tokens. A site may still expire or reject a copied session."),
+      "Detection uses visible sign-out controls, not cookies or tokens. It can miss sites or be wrong; you can correct the list. Sessions may expire."),
   );
 }
 
@@ -1003,6 +1003,12 @@ async function browserView(id, seq) {
   const leaseSeconds = state.status?.humanLeaseTtlSec ?? 90;
   document.title = `${b.name} · Tallylamp`;
   const stage = h("div", { class: "stage" });
+  const sitesPanel = h("div", { id: "profile-sites", "data-browser-id": id }, siteAccessSection(b));
+  sitesPanel.updateSites = (sites) => {
+    if (JSON.stringify(sites) === JSON.stringify(b.signedInSites)) return;
+    b.signedInSites = sites;
+    sitesPanel.replaceChildren(siteAccessSection(b));
+  };
   // A canvas, not an <img>. Swapping an <img>'s src decodes the JPEG on the main thread, which
   // is the same thread that has to forward this operator's mouse and key events; passing the
   // bytes to createImageBitmap instead moves the decode off it entirely. It also ends the
@@ -1091,8 +1097,8 @@ async function browserView(id, seq) {
         human
           ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
           : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
-        h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/start`) }, "Start"),
-        h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, "Stop & keep profile"),
+        h("button", { class: "btn", disabled: b.status === "running", onClick: () => call(`/api/v1/browsers/${id}/start`) }, "Start"),
+        h("button", { class: "btn", disabled: b.status === "stopped", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, b.persistent ? "Stop & keep profile" : "Stop temporary browser"),
         h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/restart`) }, "Restart"),
         h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name) }, "Delete"),
       ),
@@ -1100,7 +1106,7 @@ async function browserView(id, seq) {
     // Three short lines, not one dense block. The old banner was a 74-word paragraph that said
     // everything at once and so got read as nothing: what you can do, what the agent can do,
     // what happens to your logins, and how long you have, with no gap between them.
-    h("div", { class: human ? "banner control" : "banner watch" },
+    b.status === "running" ? h("div", { class: human ? "banner control" : "banner watch" },
       ...(human
         ? [
             "You have control. The agent can still read this page, but every change it tries will fail until you press Return to agent.",
@@ -1119,7 +1125,7 @@ async function browserView(id, seq) {
               : "Nothing has control right now. Press Take control when you need the keyboard.",
           ]
       ).map((line) => h("p", {}, line)),
-    ),
+    ) : null,
     h("div", { class: "detail" },
       stagewrap,
       h("aside", { class: "side" },
@@ -1127,7 +1133,7 @@ async function browserView(id, seq) {
         h("dl", { class: "kv" },
           h("dt", {}, "Status"), h("dd", {}, b.status),
           h("dt", {}, "Controller"), h("dd", {}, b.control?.controllerType || "none"),
-          h("dt", {}, "Profile"), h("dd", {}, b.persistent ? "kept when stopped" : "deleted when stopped"),
+          h("dt", {}, "Profile"), h("dd", {}, b.persistent ? "saved automatically" : "temporary · may be deleted when idle"),
           h("dt", {}, "Project"), h("dd", {}, md.project || "—"),
           h("dt", {}, "Purpose"), h("dd", {}, md.purpose || "—"),
           h("dt", {}, "Task"), h("dd", {}, md.task || "—"),
@@ -1139,8 +1145,9 @@ async function browserView(id, seq) {
           h("dt", {}, "MCP attached"), h("dd", {}, String(b.mcpAttached)),
           h("dt", {}, "Watchers"), h("dd", {}, String(b.viewers ?? 0)),
         ),
+        h("button", { class: "btn", onClick: () => editBrowser(b) }, "Edit profile"),
         h("h2", {}, "Signed-in sites"),
-        siteAccessSection(b),
+        sitesPanel,
         // On the browser itself, not on a settings page: these two controls are only ever
         // meaningful next to the thing they hand over.
         h("h2", {}, "Lending"),
@@ -1158,7 +1165,13 @@ async function browserView(id, seq) {
       ),
     ),
   ]);
+  if (b.status !== "running") {
+    stagewrap.replaceChildren(h("div", { class: "banner", role: "status" },
+      b.persistent ? "Browser stopped. Your profile and metadata are saved. Press Start to reopen it." : "Browser stopped. This temporary profile may be deleted when idle."));
+    return;
+  }
   void connectViewer(id, human ? "control" : "watch", img, b.control?.leaseToken, status, {
+    onActiveTab: (tab) => { b.url = tab?.url || ""; b.title = tab?.title || ""; },
     stage,
     tabstrip,
     urlInput,
@@ -1389,6 +1402,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     if (ui.newTabBtn) kids.push(ui.newTabBtn);
     ui.tabstrip.replaceChildren(...kids);
     const act = tabs.find((t) => t.targetId === activeTargetId);
+    ui.onActiveTab?.(act);
     // Never overwrite an address the operator is part-way through typing.
     if (ui.urlInput && document.activeElement !== ui.urlInput) ui.urlInput.value = (act && act.url) || "";
   };
@@ -1954,6 +1968,7 @@ async function editBrowser(b) {
     { name: "name", label: "Profile name", value: b.name, hint: "Shown to people and agents. The stable browser id does not change." },
     { name: "project", label: "Project", value: md.project || "", placeholder: "Optional" },
     { name: "purpose", label: "What is it for?", value: md.purpose || "", placeholder: "Optional", maxLength: 200 },
+    { name: "task", label: "Task", value: md.task || "", placeholder: "Optional", maxLength: 200 },
   ], "Save changes");
   if (!answers) return;
   await act(async () => {
@@ -1962,6 +1977,8 @@ async function editBrowser(b) {
     else delete metadata.project;
     if (answers.purpose) metadata.purpose = answers.purpose;
     else delete metadata.purpose;
+    if (answers.task) metadata.task = answers.task;
+    else delete metadata.task;
     await api(`/api/v1/browsers/${b.id}`, {
       method: "PATCH",
       body: { name: answers.name, metadata },
@@ -1991,7 +2008,7 @@ async function addSite(b) {
       placeholder: "mobbin.com",
       hint: "Only record a site after you can see that this profile is signed in.",
     },
-    { name: "name", label: "Service name", placeholder: "Optional — defaults to the hostname" },
+    { name: "name", label: "Service name", value: origin ? new URL(origin).hostname.replace(/^www\./, "") : "", placeholder: "Optional — defaults to the hostname" },
   ], "Record site");
   if (!answers) return;
   await act(async () => {
@@ -2244,6 +2261,9 @@ function startEvents() {
           // whole layout — so an operator typing in the filter lost focus to <body> and had the
           // caret sent back to the start, roughly every time any agent touched any browser.
           if (route().name === "home") paintBrowsers();
+          const sitesPanel = document.getElementById("profile-sites");
+          const current = sitesPanel && state.browsers.find(b => b.id === sitesPanel.dataset.browserId);
+          if (current) sitesPanel.updateSites(current.signedInSites || []);
         });
       }, 1500);
     };
