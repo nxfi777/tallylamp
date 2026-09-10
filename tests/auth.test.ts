@@ -66,6 +66,32 @@ describe("authentication", () => {
     assert.equal(r.status, 401);
   });
 
+  it("serves standalone favicons without leaking markup into the dashboard", async () => {
+    const response = await fetch(ctx.url);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /text\/html/);
+    const html = await response.text();
+    const head = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1];
+    assert.ok(head, "dashboard has a document head");
+
+    // Orphaned SVG fragments after a favicon link make the browser close the
+    // head early and render the leftover attribute terminators above sign-in.
+    const unexpectedMarkup = head
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/<(script|style|title)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+      .replace(/<(meta|link)\b[^>]*>/gi, "")
+      .trim();
+    assert.equal(unexpectedMarkup, "", "no stray text or SVG markup in the document head");
+
+    for (const name of ["favicon-light.svg", "favicon-dark.svg"]) {
+      assert.ok(head.includes(`href="/${name}"`), `${name} is linked`);
+      const icon = await fetch(`${ctx.url}/${name}`);
+      assert.equal(icon.status, 200);
+      assert.match(icon.headers.get("content-type") ?? "", /image\/svg\+xml/);
+      assert.match(await icon.text(), /<svg\b/);
+    }
+  });
+
   it("healthz is unauthenticated and minimal", async () => {
     const r = await json(`${ctx.url}/healthz`);
     assert.equal(r.status, 200);

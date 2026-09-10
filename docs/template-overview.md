@@ -2,9 +2,14 @@
 
 Give your AI agent a browser you can watch and take over.
 
-Tallylamp runs Chrome on your server and keeps its profile between sessions.
-Your agent drives the browser through MCP. You can watch it live, take control
-to sign in or finish a verification step, then return control to the agent.
+[Tallylamp](https://tallylamp.dev) gives your agent full, headed Chrome with a
+display and Chrome's normal user agent. Each browser saves its own profile by
+default, including cookies, logins, and local storage. Your agent can come back
+to that profile for its next task instead of starting with an empty browser.
+
+Your agent drives the browser through MCP. You can watch the same browser live,
+take control to sign in or finish a verification step, then return it to the agent.
+Websites can still expire logins or ask you to sign in again.
 
 Tallylamp is open source under the MIT license. You pay Railway for the
 infrastructure used by your deployment.
@@ -30,6 +35,8 @@ password. You choose when to upgrade the application.
 - Keep a browser profile ready for an agent's recurring tasks.
 - Take control to sign in, then let the agent continue.
 - Watch a browser session live to inspect what the agent is doing.
+- Test pages with different user agents, mobile or desktop viewports, touch
+  input, and locations through MCP's `emulate` tool.
 
 ## Dependencies for Tallylamp
 
@@ -69,9 +76,14 @@ Redeploying the existing digest keeps the same application version.
 
 ## What to expect
 
-Cookies and profiles survive restarts and redeploys when stored on the volume.
-Websites can still expire logins. You can also prepare a profile by hand and
-clone it for agents with permission to use profile templates.
+Chrome runs in headed mode, not headless mode. Xvfb gives it a display inside
+the container. User-agent and device emulation let you test browser settings;
+they do not make an agent behave like a person.
+
+Profiles are saved automatically on the volume and survive stops and redeploys.
+There is no separate save step. You can also prepare a profile by hand and clone
+it into new browsers with explicit permission. Profile templates copy every
+saved login, so only share them with agents you trust with those accounts.
 
 Chrome needs memory. Start with a cap of two browsers and budget roughly
 1–2 GB per active browser, plus the server. Measure your own workload before
@@ -86,7 +98,9 @@ Tallylamp does not bypass CAPTCHAs or guarantee that sites will accept automatio
 
 ## Source and documentation
 
+- [Tallylamp website](https://tallylamp.dev)
 - [Source code and setup](https://github.com/nxfi777/tallylamp)
+- [Browser realism and emulation limits](https://github.com/nxfi777/tallylamp/blob/main/docs/browser-realism.md)
 - [Railway configuration](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md)
 - [Security model](https://github.com/nxfi777/tallylamp/blob/main/docs/security.md)
 - [MCP compatibility](https://github.com/nxfi777/tallylamp/blob/main/docs/mcp-compatibility.md)
