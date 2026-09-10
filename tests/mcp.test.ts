@@ -75,7 +75,7 @@ describe("MCP", () => {
     assert.ok(text.includes("tallylamp_list_profile_templates"), text);
   });
 
-  it("sends persistent-session guidance during initialization, before any browser is bound", async () => {
+  it("sends browser-fallback and persistent-session guidance during initialization, before any browser is bound", async () => {
     const init = await mcp(
       "initialize",
       { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "reuse-guidance", version: "1" } },
@@ -84,6 +84,13 @@ describe("MCP", () => {
     assert.equal(init.status, 200);
     const instructions = rpcResult(init.body)?.instructions;
     assert.ok(instructions, "clients need the workflow in initialize.instructions, not only in repository docs");
+    assert.match(instructions, /A failed HTTP fetch is not proof that a website is inaccessible/);
+    assert.match(instructions, /401\/403, a login page, or a browser challenge, try browser access before reporting a blocker/);
+    assert.match(instructions, /saved authentication or human assistance.*tallylamp_list_browsers.*tallylamp_use_browser.*tallylamp_create_browser if none fits/);
+    assert.match(instructions, /Open and inspect the page first; sign-in may not be needed/);
+    assert.match(instructions, /sign-in, 2FA, or a CAPTCHA.*request human takeover of the named browser.*stop automated input until they return control/);
+    assert.match(instructions, /Then inspect the page before continuing/);
+    assert.match(instructions, /Do not promise that sign-in will resolve every block, attempt to bypass a challenge, or circumvent access restrictions/);
     assert.match(instructions, /Before creating a browser or asking the user to sign in again, call tallylamp_list_browsers/);
     assert.match(instructions, /tallylamp_use_browser/);
     assert.match(instructions, /project, purpose, and intended account/);
