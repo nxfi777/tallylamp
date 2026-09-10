@@ -50,6 +50,9 @@ The template sets up the public `0.1.1` image, a persistent `/data` volume,
 healthcheck, HTTPS domain, and a generated dashboard password. It pins the image
 digest and leaves automatic upgrades disabled.
 
+The newer `0.1.2` image is available for manual deployments; the published
+template still pins `0.1.1`. See the [release and upgrade notes](docs/railway.md#releasing-and-upgrading).
+
 1. Deploy the template into your Railway workspace.
 2. Copy `ADMIN_SECRET` from the service's Railway variables and save it as your
    dashboard password.
@@ -73,7 +76,7 @@ docker run --rm --platform linux/amd64 -p 127.0.0.1:8080:8080 \
   -e ADMIN_SECRET \
   -e TALLYLAMP_PUBLIC_URL=http://127.0.0.1:8080 \
   -v tallylamp-data:/data \
-  ghcr.io/nxfi777/tallylamp:0.1.1
+  ghcr.io/nxfi777/tallylamp:0.1.2
 ```
 
 Open <http://127.0.0.1:8080> and log in with that secret. This command binds to
