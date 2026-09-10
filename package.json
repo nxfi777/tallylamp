@@ -1,6 +1,6 @@
 {
   "name": "tallylamp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Persistent headed browsers for AI agents, with a human watch-and-takeover control plane.",
   "type": "module",
