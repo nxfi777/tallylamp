@@ -8,7 +8,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.1.2` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
-   still pins `0.1.1`; it supplies these settings and leaves automatic image
+   pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
 2. Attach a volume at `/data`.
 3. Set **`ADMIN_SECRET`** (`openssl rand -hex 32`); the template generates it for you.
@@ -145,7 +145,8 @@ passed the application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact. Anonymous registry access, its manifest
 digest, and its version and source-revision labels were verified afterward.
 
-The Railway template still pins `0.1.1`. Railway redeploy persistence and unique
+The Railway template pins the `0.1.2` digest for new installations. Existing
+deployments keep their selected image. Railway redeploy persistence and unique
 passwords across two template installations were checked for `0.1.1`, not repeated
 for `0.1.2`. These checks do not certify every external MCP client.
 
