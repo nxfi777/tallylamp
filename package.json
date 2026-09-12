@@ -1,6 +1,6 @@
 {
   "name": "tallylamp",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "description": "Persistent headed browsers for AI agents, with a human watch-and-takeover control plane.",
   "type": "module",
@@ -14,7 +14,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "test": "tsx --test --test-concurrency=1 tests/auth.test.ts tests/metadata.test.ts tests/site-access.test.ts tests/ssrf.test.ts tests/names.test.ts tests/ownership.test.ts tests/takeover.test.ts tests/mcp.test.ts tests/isolation.test.ts tests/persistence.test.ts tests/oauth.test.ts tests/data-dir.test.ts tests/migration.test.ts tests/egress.test.ts tests/memory.test.ts tests/lending.test.ts tests/tunnel.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/auth.test.ts tests/metadata.test.ts tests/site-access.test.ts tests/saved-profiles.test.ts tests/ssrf.test.ts tests/names.test.ts tests/ownership.test.ts tests/takeover.test.ts tests/mcp.test.ts tests/isolation.test.ts tests/persistence.test.ts tests/oauth.test.ts tests/data-dir.test.ts tests/migration.test.ts tests/egress.test.ts tests/memory.test.ts tests/lending.test.ts tests/tunnel.test.ts",
     "test:realism": "tsx --test tests/realism.test.ts",
     "test:all": "tsx --test --test-concurrency=1 tests/**/*.test.ts",
     "lint": "tsc --noEmit",

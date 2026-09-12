@@ -300,6 +300,8 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   // profile over WITHOUT the owner answering, on the strength of it having gone idle. A
   // browser holding a banking login must never be lent because its owner stopped talking.
   ["browsers", "lendable", "INTEGER NOT NULL DEFAULT 0"],
+  ["seeds", "metadata_json", "TEXT NOT NULL DEFAULT '{}'"],
+  ["seeds", "updated_at", "TEXT"],
 ];
 
 function migrate(database: DatabaseSync): void {

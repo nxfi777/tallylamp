@@ -75,7 +75,7 @@ Before creating a browser or asking the user to sign in again, call tallylamp_li
 
 Profiles are saved automatically when persistent is true (the default); no separate save action or template is needed to reuse the same browser. After a successful human sign-in, wait until control is returned, check authenticated UI, and call tallylamp_report_site_access with confirmed. Explain that this persistent browser keeps its saved session. If future reuse is unclear, ask once whether to reuse this browser for future tasks on this project. Respect the answer and do not ask again once the user has decided. Do not claim a temporary browser is saved for future use or change the user's temporary-session choice without consent. Websites can expire or revoke sessions and ask for sign-in again.
 
-Offer a profile template only when future tasks need separate browsers with the same prepared setup. Explain that a template copies every saved login in the source profile, and ask for explicit consent before copying it. Template creation is administrator-only and is not an MCP tool: ask the administrator to snapshot the stopped browser through the dashboard. Do not stop active work just to make a template or ask for administrator credentials. Listing or cloning templates requires the non-default seed:use scope; do not bypass a missing permission. Check copied sessions in the new browser because they may require a fresh sign-in.
+Offer a saved profile (called a profile template by the compatibility tools) when separate browsers need the same prepared setup. Explain that it copies every saved login, and ask for explicit consent before cloning. Saving is administrator-only: ask the administrator to choose Save profile in the dashboard. A running source briefly pauses and resumes automatically; unsaved page edits may be lost. The saved profile is immediately available for independent browsers. Update saved profile explicitly changes future copies, never existing browsers. Do not stop active work yourself or ask for administrator credentials. Listing or cloning saved profiles requires the non-default seed:use scope; do not bypass a missing permission. Check copied sessions in the new browser because they may require a fresh sign-in.
 
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
@@ -143,9 +143,9 @@ export const LIFECYCLE_TOOLS: Tool[] = [
   {
     name: "tallylamp_list_profile_templates",
     description:
-      "List profile templates this agent is permitted to clone, including the signed-in sites recorded when each snapshot was made. " +
+      "List saved profiles (profile templates) this agent is permitted to clone, including their metadata and recorded sites. " +
       "Offer a template only when separate browsers need the same setup; reusing the existing browser needs no snapshot. " +
-      "Templates copy every saved login: ask for explicit consent before cloning. To save a new template, ask the administrator to snapshot a stopped browser through the dashboard; creation is not an MCP tool. " +
+      "Templates copy every saved login: ask for explicit consent before cloning. To save one, ask the administrator to choose Save profile in the dashboard; running browsers briefly pause and resume automatically. Creation is not an MCP tool. " +
       "Copied sites are only expected to work until checked in the new browser. Requires the non-default seed:use scope.",
     inputSchema: { type: "object", properties: {} },
   },
@@ -842,6 +842,8 @@ export class McpGateway {
           name: seed.name,
           createdFromBrowserId: seed.created_from_browser_id,
           createdAt: seed.created_at,
+          updatedAt: seed.updated_at,
+          metadata: seed.metadata,
           signedInSites: seed.signedInSites,
         }));
         return { content: [{ type: "text", text: JSON.stringify(templates) }] };

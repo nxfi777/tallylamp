@@ -435,10 +435,17 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
         String(req.body?.browserId),
         String(req.body?.name ?? "seed"),
         req.principal!,
+        { metadata: req.body?.metadata },
       );
       res.status(201).json({ seed });
     }),
   );
+
+  api.put("/api/v1/seeds/:id", requireAdmin, asyncRoute(async (req, res) => {
+    const seed = await browsers.snapshotSeed(String(req.body?.browserId), String(req.body?.name ?? ""), req.principal!,
+      { seedId: req.params.id, metadata: req.body?.metadata });
+    res.json({ seed });
+  }));
 
   api.get("/api/v1/audit", requireAdmin, (_req, res) => {
     res.json({ events: listAudit() });

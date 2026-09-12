@@ -16,10 +16,16 @@ window.addEventListener("beforeunload", teardownViewer);
 // Held in state, not only in the DOM. refresh() reports a partial failure and the render that
 // immediately follows it used to rebuild the layout and throw the message away — so the messages
 // this code takes care to compose were unreachable exactly when they mattered.
-function flash(message) {
+function flash(message, success = false) {
   state.flash = message || "";
   const el = document.querySelector(".flash");
-  if (el) el.textContent = state.flash;
+  if (el) {
+    el.textContent = state.flash;
+    el.classList.toggle("err", !success);
+    el.classList.toggle("ok", success);
+    el.setAttribute("role", success ? "status" : "alert");
+    el.setAttribute("aria-live", success ? "polite" : "assertive");
+  }
 }
 
 /**
@@ -65,35 +71,47 @@ function openModal(title, build, onClose) {
  * Ask for a few values at once. This replaces a run of prompt() dialogs, which arrive one at a
  * time with no labels, no hint of how many are coming, and no way back to the previous answer.
  */
-function askFor(title, fields, submitLabel) {
+function askFor(title, fields, submitLabel, submit) {
   return new Promise((resolve) => {
     const inputs = new Map();
     const { box } = openModal(title, (close) => {
+      let submitting = false;
+      const error = h("div", { class: "err", role: "alert" });
       const form = h("form", {
-        onSubmit: (e) => {
+        onSubmit: async (e) => {
           e.preventDefault();
+          if (submitting) return;
           const out = {};
           for (const [name, el] of inputs) out[name] = el.value.trim();
-          close(out);
+          submitting = true;
+          const button = form.querySelector('button[type="submit"]');
+          button.disabled = true;
+          button.textContent = submit ? (submitLabel.startsWith("Create") ? "Creating…" : "Saving…") : submitLabel;
+          error.textContent = "";
+          try { if (submit) await submit(out); close(out); }
+          catch (e) { error.textContent = e.message; }
+          finally { submitting = false; button.disabled = false; button.textContent = submitLabel; }
         },
       });
       for (const f of fields) {
         const id = `field-${f.name}`;
-        const input = h("input", {
+        const input = f.options ? h("select", { id, name: f.name, required: !!f.required },
+          ...f.options.map(option => h("option", { value: option.value, selected: option.value === (f.value || "") }, option.label))) : h("input", {
           id, name: f.name, type: "text", value: f.value || "",
+          required: !!f.required,
           placeholder: f.placeholder || "", maxlength: String(f.maxLength || 120), autocomplete: "off",
         });
         inputs.set(f.name, input);
         form.append(h("label", { for: id }, f.label), input);
         if (f.hint) form.append(h("div", { class: "sub field-hint" }, f.hint));
       }
-      form.append(h("div", { class: "row modal-foot" },
+      form.append(error, h("div", { class: "row modal-foot" },
         h("button", { class: "btn primary", type: "submit" }, submitLabel),
         h("button", { class: "btn", type: "button", onClick: () => close() }, "Cancel"),
       ));
       return [h("h2", {}, title), form];
     }, (result) => resolve(result || null));
-    const first = box.querySelector("input");
+    const first = box.querySelector("input, select");
     if (first) first.focus();
   });
 }
@@ -323,12 +341,12 @@ function browserMenu(b) {
       : { label: "Take control", onSelect: () => takeControl(b.id) },
     "-",
     running
-      ? { label: b.persistent ? "Stop & keep profile" : "Stop temporary browser", onSelect: () => call(`/api/v1/browsers/${b.id}/stop`) }
+      ? { label: "Stop browser", onSelect: () => call(`/api/v1/browsers/${b.id}/stop`) }
       : { label: "Start", onSelect: () => call(`/api/v1/browsers/${b.id}/start`) },
     running && { label: "Restart", onSelect: () => call(`/api/v1/browsers/${b.id}/restart`) },
     "-",
     { label: "Edit profile…", onSelect: () => editBrowser(b) },
-    !running && { label: "Save as profile template…", onSelect: () => saveProfileTemplate(b) },
+    { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
     { label: "Copy browser id", onSelect: () => act(async () => {
       await navigator.clipboard.writeText(b.id);
       flash(`Copied ${b.id}.`);
@@ -506,7 +524,7 @@ function layout(main) {
         ...[
           ["/", "home", "Browsers"],
           ["/agents", "agents", "Agents"],
-          ["/seeds", "seeds", "Profile templates"],
+          ["/seeds", "seeds", "Saved profiles"],
           ["/security", "security", "Security"],
         ].map(([href, name, label]) => {
           const active = route().name === name;
@@ -926,7 +944,7 @@ function siteAccessSection(b) {
                   ? `${site.reportedBy?.type === "system" ? "Detected" : "Confirmed"} ${site.lastConfirmedAt ? ago(site.lastConfirmedAt) : "recently"}`
                   : site.state === "needs_sign_in"
                     ? "Sign-in needed"
-                    : `Expected from a profile template${site.lastConfirmedAt ? ` · last confirmed ${ago(site.lastConfirmedAt)}` : ""}`,
+                    : `Copied from a saved profile · not yet checked${site.lastConfirmedAt ? ` · last confirmed ${ago(site.lastConfirmedAt)}` : ""}`,
               ),
             ),
             h("div", { class: "row site-actions" },
@@ -1098,7 +1116,8 @@ async function browserView(id, seq) {
           ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
           : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
         h("button", { class: "btn", disabled: b.status === "running", onClick: () => call(`/api/v1/browsers/${id}/start`) }, "Start"),
-        h("button", { class: "btn", disabled: b.status === "stopped", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, b.persistent ? "Stop & keep profile" : "Stop temporary browser"),
+        h("button", { class: "btn primary", onClick: () => saveProfileTemplate(b) }, "Save profile"),
+        h("button", { class: "btn", disabled: b.status === "stopped", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, "Stop browser"),
         h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/restart`) }, "Restart"),
         h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name) }, "Delete"),
       ),
@@ -1133,7 +1152,7 @@ async function browserView(id, seq) {
         h("dl", { class: "kv" },
           h("dt", {}, "Status"), h("dd", {}, b.status),
           h("dt", {}, "Controller"), h("dd", {}, b.control?.controllerType || "none"),
-          h("dt", {}, "Profile"), h("dd", {}, b.persistent ? "saved automatically" : "temporary · may be deleted when idle"),
+          h("dt", {}, "Browser data"), h("dd", {}, b.persistent ? "kept when stopped" : "temporary · may be deleted when idle"),
           h("dt", {}, "Project"), h("dd", {}, md.project || "—"),
           h("dt", {}, "Purpose"), h("dd", {}, md.purpose || "—"),
           h("dt", {}, "Task"), h("dd", {}, md.task || "—"),
@@ -1167,7 +1186,7 @@ async function browserView(id, seq) {
   ]);
   if (b.status !== "running") {
     stagewrap.replaceChildren(h("div", { class: "banner", role: "status" },
-      b.persistent ? "Browser stopped. Your profile and metadata are saved. Press Start to reopen it." : "Browser stopped. This temporary profile may be deleted when idle."));
+      b.persistent ? "Browser stopped. Its data and metadata are kept. Start to reopen it, or Save profile to reuse its logins in another browser." : "Browser stopped. This temporary profile may be deleted when idle. Save profile to make a reusable copy."));
     return;
   }
   void connectViewer(id, human ? "control" : "watch", img, b.control?.leaseToken, status, {
@@ -1845,23 +1864,23 @@ async function agentsView() {
 async function seedsView() {
   layout([
     h("div", { class: "top" },
-      h("div", {}, h("h1", {}, "Profile templates"), h("div", { class: "sub" }, "A template is a frozen copy of a stopped browser profile. New ephemeral browsers can inherit all of its logins, but copied sessions are only expected until the destination site accepts them.")),
+      h("div", {}, h("h1", {}, "Saved profiles"), h("div", { class: "sub" }, "Start independent browsers with saved logins and metadata. Changes in one browser do not affect another. Update a saved profile explicitly to change future copies.")),
     ),
     h("table", { class: "table" },
-      h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", {}, "Recorded sites"), h("th", {}, "Created"), h("th", {}, "Actions"))),
+      h("thead", {}, h("tr", {}, h("th", {}, "Profile"), h("th", {}, "Recorded sites"), h("th", {}, "Saved"), h("th", {}, "Actions"))),
       h("tbody", {},
         state.seeds.length === 0
-          ? h("tr", {}, h("td", { colspan: "4", class: "sub" }, "No profile templates yet. Stop a browser, then choose Save as profile template from its menu."))
+          ? h("tr", {}, h("td", { colspan: "4", class: "sub" }, "No saved profiles yet. Open a browser, sign in to the sites you need, then choose Save profile. You do not need to stop it first."))
           : null,
         ...state.seeds.map((s) => h("tr", {},
-          h("td", {}, s.name, h("div", { class: "mono sub" }, s.id)),
+          h("td", {}, s.name, h("div", { class: "sub" }, [s.metadata?.project, s.metadata?.purpose].filter(Boolean).join(" · "))),
           h("td", {}, sitePills(s) || h("span", { class: "sub" }, "None recorded")),
-          h("td", { title: s.created_at }, ago(s.created_at)),
+          h("td", { title: s.updated_at || s.created_at }, ago(s.updated_at || s.created_at)),
           h("td", {}, h("button", {
             class: "btn",
-            "aria-label": `Create ephemeral browser from ${s.name}`,
+            "aria-label": `Create browser from ${s.name}`,
             onClick: () => createFromTemplate(s),
-          }, "Create browser")),
+          }, "Create browser"), " ", h("button", { class: "btn", disabled: !state.browsers.length, onClick: () => saveProfileTemplate(null, s) }, "Update saved profile")),
         )),
       ),
     ),
@@ -1869,29 +1888,7 @@ async function seedsView() {
 }
 
 async function createFromTemplate(template) {
-  const answers = await askFor("New browser from template", [
-    {
-      name: "name",
-      label: "Browser name",
-      value: `${template.name} session`,
-      hint: "This copy is ephemeral. Deleting it does not change the template.",
-    },
-  ], "Create browser");
-  if (!answers) return;
-  await act(async () => {
-    const created = await api("/api/v1/browsers", {
-      method: "POST",
-      body: {
-        name: answers.name,
-        persistent: false,
-        seedId: template.id,
-        metadata: { source: "dashboard", purpose: `Ephemeral copy of ${template.name}` },
-      },
-    });
-    flash(`${answers.name} created. Its recorded sessions are expected until checked.`);
-    await refresh();
-    go(`/browsers/${created.browser.id}`);
-  });
+  return createBrowser(template.id);
 }
 
 async function securityView() {
@@ -1936,20 +1933,23 @@ async function securityView() {
   ]);
 }
 
-async function createBrowser() {
+async function createBrowser(seedId = "") {
+  if (typeof seedId !== "string") seedId = "";
+  let created;
   const answers = await askFor("New browser", [
     { name: "name", label: "Name", placeholder: "Leave blank and one will be generated", hint: "How it appears in the fleet." },
-    { name: "project", label: "Project", placeholder: "Optional", hint: "Shown on the card, and the filter box matches it." },
-    { name: "purpose", label: "What is it for?", placeholder: "Optional", maxLength: 200, hint: "The next person to look at this fleet will thank you." },
-  ], "Create browser");
-  if (!answers) return;
-  const { name, project, purpose } = answers;
-  await act(async () => {
-    await api("/api/v1/browsers", {
+    { name: "seedId", label: "Use saved profile", value: seedId, options: [{ value: "", label: "Start fresh" }, ...state.seeds.map(s => ({ value: s.id, label: s.name }))],
+      hint: "Copies every saved login and its metadata into an independent browser. Sites may ask you to sign in again." },
+    { name: "project", label: "Project", placeholder: "Use saved profile's project, if any", hint: "Leave blank to keep the saved metadata." },
+    { name: "purpose", label: "What is it for?", placeholder: "Use saved profile's purpose, if any", maxLength: 200 },
+  ], "Create browser", async (values) => {
+    const { name, project, purpose } = values;
+    created = await api("/api/v1/browsers", {
       method: "POST",
       body: {
         name: name || undefined,
         persistent: true,
+        seedId: values.seedId || undefined,
         metadata: {
           source: "dashboard",
           ...(project ? { project } : {}),
@@ -1957,9 +1957,8 @@ async function createBrowser() {
         },
       },
     });
-    await refresh();
-    void render();
   });
+  if (answers) go(`/browsers/${created.browser.id}`);
 }
 
 async function editBrowser(b) {
@@ -2043,21 +2042,33 @@ async function removeSite(b, site) {
   });
 }
 
-async function saveProfileTemplate(b) {
-  const answers = await askFor("Save profile template", [
-    {
-      name: "name",
-      label: "Template name",
-      value: b.name,
-      hint: "The template copies the whole profile and every login inside it.",
-    },
-  ], "Save template");
+async function saveProfileTemplate(b, saved = null) {
+  const md = saved?.metadata || b?.metadata || {};
+  let result;
+  const answers = await askFor(saved ? "Update saved profile" : "Save profile", [
+    ...(!b ? [{ name: "browserId", label: "Copy from browser", value: saved?.created_from_browser_id || "", required: true,
+      options: [{ value: "", label: "Choose a browser" }, ...state.browsers.map(browser => ({ value: browser.id, label: browser.name }))] }] : []),
+    { name: "name", label: "Saved profile name", value: saved?.name || b?.name || "", required: true, maxLength: 80,
+      hint: saved ? "Replaces this saved snapshot for future browsers. Existing browsers stay unchanged. Every login in the source is copied." : "Copies every login into a reusable profile. Other browsers can use it immediately." },
+    { name: "project", label: "Project", value: md.project || "" },
+    { name: "purpose", label: "What is it for?", value: md.purpose || "", maxLength: 200 },
+    { name: "task", label: "Task", value: md.task || "", maxLength: 200,
+      hint: "If the source is running, saving briefly pauses Chrome, then resumes it. Unsaved page edits may be lost." },
+  ], saved ? "Update saved profile" : "Save profile", async (values) => {
+    const metadata = { ...md };
+    for (const key of ["project", "purpose", "task"]) {
+      if (values[key]) metadata[key] = values[key]; else delete metadata[key];
+    }
+    result = await api(saved ? `/api/v1/seeds/${saved.id}` : "/api/v1/seeds", {
+      method: saved ? "PUT" : "POST", body: { browserId: b?.id || values.browserId, name: values.name, metadata },
+    });
+  });
   if (!answers) return;
   await act(async () => {
-    await api("/api/v1/seeds", { method: "POST", body: { browserId: b.id, name: answers.name } });
-    flash(`Saved ${answers.name} as a profile template. Copied sessions are only expected until checked.`);
-    await refresh();
-    void render();
+    await render();
+    flash(result.seed.resumeError
+      ? `${answers.name} saved, but the source could not resume: ${result.seed.resumeError}. Press Start to retry.`
+      : `${answers.name} saved. Choose it under New browser → Use saved profile.${result.seed.resumed ? " The source browser has resumed." : ""}`, !result.seed.resumeError);
   });
 }
 
@@ -2200,7 +2211,7 @@ function busy(on) {
   }
 }
 
-const TITLES = { home: "Browsers", agents: "Agents", seeds: "Profile templates", security: "Security state", login: "Sign in" };
+const TITLES = { home: "Browsers", agents: "Agents", seeds: "Saved profiles", security: "Security state", login: "Sign in" };
 
 let renderSeq = 0;
 

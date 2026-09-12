@@ -101,11 +101,13 @@ describe("MCP", () => {
     assert.match(instructions, /ask once whether to reuse this browser/);
     assert.match(instructions, /do not ask again once the user has decided/);
     assert.match(instructions, /Do not claim a temporary browser is saved/);
-    assert.match(instructions, /Offer a profile template only when future tasks need separate browsers/);
+    assert.match(instructions, /Offer a saved profile.*when separate browsers need/);
     assert.match(instructions, /copies every saved login/);
-    assert.match(instructions, /explicit consent before copying/);
-    assert.match(instructions, /administrator-only and is not an MCP tool/);
-    assert.match(instructions, /snapshot the stopped browser through the dashboard/);
+    assert.match(instructions, /explicit consent before cloning/);
+    assert.match(instructions, /Saving is administrator-only/);
+    assert.match(instructions, /choose Save profile in the dashboard/);
+    assert.match(instructions, /briefly pauses and resumes automatically/);
+    assert.match(instructions, /future copies, never existing browsers/);
     assert.match(instructions, /Do not stop active work/);
     assert.match(instructions, /non-default seed:use scope/);
     assert.match(instructions, /Websites can expire or revoke sessions/);
@@ -136,7 +138,7 @@ describe("MCP", () => {
     assert.match(description("tallylamp_report_site_access"), /ask once whether to reuse/);
     assert.match(description("tallylamp_report_site_access"), /not credentials or a profile snapshot/);
     assert.match(description("tallylamp_list_profile_templates"), /explicit consent before cloning/);
-    assert.match(description("tallylamp_list_profile_templates"), /creation is not an MCP tool/);
+    assert.match(description("tallylamp_list_profile_templates"), /creation is not an MCP tool/i);
     assert.match(description("tallylamp_list_profile_templates"), /non-default seed:use scope/);
     assert.match(description("tallylamp_stop_browser"), /Prefer this to deletion for routine cleanup/);
     assert.match(description("tallylamp_delete_browser"), /user explicitly asks/);

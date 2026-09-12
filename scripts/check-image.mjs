@@ -11,6 +11,7 @@ let token = "";
 let session = "";
 let browserId;
 let agentId;
+const cloneIds = [];
 let sequence = 0;
 
 async function request(path, { method = "GET", body, agent = false, anonymous = false } = {}) {
@@ -82,7 +83,8 @@ const discovery = await request("/.well-known/oauth-protected-resource", { anony
 assert.equal(discovery.data.resource, base + "/mcp");
 
 try {
-  const created = await request("/api/v1/agents", { method: "POST", body: { name: "Release validation", maxBrowsers: 2 } });
+  const created = await request("/api/v1/agents", { method: "POST", body: { name: "Release validation", maxBrowsers: 4,
+    scopes: ["browser:create", "browser:list:own", "browser:read:own", "browser:start:own", "browser:stop:own", "browser:delete:own", "browser:control:own", "seed:use"] } });
   assert.equal(created.response.status, 201);
   token = created.data.token;
   agentId = created.data.agent.id;
@@ -122,7 +124,43 @@ try {
   const stored = saved.content.filter(c => c.type === "text").map(c => c.text).join("\n");
   assert.ok(/"stored":\s*"saved"/.test(stored) && stored.includes('release_check=saved'), `Profile data was lost on stop: ${stored}`);
   console.log("PASS: cookies and local storage survive an immediate browser stop/start");
+
+  await tool("evaluate_script", { pageId: restartedPageId, function: "() => { document.cookie = 'release_session=saved; Path=/; Secure; SameSite=Lax'; return true; }" });
+  const snapshot = await request("/api/v1/seeds", { method: "POST", body: { browserId, name: "Reusable release profile", metadata: { project: "release-check", purpose: "Independent copies" } } });
+  assert.equal(snapshot.response.status, 201, JSON.stringify(snapshot.data));
+  assert.equal(snapshot.data.seed.resumed, true, "Save profile must resume its running source");
+  const seedId = snapshot.data.seed.id;
+  await tool("tallylamp_stop_browser", { browserId });
+  const checkState = async (expected) => {
+    const pageId = examplePageId(await tool("list_pages"));
+    const result = await tool("evaluate_script", { pageId, function: "() => ({stored: localStorage.getItem('release-check'), session: document.cookie.includes('release_session=saved'), persistent: document.cookie.includes('release_check=saved')})" });
+    const text = result.content.filter(c => c.type === "text").map(c => c.text).join("\n");
+    assert.ok(new RegExp(`\"stored\":\\s*\"${expected}\"`).test(text) && /"session":\s*true/.test(text) && /"persistent":\s*true/.test(text), text);
+    return pageId;
+  };
+  for (const name of ["First independent copy", "Second independent copy"]) {
+    const copy = await tool("tallylamp_create_browser", { name, seedId, persistent: true });
+    const id = JSON.parse(copy.content.find(c => c.type === "text").text).browserId;
+    cloneIds.push(id);
+    const detail = await request(`/api/v1/browsers/${id}`);
+    assert.equal(detail.data.browser.metadata.project, "release-check");
+    await checkState("saved");
+  }
+  await tool("tallylamp_use_browser", { browserId: cloneIds[0] });
+  const firstPage = await checkState("saved");
+  await tool("evaluate_script", { pageId: firstPage, function: "() => { localStorage.setItem('release-check', 'updated'); return true; }" });
+  const updated = await request(`/api/v1/seeds/${seedId}`, { method: "PUT", body: { browserId: cloneIds[0], name: "Updated release profile", metadata: { project: "release-check" } } });
+  assert.equal(updated.response.status, 200, JSON.stringify(updated.data));
+  assert.equal(updated.data.seed.resumed, true);
+  await tool("tallylamp_stop_browser", { browserId: cloneIds[0] });
+  await tool("tallylamp_use_browser", { browserId: cloneIds[1] });
+  await checkState("saved");
+  const newest = await tool("tallylamp_create_browser", { name: "Copy after update", seedId, persistent: true });
+  cloneIds.push(JSON.parse(newest.content.find(c => c.type === "text").text).browserId);
+  await checkState("updated");
+  console.log("PASS: Save profile pauses/resumes real Chrome, clones cookies and metadata into independent browsers, and updates future copies only");
 } finally {
+  for (const id of cloneIds) await request(`/api/v1/browsers/${id}`, { method: "DELETE" });
   if (browserId) await request(`/api/v1/browsers/${browserId}`, { method: "DELETE" });
   if (agentId) {
     await request(`/api/v1/agents/${agentId}`, { method: "PATCH", body: { enabled: false } });

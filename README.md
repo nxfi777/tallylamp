@@ -30,8 +30,9 @@ sites where you need to sign in yourself.
   the browser.
 - Keep browsers for different projects and agents. The dashboard shows who
   created each browser, its purpose, and who currently has control.
-- Prepare a browser by hand and let an agent use that profile later. Profile
-  templates can also copy it into new browsers, with explicit permission.
+- Choose **Save profile** to make its logins and metadata reusable in new,
+  independent browsers. A running source briefly pauses and resumes automatically.
+  Copying every saved login requires explicit permission.
 - Test pages with a different user agent, mobile or desktop viewport, touch
   input, or location through MCP's `emulate` tool.
 

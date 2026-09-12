@@ -125,15 +125,33 @@ profile is saved. If future reuse is unclear, it should ask once whether you wan
 to reuse that browser. A temporary-session choice still needs to be respected.
 For routine cleanup, stop a persistent browser rather than deleting its profile.
 
-### Profile templates
+### Save a reusable profile
 
-Reuse the same browser when you can; it does not need a template. When separate
-browsers need the same prepared setup, stop the source browser after active work
-is finished, snapshot it, and clone the snapshot into new browsers. The API calls
-these templates seeds. Only an administrator can create a snapshot, and a running
-profile cannot be snapshotted. There is no MCP tool for creating a template;
-an agent should offer the option, explain that it copies every saved login, ask
-for consent, and direct the administrator to the dashboard to create it.
+**Stop browser** ends Chrome and keeps a persistent browser's data. It does not
+create a shared snapshot. **Save profile** makes a reusable copy of its logins,
+metadata, and recorded sites, available immediately under **Saved profiles**.
+
+1. Open the source browser and choose **Save profile**.
+2. Name the saved profile and edit its project, purpose, and task if needed.
+3. Choose **New browser → Use saved profile**, or **Create browser** on its saved
+   profile row. The new browser keeps its own data and metadata.
+
+Saving a running browser briefly closes Chrome to flush its data, copies the
+profile, and resumes the source automatically. Finish any unsaved page edits first.
+A stopped source stays stopped. If copying fails, the source is still resumed;
+if restarting fails, the dashboard says so and offers **Start** to retry.
+
+Each browser uses its own copy, not a shared Chrome directory. Changes in one
+browser do not affect another. **Update saved profile** lets you select a source
+browser and explicitly replace a saved snapshot for future copies. Existing
+browsers keep their current data. Saving or updating never modifies those copies.
+
+Only an administrator can save or update reusable profiles. The compatibility
+API calls them seeds: `POST /api/v1/seeds` creates one, and `PUT /api/v1/seeds/:id`
+updates it. Both accept `browserId`, `name`, and optional `metadata`. The existing
+`tallylamp_list_profile_templates` MCP tool lists saved profiles and their metadata;
+`tallylamp_create_browser` clones one with `seedId`. Agents must ask for consent
+before copying every login and direct administrators to the dashboard to save one.
 
 Cloning requires `seed:use` because the clone receives every login in the profile.
 A seed ID is not a secret or proof of permission. Some websites invalidate copied

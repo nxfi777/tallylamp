@@ -1,4 +1,5 @@
 import { cpSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { cp, rm } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { config, downloadDir, profileDir, seedDir } from "./config.js";
@@ -60,11 +61,16 @@ export type ControlState = {
   leaseToken: string | null;
 };
 
+type SavedProfileResult = { id: string; path: string; resumed: boolean; resumeError?: string };
+
 export class BrowserManager {
   private siteDetector = new SiteDetector();
   private runtimes = new Map<string, ChromeRuntime>();
   private windowContents = new Map<string, { width: number; height: number }>();
   private starting = new Map<string, Promise<ChromeRuntime>>();
+  private profileSaves = new Map<string, Promise<SavedProfileResult>>();
+  private savingSeeds = new Set<string>();
+  private resumeReservations = new Set<string>();
   private mcpAttached = new Map<string, number>();
   private viewers = new Map<string, number>();
   private fakeClosers = new Map<string, () => Promise<void>>();
@@ -297,7 +303,15 @@ export class BrowserManager {
         throw Err.fleetFull(`agent ${input.principal.name} is at max browsers (${input.principal.maxBrowsers})`);
       }
     }
-    const metadata = sanitizeMetadata(input.metadata);
+    // Saved profiles are independent copies, with reusable descriptive metadata.
+    // Authorize before reading or copying any saved authenticated state.
+    let seed: { path: string; metadata_json: string } | undefined;
+    if (input.seedId) {
+      if (input.principal.type === "agent") requireScope(input.principal, "seed:use");
+      seed = getDb().prepare(`SELECT path, metadata_json FROM seeds WHERE id = ?`).get(input.seedId) as typeof seed;
+      if (!seed) throw Err.notFound("saved profile not found");
+    }
+    const metadata = sanitizeMetadata({ ...(seed ? JSON.parse(seed.metadata_json) : {}), ...sanitizeMetadata(input.metadata) });
     const id = randomBytes(8).toString("hex");
     const name = input.name?.trim() || metadata.project || metadata.purpose || `browser-${id.slice(0, 6)}`;
     let slug = slugify(name, `b-${id.slice(0, 8)}`);
@@ -311,10 +325,7 @@ export class BrowserManager {
       // A seed is a whole authenticated profile, so cloning one is a credential transfer and
       // is gated separately from browser:create. Checked before the copy so a refusal cannot
       // leave a seeded profile on disk.
-      if (input.principal.type === "agent") requireScope(input.principal, "seed:use");
-      const seed = getDb().prepare(`SELECT path FROM seeds WHERE id = ?`).get(input.seedId) as { path: string } | undefined;
-      if (!seed) throw Err.notFound("seed not found");
-      cpSync(seed.path, profile, { recursive: true });
+      cpSync(seed!.path, profile, { recursive: true });
       clearSingletonLocks(profile);
       audit({
         actorType: input.principal.type,
@@ -364,6 +375,12 @@ export class BrowserManager {
   }
 
   async ensureRunning(id: string): Promise<ChromeRuntime> {
+    if (this.profileSaves.has(id)) throw Err.browserUnavailable("profile is being saved; retry when saving finishes");
+    return this.ensureRunningInternal(id);
+  }
+
+  private async ensureRunningInternal(id: string): Promise<ChromeRuntime> {
+    if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     const existing = this.runtimes.get(id);
     if (existing && existing.chrome.exitCode === null) return existing;
     const inflight = this.starting.get(id);
@@ -374,7 +391,8 @@ export class BrowserManager {
     // and all launched. Counting the in-flight starts is what makes the number mean anything.
     // Between runtimes.set() and the finally below an id sits in both maps, so the cap is
     // briefly one stricter than asked -- the safe direction to be wrong in.
-    if (this.runtimes.size + this.starting.size >= config.maxBrowsers && !this.runtimes.has(id)) {
+    const occupied = new Set([...this.runtimes.keys(), ...this.starting.keys(), ...this.resumeReservations]);
+    if (occupied.size >= config.maxBrowsers && !occupied.has(id)) {
       throw Err.fleetFull(`fleet is full (max ${config.maxBrowsers})`);
     }
     const p = this.start(id);
@@ -455,6 +473,11 @@ export class BrowserManager {
   }
 
   async stop(id: string): Promise<void> {
+    if (this.profileSaves.has(id)) throw Err.browserUnavailable("profile is being saved; retry when saving finishes");
+    return this.stopInternal(id);
+  }
+
+  private async stopInternal(id: string): Promise<void> {
     const rt = this.runtimes.get(id);
     this.setStatus(id, "stopping");
     if (rt) {
@@ -684,6 +707,8 @@ export class BrowserManager {
       },
       reportedClient: row.client_name ? { name: row.client_name, version: row.client_version } : null,
       metadata,
+      savedProfileId: row.seed_id,
+      savingProfile: this.profileSaves.has(row.id),
       signedInSites: listSiteAccess(row.id),
       url: row.current_url,
       title: row.current_title,
@@ -717,7 +742,7 @@ export class BrowserManager {
       // A start in flight owns a freshly created proxy that is not yet paired with a runtime;
       // stopping underneath it would close the new listener and leave Chrome pointed at a
       // dead port.
-      if (this.starting.has(id)) continue;
+      if (this.starting.has(id) || this.profileSaves.has(id)) continue;
       if (rt.chrome.exitCode !== null) {
         this.runtimes.delete(id);
         this.windowContents.delete(id);
@@ -747,33 +772,91 @@ export class BrowserManager {
     }
   }
 
-  async snapshotSeed(browserId: string, name: string, principal: Principal): Promise<{ id: string; path: string }> {
-    const row = this.row(browserId);
-    if (this.runtimes.has(browserId)) {
-      throw Err.invalid("stop the browser before snapshotting its profile");
+  async snapshotSeed(browserId: string, name: string, principal: Principal,
+    options: { seedId?: string; metadata?: unknown } = {}): Promise<SavedProfileResult> {
+    // Saving makes credentials reusable by other authorized browsers, unlike a
+    // temporary loan. Keep publication/update administrator-only.
+    if (principal.type !== "admin") throw Err.unauthorized("only an administrator can save reusable profiles");
+    if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
+    this.row(browserId);
+    name = name.trim();
+    if (!name || name.length > 80) throw Err.invalid("profile name must be between 1 and 80 characters");
+    const metadata = sanitizeMetadata(options.metadata ?? JSON.parse(this.row(browserId).metadata_json));
+    if (this.profileSaves.has(browserId) || this.starting.has(browserId) || this.row(browserId).status === "stopping") {
+      throw Err.browserUnavailable("browser is busy; retry when its current operation finishes");
     }
-    const id = randomBytes(6).toString("hex");
-    const dest = seedDir(id);
-    mkdirSync(path.dirname(dest), { recursive: true });
-    cpSync(row.profile_path, dest, { recursive: true });
-    clearSingletonLocks(dest);
-    getDb()
-      .prepare(`INSERT INTO seeds(id, name, path, created_from_browser_id, created_at) VALUES (?, ?, ?, ?, ?)`)
-      .run(id, name, dest, browserId, nowIso());
-    snapshotSiteAccess(browserId, id);
-    audit({
-      actorType: principal.type,
-      actorId: principal.id,
-      action: "seed.created",
-      targetType: "seed",
-      targetId: id,
+    if (options.seedId && this.savingSeeds.has(options.seedId)) throw Err.browserUnavailable("saved profile is already being updated");
+    const previous = options.seedId
+      ? getDb().prepare(`SELECT path FROM seeds WHERE id = ?`).get(options.seedId) as { path: string } | undefined
+      : undefined;
+    if (options.seedId && !previous) throw Err.notFound("saved profile not found");
+    const id = options.seedId ?? randomBytes(6).toString("hex");
+    this.savingSeeds.add(id);
+    // Publish a new immutable directory, then atomically move the DB pointer.
+    // Readers continue using the old complete snapshot throughout an update.
+    const dest = seedDir(`${id}-${randomBytes(6).toString("hex")}`);
+    const wasRunning = !!this.runtimes.get(browserId) && this.runtimes.get(browserId)!.chrome.exitCode === null;
+    if (wasRunning) this.resumeReservations.add(browserId);
+    const work = Promise.resolve().then(async (): Promise<SavedProfileResult> => {
+      let saved = false;
+      let failure: unknown;
+      let resumeError: string | undefined;
+      try {
+        if (wasRunning) {
+          const runtime = this.runtimes.get(browserId)!;
+          const fake = config.fakeChrome;
+          await this.stopInternal(browserId);
+          if (!fake && (runtime.chrome.signalCode !== null || runtime.chrome.exitCode !== 0)) {
+            throw Err.browserUnavailable("Chrome did not close cleanly; no saved profile was published. Retry Save profile.");
+          }
+        }
+        await this.copyProfile(this.row(browserId).profile_path, dest);
+        clearSingletonLocks(dest);
+        const db = getDb();
+        db.exec("BEGIN IMMEDIATE");
+        try {
+          if (previous) {
+            db.prepare(`UPDATE seeds SET name = ?, path = ?, created_from_browser_id = ?, metadata_json = ?, updated_at = ? WHERE id = ?`)
+              .run(name, dest, browserId, JSON.stringify(metadata), nowIso(), id);
+            db.prepare(`DELETE FROM seed_site_access WHERE seed_id = ?`).run(id);
+          } else {
+            db.prepare(`INSERT INTO seeds(id, name, path, created_from_browser_id, created_at, metadata_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+              .run(id, name, dest, browserId, nowIso(), JSON.stringify(metadata), nowIso());
+          }
+          snapshotSiteAccess(browserId, id);
+          db.exec("COMMIT");
+          saved = true;
+        } catch (e) { db.exec("ROLLBACK"); throw e; }
+        audit({ actorType: principal.type, actorId: principal.id, action: previous ? "seed.updated" : "seed.created", targetType: "seed", targetId: id });
+        hub.emitEvent("profile.saved", { id, name }, browserId);
+      } catch (e) { failure = e; }
+      finally {
+        if (wasRunning) {
+          try { await this.ensureRunningInternal(browserId); }
+          catch (e) { resumeError = (e as Error).message; }
+        }
+        this.resumeReservations.delete(browserId);
+        if (!saved) await rm(dest, { recursive: true, force: true }).catch(() => undefined);
+        if (saved && previous) await rm(previous.path, { recursive: true, force: true }).catch(e => log.warn("old profile snapshot cleanup failed", { id, error: (e as Error).message }));
+      }
+      if (failure) {
+        if (resumeError) throw Err.browserUnavailable(`Profile was not saved and the browser could not resume: ${resumeError}`);
+        throw failure;
+      }
+      return { id, path: dest, resumed: wasRunning && !resumeError, ...(resumeError ? { resumeError } : {}) };
     });
-    return { id, path: dest };
+    this.profileSaves.set(browserId, work);
+    try { return await work; }
+    finally { this.profileSaves.delete(browserId); this.savingSeeds.delete(id); }
+  }
+
+  protected async copyProfile(source: string, destination: string): Promise<void> {
+    await cp(source, destination, { recursive: true, filter: file => !["SingletonLock", "SingletonSocket", "SingletonCookie", "DevToolsActivePort"].includes(path.basename(file)) });
   }
 
   listSeeds() {
     const rows = getDb()
-      .prepare(`SELECT id, name, path, created_from_browser_id, created_at, notes FROM seeds ORDER BY created_at DESC`)
+      .prepare(`SELECT id, name, path, created_from_browser_id, created_at, notes, metadata_json, updated_at FROM seeds ORDER BY COALESCE(updated_at, created_at) DESC`)
       .all() as Array<{
         id: string;
         name: string;
@@ -781,12 +864,15 @@ export class BrowserManager {
         created_from_browser_id: string | null;
         created_at: string;
         notes: string | null;
+        metadata_json: string;
+        updated_at: string | null;
       }>;
-    return rows.map((row) => ({ ...row, signedInSites: listSeedSiteAccess(row.id) }));
+    return rows.map(({ metadata_json, ...row }) => ({ ...row, metadata: JSON.parse(metadata_json) as BrowserMetadata, signedInSites: listSeedSiteAccess(row.id) }));
   }
 
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
+    await Promise.allSettled([...this.profileSaves.values()]);
     const ids = [...this.runtimes.keys()];
     for (const id of ids) {
       try {
