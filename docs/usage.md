@@ -83,9 +83,10 @@ other mutating tools.
 Create agents in the dashboard. Each gets a bearer token, a browser cap, and
 scopes such as `browser:create` and `browser:list:own`.
 
-Four scopes require an explicit grant: `seed:use`, `browser:lend`,
+Five scopes require an explicit grant: `seed:use`, `seed:write`, `browser:lend`,
 `browser:borrow`, and `browser:tunnel`. They allow access to copied logins,
-another agent's browser, or a private network address. Set them deliberately
+shared profile updates, another agent's browser, or a private network address.
+Use **Agents → Profile permissions** to grant profile access, or set scopes
 with `PATCH /api/v1/agents/:id`.
 
 Agents create browsers through `tallylamp_create_browser` or
@@ -129,7 +130,7 @@ For routine cleanup, stop a persistent browser rather than deleting its profile.
 
 **Stop browser** ends Chrome and keeps a persistent browser's data. It does not
 create a shared snapshot. **Save profile** makes a reusable copy of its logins,
-metadata, and recorded sites, available immediately under **Saved profiles**.
+metadata, and recorded sites. It appears under **Saved profiles** right away.
 
 1. Open the source browser and choose **Save profile**.
 2. Name the saved profile and edit its project, purpose, and task if needed.
@@ -142,16 +143,42 @@ A stopped source stays stopped. If copying fails, the source is still resumed;
 if restarting fails, the dashboard says so and offers **Start** to retry.
 
 Each browser uses its own copy, not a shared Chrome directory. Changes in one
-browser do not affect another. **Update saved profile** lets you select a source
-browser and explicitly replace a saved snapshot for future copies. Existing
-browsers keep their current data. Saving or updating never modifies those copies.
+browser do not affect another. If you load a saved profile, log into another
+site, then click **Save profile**, it updates that same saved profile. The save
+target is shown beside the browser details. Renaming a browser does not change it.
 
-Only an administrator can save or update reusable profiles. The compatibility
-API calls them seeds: `POST /api/v1/seeds` creates one, and `PUT /api/v1/seeds/:id`
-updates it. Both accept `browserId`, `name`, and optional `metadata`. The existing
-`tallylamp_list_profile_templates` MCP tool lists saved profiles and their metadata;
-`tallylamp_create_browser` clones one with `seedId`. Agents must ask for consent
-before copying every login and direct administrators to the dashboard to save one.
+**Save as new profile** creates a separate snapshot and makes it this browser's
+new save target. The original stays unchanged. From the saved-profile list,
+**Update saved profile** also lets an administrator choose a source browser.
+Updates affect future copies only; browsers already created keep their own data.
+
+The compatibility API calls profiles seeds: `POST /api/v1/seeds` creates one,
+and `PUT /api/v1/seeds/:id` updates it. Both accept `browserId`, `name`, and optional
+`metadata`. Omitting metadata preserves it on updates; new profiles copy the
+source browser's metadata.
+
+### Save and update through MCP
+
+- `tallylamp_list_profile_templates` lists profiles and their metadata.
+- `tallylamp_create_browser` loads one with `seedId` into a new browser.
+- `tallylamp_save_profile` updates the bound browser's linked profile, or creates
+  one if it has none. Pass `asNew: true` to make a separate profile.
+- `tallylamp_update_profile` updates an existing linked profile. It refuses to
+  create one if the browser has no save target.
+
+Both save tools accept an optional `browserId`, `name`, and replacement `metadata`.
+By default they use the bound browser, preserve an existing profile's name and
+metadata, and retain its ID. The update tool also accepts `profileId`, which must
+match the agent's browser's save target. A running source resumes automatically,
+and the calling agent reconnects to it before continuing.
+
+Agents need the separate `seed:write` permission to save. This lets them publish
+every login in an owned browser and replace its linked shared snapshot. It can
+change what other authorized agents load next. An agent with only `seed:use`
+cannot overwrite profiles. Borrowed browsers cannot be exported, and saving is
+blocked while a human has control. Ask for consent before sharing or replacing
+saved logins. Administrators can grant these permissions in **Agents → Profile
+permissions**; they are not enabled automatically for existing agents.
 
 Cloning requires `seed:use` because the clone receives every login in the profile.
 A seed ID is not a secret or proof of permission. Some websites invalidate copied

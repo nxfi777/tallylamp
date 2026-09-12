@@ -75,7 +75,7 @@ Before creating a browser or asking the user to sign in again, call tallylamp_li
 
 Profiles are saved automatically when persistent is true (the default); no separate save action or template is needed to reuse the same browser. After a successful human sign-in, wait until control is returned, check authenticated UI, and call tallylamp_report_site_access with confirmed. Explain that this persistent browser keeps its saved session. If future reuse is unclear, ask once whether to reuse this browser for future tasks on this project. Respect the answer and do not ask again once the user has decided. Do not claim a temporary browser is saved for future use or change the user's temporary-session choice without consent. Websites can expire or revoke sessions and ask for sign-in again.
 
-Offer a saved profile (called a profile template by the compatibility tools) when separate browsers need the same prepared setup. Explain that it copies every saved login, and ask for explicit consent before cloning. Saving is administrator-only: ask the administrator to choose Save profile in the dashboard. A running source briefly pauses and resumes automatically; unsaved page edits may be lost. The saved profile is immediately available for independent browsers. Update saved profile explicitly changes future copies, never existing browsers. Do not stop active work yourself or ask for administrator credentials. Listing or cloning saved profiles requires the non-default seed:use scope; do not bypass a missing permission. Check copied sessions in the new browser because they may require a fresh sign-in.
+Offer a saved profile (called a profile template by the compatibility tools) when separate browsers need the same prepared setup. Explain that it copies every saved login, and ask for explicit consent before cloning or publishing. tallylamp_save_profile updates the browser's linked saved profile, or creates one if none is linked; pass asNew: true only to save a separate profile. tallylamp_update_profile updates an existing linked profile and refuses to create one accidentally. Both require the non-default seed:write scope and an owned browser; borrowing is not permission to copy its logins. Listing or cloning requires seed:use. A seed:write grant permits replacing shared snapshots loaded into the agent's own browsers, affecting future copies by other authorized agents. Do not bypass a missing permission or ask for administrator credentials; ask the administrator to grant the scope or save through the dashboard instead. A running source briefly pauses and resumes automatically; unsaved page edits may be lost. Finish active work and wait until human control has returned before saving. Updates change future copies, never existing browsers. Check copied sessions in the new browser because they may require a fresh sign-in.
 
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
@@ -141,11 +141,31 @@ export const LIFECYCLE_TOOLS: Tool[] = [
     },
   },
   {
+    name: "tallylamp_save_profile",
+    description: "Save an owned browser's logins, storage, metadata and recorded sites as a reusable profile. Updates its linked profile by default; creates one if none is linked. Use asNew: true for Save as new. Requires non-default seed:write permission and explicit user consent to copy every login. Borrowed or human-controlled browsers cannot be saved by agents. A running source briefly pauses and resumes; finish unsaved page edits first. Updates affect future copies only, not existing browsers. Browser data already persists automatically; this tool publishes a shared snapshot, not a routine autosave.",
+    inputSchema: { type: "object", properties: {
+      browserId: { type: "string", description: "Source browser; defaults to the bound browser." },
+      name: { type: "string", description: "Saved profile name. Defaults to the linked profile's name, or the browser name for a new profile." },
+      metadata: { type: "object", description: "Optional replacement metadata. Updates preserve saved metadata; new profiles copy browser metadata. Never include credentials." },
+      asNew: { type: "boolean", description: "Default false. True creates a separate profile and makes it this browser's new save target." },
+    } },
+  },
+  {
+    name: "tallylamp_update_profile",
+    description: "Update the saved profile linked to an owned browser after loading it and changing logins or settings. Requires seed:write and explicit user consent. Defaults to that browser's linked profile ID; refuses an unrelated ID or an unlinked browser. Retains the profile ID, changes future copies only, and automatically resumes a running source. Borrowed or human-controlled browsers cannot be saved by agents. Use tallylamp_save_profile with asNew: true to create a separate profile instead.",
+    inputSchema: { type: "object", properties: {
+      browserId: { type: "string", description: "Source browser; defaults to the bound browser." },
+      profileId: { type: "string", description: "Defaults to the source browser's linked saved profile. Agents may update only that linked ID." },
+      name: { type: "string", description: "Optional new name; omission keeps the saved profile's name." },
+      metadata: { type: "object", description: "Optional replacement metadata. Omission preserves saved metadata. Never include credentials." },
+    } },
+  },
+  {
     name: "tallylamp_list_profile_templates",
     description:
       "List saved profiles (profile templates) this agent is permitted to clone, including their metadata and recorded sites. " +
       "Offer a template only when separate browsers need the same setup; reusing the existing browser needs no snapshot. " +
-      "Templates copy every saved login: ask for explicit consent before cloning. To save one, ask the administrator to choose Save profile in the dashboard; running browsers briefly pause and resume automatically. Creation is not an MCP tool. " +
+      "Profiles copy every saved login: ask for explicit consent before cloning. With seed:write, use tallylamp_save_profile or tallylamp_update_profile on an owned browser; otherwise ask the administrator to save it in the dashboard. " +
       "Copied sites are only expected to work until checked in the new browser. Requires the non-default seed:use scope.",
     inputSchema: { type: "object", properties: {} },
   },
@@ -585,6 +605,8 @@ export class McpGateway {
     "tallylamp_update_browser",
     "tallylamp_report_site_access",
     "tallylamp_list_profile_templates",
+    "tallylamp_save_profile",
+    "tallylamp_update_profile",
   ]);
 
   private async callTool(session: Session, name: string, args: Record<string, unknown>) {
@@ -847,6 +869,26 @@ export class McpGateway {
           signedInSites: seed.signedInSites,
         }));
         return { content: [{ type: "text", text: JSON.stringify(templates) }] };
+      }
+      if (name === "tallylamp_save_profile" || name === "tallylamp_update_profile") {
+        const browserId = String(args.browserId ?? session.browserId ?? "");
+        if (!browserId) throw Err.invalid("pass browserId, or bind a browser first with tallylamp_use_browser");
+        if (args.asNew !== undefined && typeof args.asNew !== "boolean") throw Err.invalid("asNew must be a boolean");
+        if (args.name !== undefined && typeof args.name !== "string") throw Err.invalid("name must be a string");
+        if (args.profileId !== undefined && typeof args.profileId !== "string") throw Err.invalid("profileId must be a string");
+        const wasBound = session.browserId === browserId;
+        const saved = await this.browsers.saveProfile(browserId, p, {
+          name: args.name as string | undefined, metadata: args.metadata,
+          asNew: name === "tallylamp_save_profile" && args.asNew === true,
+          profileId: name === "tallylamp_update_profile" ? args.profileId as string | undefined : undefined,
+          updateOnly: name === "tallylamp_update_profile",
+        });
+        let bindingError: string | undefined;
+        if (wasBound && saved.resumed) {
+          try { await this.bind(session, this.browsers.row(browserId)); }
+          catch (e) { bindingError = (e as Error).message; }
+        }
+        return { content: [{ type: "text", text: JSON.stringify({ ...saved, ...(bindingError ? { bindingError, note: "Profile saved. Reconnect with tallylamp_use_browser before continuing." } : {}) }) }] };
       }
       if (name === "tallylamp_screencast_start" || name === "tallylamp_screencast_stop") {
         return await this.callScreencast(session, name, args);

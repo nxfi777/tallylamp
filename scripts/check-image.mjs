@@ -84,7 +84,7 @@ assert.equal(discovery.data.resource, base + "/mcp");
 
 try {
   const created = await request("/api/v1/agents", { method: "POST", body: { name: "Release validation", maxBrowsers: 4,
-    scopes: ["browser:create", "browser:list:own", "browser:read:own", "browser:start:own", "browser:stop:own", "browser:delete:own", "browser:control:own", "seed:use"] } });
+    scopes: ["browser:create", "browser:list:own", "browser:read:own", "browser:start:own", "browser:stop:own", "browser:delete:own", "browser:control:own", "seed:use", "seed:write"] } });
   assert.equal(created.response.status, 201);
   token = created.data.token;
   agentId = created.data.agent.id;
@@ -126,10 +126,15 @@ try {
   console.log("PASS: cookies and local storage survive an immediate browser stop/start");
 
   await tool("evaluate_script", { pageId: restartedPageId, function: "() => { document.cookie = 'release_session=saved; Path=/; Secure; SameSite=Lax'; return true; }" });
-  const snapshot = await request("/api/v1/seeds", { method: "POST", body: { browserId, name: "Reusable release profile", metadata: { project: "release-check", purpose: "Independent copies" } } });
-  assert.equal(snapshot.response.status, 201, JSON.stringify(snapshot.data));
-  assert.equal(snapshot.data.seed.resumed, true, "Save profile must resume its running source");
-  const seedId = snapshot.data.seed.id;
+  const payload = result => JSON.parse(result.content.find(c => c.type === "text").text);
+  const snapshot = payload(await tool("tallylamp_save_profile", { name: "Reusable release profile", metadata: { project: "release-check", purpose: "Independent copies" } }));
+  assert.equal(snapshot.resumed, true, "Save profile must resume its running source");
+  assert.equal(snapshot.updated, false);
+  const seedId = snapshot.profile.id;
+  const savedAgain = payload(await tool("tallylamp_save_profile"));
+  assert.equal(savedAgain.profile.id, seedId, "normal Save must update the same profile");
+  assert.equal(savedAgain.updated, true);
+  assert.equal(savedAgain.bindingError, undefined);
   await tool("tallylamp_stop_browser", { browserId });
   const checkState = async (expected) => {
     const pageId = examplePageId(await tool("list_pages"));
@@ -149,16 +154,19 @@ try {
   await tool("tallylamp_use_browser", { browserId: cloneIds[0] });
   const firstPage = await checkState("saved");
   await tool("evaluate_script", { pageId: firstPage, function: "() => { localStorage.setItem('release-check', 'updated'); return true; }" });
-  const updated = await request(`/api/v1/seeds/${seedId}`, { method: "PUT", body: { browserId: cloneIds[0], name: "Updated release profile", metadata: { project: "release-check" } } });
-  assert.equal(updated.response.status, 200, JSON.stringify(updated.data));
-  assert.equal(updated.data.seed.resumed, true);
+  const updated = payload(await tool("tallylamp_update_profile", { name: "Updated release profile", metadata: { project: "release-check" } }));
+  assert.equal(updated.profile.id, seedId);
+  assert.equal(updated.resumed, true);
   await tool("tallylamp_stop_browser", { browserId: cloneIds[0] });
   await tool("tallylamp_use_browser", { browserId: cloneIds[1] });
   await checkState("saved");
   const newest = await tool("tallylamp_create_browser", { name: "Copy after update", seedId, persistent: true });
   cloneIds.push(JSON.parse(newest.content.find(c => c.type === "text").text).browserId);
   await checkState("updated");
-  console.log("PASS: Save profile pauses/resumes real Chrome, clones cookies and metadata into independent browsers, and updates future copies only");
+  const fork = payload(await tool("tallylamp_save_profile", { asNew: true, name: "Separate release profile" }));
+  assert.notEqual(fork.profile.id, seedId);
+  assert.equal(fork.updated, false);
+  console.log("PASS: MCP save/load/update preserves profile IDs, cookies, metadata and bindings; Save as new forks; existing browsers stay independent");
 } finally {
   for (const id of cloneIds) await request(`/api/v1/browsers/${id}`, { method: "DELETE" });
   if (browserId) await request(`/api/v1/browsers/${browserId}`, { method: "DELETE" });

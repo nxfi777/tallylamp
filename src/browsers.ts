@@ -707,7 +707,7 @@ export class BrowserManager {
       },
       reportedClient: row.client_name ? { name: row.client_name, version: row.client_version } : null,
       metadata,
-      savedProfileId: row.seed_id,
+      savedProfileId: this.linkedProfile(row.id)?.id ?? null,
       savingProfile: this.profileSaves.has(row.id),
       signedInSites: listSiteAccess(row.id),
       url: row.current_url,
@@ -774,22 +774,30 @@ export class BrowserManager {
 
   async snapshotSeed(browserId: string, name: string, principal: Principal,
     options: { seedId?: string; metadata?: unknown } = {}): Promise<SavedProfileResult> {
-    // Saving makes credentials reusable by other authorized browsers, unlike a
-    // temporary loan. Keep publication/update administrator-only.
-    if (principal.type !== "admin") throw Err.unauthorized("only an administrator can save reusable profiles");
+    // Publishing makes every login reusable. A loan grants driving, never export.
+    // seed:write is an explicit grant to publish owned browsers and overwrite
+    // their linked shared snapshot; seed:use alone is deliberately read-only.
+    const source = this.row(browserId);
+    if (principal.type !== "admin") {
+      requireScope(principal, "seed:write");
+      if (source.owner_type !== principal.type || source.owner_id !== principal.id) throw Err.unauthorized("only the browser owner can save its profile; borrowed browsers cannot be copied");
+      this.assertAccess(principal, source, "control");
+      if (this.isHumanControlled(browserId)) throw Err.humanControlling();
+      if (options.seedId && this.linkedProfile(browserId)?.id !== options.seedId) throw Err.unauthorized("agents may update only the saved profile linked to their own browser");
+    }
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     this.row(browserId);
     name = name.trim();
     if (!name || name.length > 80) throw Err.invalid("profile name must be between 1 and 80 characters");
-    const metadata = sanitizeMetadata(options.metadata ?? JSON.parse(this.row(browserId).metadata_json));
     if (this.profileSaves.has(browserId) || this.starting.has(browserId) || this.row(browserId).status === "stopping") {
       throw Err.browserUnavailable("browser is busy; retry when its current operation finishes");
     }
     if (options.seedId && this.savingSeeds.has(options.seedId)) throw Err.browserUnavailable("saved profile is already being updated");
     const previous = options.seedId
-      ? getDb().prepare(`SELECT path FROM seeds WHERE id = ?`).get(options.seedId) as { path: string } | undefined
+      ? getDb().prepare(`SELECT path, metadata_json FROM seeds WHERE id = ?`).get(options.seedId) as { path: string; metadata_json: string } | undefined
       : undefined;
     if (options.seedId && !previous) throw Err.notFound("saved profile not found");
+    const metadata = sanitizeMetadata(options.metadata ?? JSON.parse(previous?.metadata_json ?? source.metadata_json));
     const id = options.seedId ?? randomBytes(6).toString("hex");
     this.savingSeeds.add(id);
     // Publish a new immutable directory, then atomically move the DB pointer.
@@ -824,6 +832,9 @@ export class BrowserManager {
               .run(id, name, dest, browserId, nowIso(), JSON.stringify(metadata), nowIso());
           }
           snapshotSiteAccess(browserId, id);
+          // Save as new switches this browser's save target. Normal Save then
+          // updates this exact id, regardless of later browser/profile renames.
+          db.prepare(`UPDATE browsers SET seed_id = ? WHERE id = ?`).run(id, browserId);
           db.exec("COMMIT");
           saved = true;
         } catch (e) { db.exec("ROLLBACK"); throw e; }
@@ -852,6 +863,32 @@ export class BrowserManager {
 
   protected async copyProfile(source: string, destination: string): Promise<void> {
     await cp(source, destination, { recursive: true, filter: file => !["SingletonLock", "SingletonSocket", "SingletonCookie", "DevToolsActivePort"].includes(path.basename(file)) });
+  }
+
+  linkedProfile(browserId: string): { id: string; name: string } | null {
+    const row = this.row(browserId);
+    if (row.seed_id) {
+      return getDb().prepare(`SELECT id, name FROM seeds WHERE id = ?`).get(row.seed_id) as { id: string; name: string } | undefined ?? null;
+    }
+    // Upgrade existing 0.2.0 source browsers, which were not linked on Save.
+    return getDb().prepare(`SELECT id, name FROM seeds WHERE created_from_browser_id = ? ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT 1`)
+      .get(browserId) as { id: string; name: string } | undefined ?? null;
+  }
+
+  async saveProfile(browserId: string, principal: Principal, options: { name?: string; metadata?: unknown; asNew?: boolean; profileId?: string; updateOnly?: boolean } = {}) {
+    const row = this.row(browserId);
+    // Do not disclose another browser's linkage/name before authorization.
+    this.assertAccess(principal, row, "control");
+    const linked = this.linkedProfile(browserId);
+    const profileId = options.asNew ? undefined : options.profileId ?? linked?.id;
+    if (options.updateOnly && !profileId) throw Err.invalid("browser has no saved profile; use tallylamp_save_profile first");
+    const existing = profileId ? this.listSeeds().find(s => s.id === profileId) : undefined;
+    if (profileId && !existing) throw Err.notFound("saved profile not found");
+    const result = await this.snapshotSeed(browserId, options.name ?? existing?.name ?? row.name, principal,
+      { seedId: profileId, metadata: options.metadata });
+    const saved = this.listSeeds().find(s => s.id === result.id)!;
+    return { profile: { id: saved.id, name: saved.name, metadata: saved.metadata, signedInSites: saved.signedInSites },
+      browserId, updated: !!profileId, resumed: result.resumed, ...(result.resumeError ? { resumeError: result.resumeError } : {}) };
   }
 
   listSeeds() {

@@ -70,6 +70,35 @@ describe("profile site inventory", () => {
     assert.equal(fields.find(field => field.name === "origin")?.value, "");
   });
 
+  it("dashboard Save updates the linked ID; Save as new explicitly posts a separate profile", async () => {
+    const source = readFileSync(new URL("../dashboard/app.js", import.meta.url), "utf8");
+    const code = source.match(/^async function saveProfileTemplate\([\s\S]*?^}/m)![0];
+    const calls: Array<{ url: string; method: string; body: { name: string; metadata: unknown } }> = [];
+    let message = "";
+    const browser = { id: "browser", name: "Renamed browser", savedProfileId: "linked-id", metadata: { project: "Browser metadata" } };
+    const sandbox = { browser,
+      state: { seeds: [{ id: "linked-id", name: "Original saved name", metadata: { project: "Saved metadata" } }] },
+      askFor: async (_title: string, fields: Array<{ name: string; value?: string }>, _label: string, submit: (values: unknown) => Promise<void>) => {
+        const values = Object.fromEntries(fields.map(field => [field.name, field.value || ""]));
+        await submit(values); return values;
+      },
+      api: async (url: string, options: { method: string; body: { name: string; metadata: unknown } }) => { calls.push({ url, ...options }); return { seed: { resumed: false } }; },
+      act: (fn: () => Promise<void>) => fn(), render: async () => {}, flash: (text: string) => { message = text; },
+    };
+    await runInNewContext(`${code}\nsaveProfileTemplate(browser)`, sandbox);
+    assert.equal(calls[0].method, "PUT");
+    assert.equal(calls[0].url, "/api/v1/seeds/linked-id");
+    assert.equal(calls[0].body.name, "Original saved name");
+    assert.equal(JSON.stringify(calls[0].body.metadata), JSON.stringify({ project: "Saved metadata" }));
+    await runInNewContext(`${code}\nsaveProfileTemplate(browser, null, true)`, sandbox);
+    assert.equal(calls[1].method, "POST");
+    assert.equal(calls[1].url, "/api/v1/seeds");
+    sandbox.state.seeds = [];
+    await runInNewContext(`${code}\nsaveProfileTemplate(browser)`, sandbox);
+    assert.equal(calls.length, 2, "a missing linked profile must not turn Save into Save as new");
+    assert.match(message, /unavailable/);
+  });
+
   it("automatically records a signal once, with system provenance, and respects manual removal", async () => {
     const created = await json(`${ctx.url}/api/v1/browsers`, {
       method: "POST", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },

@@ -429,7 +429,6 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
 
   api.post(
     "/api/v1/seeds",
-    requireAdmin,
     asyncRoute(async (req, res) => {
       const seed = await browsers.snapshotSeed(
         String(req.body?.browserId),
@@ -441,7 +440,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     }),
   );
 
-  api.put("/api/v1/seeds/:id", requireAdmin, asyncRoute(async (req, res) => {
+  api.put("/api/v1/seeds/:id", asyncRoute(async (req, res) => {
     const seed = await browsers.snapshotSeed(String(req.body?.browserId), String(req.body?.name ?? ""), req.principal!,
       { seedId: req.params.id, metadata: req.body?.metadata });
     res.json({ seed });

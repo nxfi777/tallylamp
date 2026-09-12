@@ -347,6 +347,7 @@ function browserMenu(b) {
     "-",
     { label: "Edit profile…", onSelect: () => editBrowser(b) },
     { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
+    b.savedProfileId && { label: "Save as new profile…", onSelect: () => saveProfileTemplate(b, null, true) },
     { label: "Copy browser id", onSelect: () => act(async () => {
       await navigator.clipboard.writeText(b.id);
       flash(`Copied ${b.id}.`);
@@ -1117,6 +1118,7 @@ async function browserView(id, seq) {
           : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
         h("button", { class: "btn", disabled: b.status === "running", onClick: () => call(`/api/v1/browsers/${id}/start`) }, "Start"),
         h("button", { class: "btn primary", onClick: () => saveProfileTemplate(b) }, "Save profile"),
+        b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
         h("button", { class: "btn", disabled: b.status === "stopped", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, "Stop browser"),
         h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/restart`) }, "Restart"),
         h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name) }, "Delete"),
@@ -1153,6 +1155,7 @@ async function browserView(id, seq) {
           h("dt", {}, "Status"), h("dd", {}, b.status),
           h("dt", {}, "Controller"), h("dd", {}, b.control?.controllerType || "none"),
           h("dt", {}, "Browser data"), h("dd", {}, b.persistent ? "kept when stopped" : "temporary · may be deleted when idle"),
+          h("dt", {}, "Save target"), h("dd", {}, b.savedProfileId ? (state.seeds.find(s => s.id === b.savedProfileId)?.name || b.savedProfileId) : "New saved profile"),
           h("dt", {}, "Project"), h("dd", {}, md.project || "—"),
           h("dt", {}, "Purpose"), h("dd", {}, md.purpose || "—"),
           h("dt", {}, "Task"), h("dd", {}, md.task || "—"),
@@ -1847,6 +1850,7 @@ async function agentsView() {
           h("td", {}, a.enabled ? "active" : "revoked"),
           h("td", { class: "mono" }, a.lastSeenAt || "—"),
           h("td", {},
+            h("button", { class: "btn", onClick: () => editProfilePermissions(a) }, "Profile permissions"), " ",
             // A connector has no dashboard token to rotate; its credentials come from the grant.
             a.labels?.kind === "connector" ? null : h("button", { class: "btn", onClick: () => rotate(a.id) }, "Rotate"),
             " ",
@@ -1885,6 +1889,22 @@ async function seedsView() {
       ),
     ),
   ]);
+}
+
+async function editProfilePermissions(agent) {
+  const options = [{ value: "no", label: "Not allowed" }, { value: "yes", label: "Allowed" }];
+  const answers = await askFor(`Profile permissions · ${agent.name}`, [
+    { name: "load", label: "Load saved profiles", value: agent.scopes.includes("seed:use") ? "yes" : "no", options,
+      hint: "Lets this agent copy every login in any saved profile. Grant only to agents you trust with those accounts." },
+    { name: "write", label: "Save and update profiles", value: agent.scopes.includes("seed:write") ? "yes" : "no", options,
+      hint: "Lets it publish logins from its own browsers and overwrite their linked shared profiles. Other agents' future copies will use those changes. Borrowed browsers cannot be exported." },
+  ], "Save permissions", async values => {
+    const scopes = agent.scopes.filter(scope => !["seed:use", "seed:write"].includes(scope));
+    if (values.load === "yes") scopes.push("seed:use");
+    if (values.write === "yes") scopes.push("seed:write");
+    await api(`/api/v1/agents/${agent.id}`, { method: "PATCH", body: { scopes } });
+  });
+  if (answers) { await render(); flash(`Profile permissions saved for ${agent.name}.`, true); }
 }
 
 async function createFromTemplate(template) {
@@ -2042,19 +2062,23 @@ async function removeSite(b, site) {
   });
 }
 
-async function saveProfileTemplate(b, saved = null) {
+async function saveProfileTemplate(b, saved = null, asNew = false) {
+  if (b?.savedProfileId && !saved && !asNew) {
+    saved = state.seeds.find(s => s.id === b.savedProfileId);
+    if (!saved) { flash("The linked saved profile is unavailable. Reload to retry, or choose Save as new profile."); return; }
+  }
   const md = saved?.metadata || b?.metadata || {};
   let result;
-  const answers = await askFor(saved ? "Update saved profile" : "Save profile", [
+  const answers = await askFor(saved ? "Update saved profile" : asNew ? "Save as new profile" : "Save profile", [
     ...(!b ? [{ name: "browserId", label: "Copy from browser", value: saved?.created_from_browser_id || "", required: true,
       options: [{ value: "", label: "Choose a browser" }, ...state.browsers.map(browser => ({ value: browser.id, label: browser.name }))] }] : []),
-    { name: "name", label: "Saved profile name", value: saved?.name || b?.name || "", required: true, maxLength: 80,
-      hint: saved ? "Replaces this saved snapshot for future browsers. Existing browsers stay unchanged. Every login in the source is copied." : "Copies every login into a reusable profile. Other browsers can use it immediately." },
+    { name: "name", label: "Saved profile name", value: saved?.name || (asNew ? `${b?.name || "Profile"} copy`.slice(0, 80) : b?.name) || "", required: true, maxLength: 80,
+      hint: saved ? "Updates the linked saved profile. Existing browsers stay unchanged. Every login in this browser is copied." : asNew ? "Creates a separate saved profile and makes it this browser's save target. The original stays unchanged." : "Copies every login into a reusable profile. Other browsers can use it immediately." },
     { name: "project", label: "Project", value: md.project || "" },
     { name: "purpose", label: "What is it for?", value: md.purpose || "", maxLength: 200 },
     { name: "task", label: "Task", value: md.task || "", maxLength: 200,
       hint: "If the source is running, saving briefly pauses Chrome, then resumes it. Unsaved page edits may be lost." },
-  ], saved ? "Update saved profile" : "Save profile", async (values) => {
+  ], saved ? "Update saved profile" : asNew ? "Save as new profile" : "Save profile", async (values) => {
     const metadata = { ...md };
     for (const key of ["project", "purpose", "task"]) {
       if (values[key]) metadata[key] = values[key]; else delete metadata[key];

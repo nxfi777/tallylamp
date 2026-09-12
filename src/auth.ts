@@ -13,6 +13,7 @@ export const AGENT_SCOPES = [
   "browser:delete:own",
   "browser:control:own",
   "seed:use",
+  "seed:write",
   "browser:lend",
   "browser:borrow",
   "browser:tunnel",
@@ -29,6 +30,9 @@ export type AgentScope = (typeof AGENT_SCOPES)[number];
  * good. Seed ids are not secrets -- they ride in create calls, audit rows and dashboards.
  * Granting this only on request keeps the blast radius of a leaked agent token to the browsers
  * that token created.
+ * `seed:write` is a separate opt-in: it publishes every login from an owned
+ * browser and permits overwriting its linked shared snapshot for future copies.
+ * Merely loading or borrowing a profile never grants that write permission.
  *
  * `browser:lend` and `browser:borrow` are held out for the same reason, and it is the stronger
  * case: lending hands over a *live* profile rather than a copy of one, so the borrower gets
@@ -43,7 +47,7 @@ export type AgentScope = (typeof AGENT_SCOPES)[number];
  * every agent that happens to hold a token.
  */
 export const DEFAULT_AGENT_SCOPES = AGENT_SCOPES.filter(
-  (s) => s !== "seed:use" && s !== "browser:lend" && s !== "browser:borrow" && s !== "browser:tunnel",
+  (s) => s !== "seed:use" && s !== "seed:write" && s !== "browser:lend" && s !== "browser:borrow" && s !== "browser:tunnel",
 );
 
 export type Principal =

@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
 import { emitFakeFrame } from "../src/fake-chrome.js";
+import { createAgent, DEFAULT_AGENT_SCOPES } from "../src/auth.js";
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
 let ctx: TestCtx;
 
@@ -40,6 +43,63 @@ function rpcResult(body: unknown): RpcResult | undefined {
   return undefined;
 }
 
+describe("MCP saved-profile round trip", () => {
+  before(async () => { ctx = await startTestServer(); });
+  after(async () => ctx.close());
+
+  it("creates, loads, modifies and updates one profile ID, while Save as new forks it", async () => {
+    const writer = createAgent({ name: "Profile writer", scopes: [...DEFAULT_AGENT_SCOPES, "seed:use", "seed:write"], maxBrowsers: 6 });
+    const init = await mcp("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "profile-roundtrip", version: "1" } }, writer.token);
+    const headers = { "MCP-Session-Id": init.headers.get("mcp-session-id")! };
+    const call = async (name: string, args = {}) => {
+      const response = await mcp("tools/call", { name, arguments: args }, writer.token, headers);
+      const result = rpcResult(response.body) as { isError?: boolean; content: Array<{ text: string }> };
+      assert.ok(!result.isError, JSON.stringify(result));
+      return JSON.parse(result.content[0].text);
+    };
+    const source = ctx.browsers.create({ principal: writer.agent, via: "mcp", name: "Source" });
+    const marker = (id: string) => path.join(ctx.browsers.row(id).profile_path, "profile-fixture");
+    writeFileSync(marker(source.id), "v1");
+    await call("tallylamp_use_browser", { browserId: source.id });
+    const initial = await call("tallylamp_save_profile", { name: "Reusable account", metadata: { purpose: "Saved metadata" } });
+    assert.equal(initial.updated, false);
+    assert.equal(initial.resumed, true);
+    assert.equal(ctx.browsers.linkedProfile(source.id)?.id, initial.profile.id);
+    writeFileSync(marker(source.id), "v2");
+    // No browserId or rebind: saving must preserve the caller's usable binding.
+    const resaved = await call("tallylamp_save_profile");
+    assert.equal(resaved.updated, true);
+    assert.equal(resaved.profile.id, initial.profile.id);
+    assert.equal(resaved.profile.name, "Reusable account");
+    assert.deepEqual(resaved.profile.metadata, { purpose: "Saved metadata" });
+    const loaded = await call("tallylamp_create_browser", { seedId: initial.profile.id, name: "Loaded copy" });
+    assert.equal(readFileSync(marker(loaded.browserId), "utf8"), "v2");
+    writeFileSync(marker(loaded.browserId), "new login");
+    const updated = await call("tallylamp_update_profile");
+    assert.equal(updated.profile.id, initial.profile.id);
+    const future = ctx.browsers.create({ principal: writer.agent, via: "mcp", seedId: initial.profile.id });
+    assert.equal(readFileSync(marker(future.id), "utf8"), "new login");
+    assert.equal(readFileSync(marker(source.id), "utf8"), "v2", "existing browser remains independent");
+    const fork = await call("tallylamp_save_profile", { asNew: true, name: "Separate profile" });
+    assert.notEqual(fork.profile.id, initial.profile.id);
+    assert.equal(fork.updated, false);
+    assert.equal(ctx.browsers.linkedProfile(loaded.browserId)?.id, fork.profile.id);
+    const refork = await call("tallylamp_update_profile");
+    assert.equal(refork.profile.id, fork.profile.id);
+  });
+
+  it("does not grant profile export by default or silently create through update", async () => {
+    assert.ok(!DEFAULT_AGENT_SCOPES.includes("seed:write"));
+    const ordinary = createAgent({ name: "Ordinary agent" });
+    const source = ctx.browsers.create({ principal: ordinary.agent, via: "mcp" });
+    await assert.rejects(ctx.browsers.saveProfile(source.id, ordinary.agent), /seed:write/);
+    const writer = createAgent({ name: "Unlinked writer", scopes: [...DEFAULT_AGENT_SCOPES, "seed:write"] });
+    const fresh = ctx.browsers.create({ principal: writer.agent, via: "mcp" });
+    await assert.rejects(ctx.browsers.saveProfile(fresh.id, writer.agent, { updateOnly: true }), /no saved profile/);
+    assert.equal(ctx.browsers.runtime(fresh.id), undefined, "a refused update never starts Chrome");
+  });
+});
+
 describe("MCP", () => {
   before(async () => {
     ctx = await startTestServer();
@@ -73,6 +133,8 @@ describe("MCP", () => {
     assert.ok(text.includes("tallylamp_update_browser"), text);
     assert.ok(text.includes("tallylamp_report_site_access"), text);
     assert.ok(text.includes("tallylamp_list_profile_templates"), text);
+    assert.ok(text.includes("tallylamp_save_profile"), text);
+    assert.ok(text.includes("tallylamp_update_profile"), text);
   });
 
   it("sends browser-fallback and persistent-session guidance during initialization, before any browser is bound", async () => {
@@ -104,12 +166,12 @@ describe("MCP", () => {
     assert.match(instructions, /Offer a saved profile.*when separate browsers need/);
     assert.match(instructions, /copies every saved login/);
     assert.match(instructions, /explicit consent before cloning/);
-    assert.match(instructions, /Saving is administrator-only/);
-    assert.match(instructions, /choose Save profile in the dashboard/);
+    assert.match(instructions, /Both require the non-default seed:write scope and an owned browser/);
+    assert.match(instructions, /asNew: true/);
     assert.match(instructions, /briefly pauses and resumes automatically/);
     assert.match(instructions, /future copies, never existing browsers/);
-    assert.match(instructions, /Do not stop active work/);
-    assert.match(instructions, /non-default seed:use scope/);
+    assert.match(instructions, /wait until human control has returned/);
+    assert.match(instructions, /cloning requires seed:use/);
     assert.match(instructions, /Websites can expire or revoke sessions/);
     assert.match(instructions, /tallylamp_stop_browser rather than tallylamp_delete_browser/);
     assert.match(instructions, /Delete saved browser state only when the user explicitly asks/);
@@ -138,12 +200,12 @@ describe("MCP", () => {
     assert.match(description("tallylamp_report_site_access"), /ask once whether to reuse/);
     assert.match(description("tallylamp_report_site_access"), /not credentials or a profile snapshot/);
     assert.match(description("tallylamp_list_profile_templates"), /explicit consent before cloning/);
-    assert.match(description("tallylamp_list_profile_templates"), /creation is not an MCP tool/i);
+    assert.match(description("tallylamp_save_profile"), /seed:write/);
+    assert.match(description("tallylamp_update_profile"), /linked profile ID/);
     assert.match(description("tallylamp_list_profile_templates"), /non-default seed:use scope/);
     assert.match(description("tallylamp_stop_browser"), /Prefer this to deletion for routine cleanup/);
     assert.match(description("tallylamp_delete_browser"), /user explicitly asks/);
-    assert.ok(!tools.some(tool => /(?:create|save|snapshot).*(?:template|seed)/.test(tool.name)),
-      "guidance must not advertise an agent template-creation capability that does not exist");
+    assert.match(description("tallylamp_save_profile"), /Borrowed or human-controlled browsers cannot be saved/);
   });
 
   it("reports signed-in sites for agents without exposing credential material", async () => {

@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { json, startTestServer, type TestCtx } from "./helpers.js";
 import { reportSiteAccess, listSiteAccess } from "../src/site-access.js";
+import { createAgent, DEFAULT_AGENT_SCOPES } from "../src/auth.js";
+import { answerRequest, requestBrowser } from "../src/lending.js";
 
 let ctx: TestCtx;
 const admin = { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] } as const;
@@ -91,7 +93,7 @@ describe("reusable saved profiles", () => {
     } finally { release?.(); manager.copyProfile = original; }
   });
 
-  it("requires admin authorization to publish or overwrite saved authenticated profiles", async () => {
+  it("requires explicit write authorization to publish or overwrite saved authenticated profiles", async () => {
     const source = create("Private source");
     const response = await json(`${ctx.url}/api/v1/seeds`, {
       method: "POST", headers: { Authorization: `Bearer ${ctx.agentToken}`, "Content-Type": "application/json" },
@@ -100,5 +102,29 @@ describe("reusable saved profiles", () => {
     assert.equal(response.status, 403);
     await assert.rejects(ctx.browsers.snapshotSeed(source.id, "", admin), /profile name/);
     await assert.rejects(ctx.browsers.snapshotSeed(source.id, "Missing", admin, { seedId: "missing" }), /not found/);
+  });
+
+  it("lets an authorized agent update a loaded shared profile, but refuses unrelated IDs and human control", async () => {
+    const sharedSource = create("Shared source");
+    const shared = await ctx.browsers.snapshotSeed(sharedSource.id, "Shared", admin);
+    const other = await ctx.browsers.snapshotSeed(sharedSource.id, "Other", admin);
+    const writer = createAgent({ name: "Writer", scopes: [...DEFAULT_AGENT_SCOPES, "seed:use", "seed:write"] });
+    const loaded = ctx.browsers.create({ principal: writer.agent, via: "mcp", seedId: shared.id });
+    const update = await ctx.browsers.saveProfile(loaded.id, writer.agent, { updateOnly: true });
+    assert.equal(update.profile.id, shared.id);
+    await assert.rejects(ctx.browsers.saveProfile(loaded.id, writer.agent, { profileId: other.id, updateOnly: true }), /only the saved profile linked/);
+    ctx.browsers.acquireControl(loaded.id, "human", "admin", true);
+    await assert.rejects(ctx.browsers.saveProfile(loaded.id, writer.agent), /human/i);
+  });
+
+  it("does not allow an agent to export a borrowed browser, even with profile write permission", async () => {
+    const owner = createAgent({ name: "Owner", scopes: [...DEFAULT_AGENT_SCOPES, "browser:lend"] });
+    const borrower = createAgent({ name: "Borrower", scopes: [...DEFAULT_AGENT_SCOPES, "browser:borrow", "seed:write"] });
+    const source = ctx.browsers.create({ principal: owner.agent, via: "mcp" });
+    const pending = requestBrowser(ctx.browsers, borrower.agent, { browserId: source.id });
+    assert.equal(pending.state, "pending");
+    await answerRequest(ctx.browsers, owner.agent, { requestId: pending.requestId!, decision: "grant" });
+    ctx.browsers.assertAccess(borrower.agent, source, "control");
+    await assert.rejects(ctx.browsers.saveProfile(source.id, borrower.agent), /borrowed browsers cannot be copied/);
   });
 });
