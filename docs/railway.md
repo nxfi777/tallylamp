@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.1.2` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.3.0` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -133,22 +133,36 @@ Then publish and add its real deploy URL to the README and website.
 
 ## Releasing and upgrading
 
-The current release is [0.1.2](https://github.com/nxfi777/tallylamp/releases/tag/v0.1.2)
+The current release is [0.3.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.3.0)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:00d81c7e569951d7ed81d4d9a09d4967efbd6961f27afcc8c69ba30ec2d27075
+ghcr.io/nxfi777/tallylamp@sha256:60bf057d9d130dcaf496510cc4ac9a631787631513e69f8ceae96c5ccedf507a
 ```
 
-The [0.1.2 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/34539179552)
-passed the application tests, headed Chrome tests, and running-container checks
-before publishing the same artifact. Anonymous registry access, its manifest
-digest, and its version and source-revision labels were verified afterward.
+The [0.3.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/34717721785)
+passed 197 application tests, 7 headed Chrome tests, and running-container checks
+before publishing the same artifact. The container checks exercised MCP
+save/load/update, session and persistent cookies, metadata, automatic reconnection,
+Save as new, and independence between existing browsers. Anonymous registry access,
+the manifest digest, and version/source-revision labels were verified afterward.
 
-The Railway template pins the `0.1.2` digest for new installations. Existing
+The Railway template pins the `0.3.0` digest for new installations. Existing
 deployments keep their selected image. Railway redeploy persistence and unique
 passwords across two template installations were checked for `0.1.1`, not repeated
-for `0.1.2`. These checks do not certify every external MCP client.
+for `0.3.0`. These checks do not certify every external MCP client.
+
+The template's image change was applied through its dashboard change-set API,
+then verified through the public API. `railway templates publish` updates listing
+metadata, not the image source. For the image, the dashboard currently uses
+`templateChangeSetStage` with a patch shaped as
+`{config: {services: {SERVICE_ID: {source: {image: DIGEST_REFERENCE}}}}}`,
+followed by `templateChangeSetApply`. These operations live at Railway's
+`/graphql/internal` endpoint and can authenticate with an existing CLI OAuth
+session. This is not a stable public API: inspect the current dashboard operations,
+check for other pending edits, review the staged patch, and read back the published
+configuration before reporting success. Never print or store a CLI token in scripts
+or command arguments.
 
 The `release image` workflow runs when a GitHub release is published. It checks
 that the `vX.Y.Z` tag matches `package.json`, builds a Linux amd64 image, and tests

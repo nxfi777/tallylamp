@@ -66,7 +66,7 @@ you have control.
 
 ## Updates are your choice
 
-The template uses the public `ghcr.io/nxfi777/tallylamp:0.1.2` image, pinned
+The template uses the public `ghcr.io/nxfi777/tallylamp:0.3.0` image, pinned
 to its digest. Automatic image updates are disabled. Pushing source code or
 publishing a new release does not upgrade your deployment.
 
@@ -80,10 +80,15 @@ Chrome runs in headed mode, not headless mode. Xvfb gives it a display inside
 the container. User-agent and device emulation let you test browser settings;
 they do not make an agent behave like a person.
 
-Profiles are saved automatically on the volume and survive stops and redeploys.
-There is no separate save step. You can also prepare a profile by hand and clone
-it into new browsers with explicit permission. Profile templates copy every
-saved login, so only share them with agents you trust with those accounts.
+Persistent browsers keep their own data automatically across stops and redeploys.
+**Save profile** creates a reusable snapshot, or updates the browser's linked
+profile. **Save as new profile** creates a separate snapshot. Existing browsers
+stay independent; updates affect future copies only.
+
+Agents can load, modify, and update profiles through MCP. Enable loading and
+saving separately under **Agents → Profile permissions**. Saving requires
+`seed:write`; borrowing a browser never permits exporting its logins. Saved
+profiles contain every login, so share them only with agents you trust.
 
 Chrome needs memory. Start with a cap of two browsers and budget roughly
 1–2 GB per active browser, plus the server. Measure your own workload before
