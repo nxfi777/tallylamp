@@ -58,7 +58,10 @@ export const openApiSpec = {
       get: { summary: "List seed profiles", responses: { "200": { description: "ok" } } },
       post: { summary: "Save a new reusable profile; automatically pause/resume a running source. Requires admin or seed:write and ownership.", responses: { "201": { description: "created" }, "403": { description: "missing permission or source ownership" } } },
     },
-    "/seeds/{id}": { put: { summary: "Update a saved profile from a browser. Agents need seed:write, ownership, and a matching linked profile.", responses: { "200": { description: "updated" }, "403": { description: "not authorized" } } } },
+    "/seeds/{id}": {
+      put: { summary: "Update a saved profile from a browser. Agents need seed:write, ownership, and a matching linked profile.", responses: { "200": { description: "updated" }, "403": { description: "not authorized" } } },
+      delete: { summary: "Delete a saved snapshot, not its existing browsers. Administrator only; body.confirmName must match the current name.", responses: { "200": { description: "deleted; cleanupPending reports any pending disk cleanup" }, "400": { description: "confirmation missing or stale" }, "403": { description: "not authorized" }, "404": { description: "not found" } } },
+    },
     "/audit": { get: { summary: "Recent audit events", responses: { "200": { description: "ok" } } } },
     "/events": { get: { summary: "SSE control-plane events", responses: { "200": { description: "ok" } } } },
   },

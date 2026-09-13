@@ -167,6 +167,15 @@ try {
   assert.notEqual(fork.profile.id, seedId);
   assert.equal(fork.updated, false);
   console.log("PASS: MCP save/load/update preserves profile IDs, cookies, metadata and bindings; Save as new forks; existing browsers stay independent");
+  const refused = await request(`/api/v1/seeds/${fork.profile.id}`, { method: "DELETE", body: { confirmName: "Wrong name" } });
+  assert.equal(refused.response.status, 400);
+  const removed = await request(`/api/v1/seeds/${fork.profile.id}`, { method: "DELETE", body: { confirmName: fork.profile.name } });
+  assert.equal(removed.response.status, 200, JSON.stringify(removed.data));
+  assert.equal(removed.data.cleanupPending, false);
+  assert.ok(!(await request('/api/v1/seeds')).data.seeds.some(s => s.id === fork.profile.id));
+  assert.equal((await request(`/api/v1/browsers/${cloneIds.at(-1)}`)).data.browser.savedProfileId, null);
+  await checkState("updated");
+  console.log("PASS: confirmed saved-profile deletion removes the snapshot without stopping or signing out existing browsers");
 } finally {
   for (const id of cloneIds) await request(`/api/v1/browsers/${id}`, { method: "DELETE" });
   if (browserId) await request(`/api/v1/browsers/${browserId}`, { method: "DELETE" });

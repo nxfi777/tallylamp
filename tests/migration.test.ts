@@ -91,4 +91,19 @@ describe("upgrading an existing database", () => {
     assert.doesNotThrow(() => resetDbForTests(file));
     assert.doesNotThrow(() => resetDbForTests(file));
   });
+
+  it("backfills legacy save targets only once, so deleted targets do not reappear after restart", () => {
+    const db = resetDbForTests(file);
+    db.exec(`DELETE FROM meta WHERE key = 'profile_links_backfilled';
+      INSERT INTO browsers(id,name,slug,owner_type,owner_id,created_by_type,created_by_principal_id,created_via,created_at,profile_path)
+      VALUES ('legacy-source','Legacy','legacy','admin','admin','admin','admin','dashboard','2026-01-01','/fixture');
+      INSERT INTO seeds(id,name,path,created_from_browser_id,created_at) VALUES
+      ('older-profile','Older','/older','legacy-source','2026-01-01'),
+      ('newer-profile','Newer','/newer','legacy-source','2026-02-01');`);
+    const migrated = resetDbForTests(file);
+    assert.equal((migrated.prepare(`SELECT seed_id FROM browsers WHERE id = 'legacy-source'`).get() as { seed_id: string }).seed_id, "newer-profile");
+    migrated.exec(`UPDATE browsers SET seed_id = NULL WHERE seed_id = 'newer-profile'; DELETE FROM seeds WHERE id = 'newer-profile';`);
+    const reopened = resetDbForTests(file);
+    assert.equal((reopened.prepare(`SELECT seed_id FROM browsers WHERE id = 'legacy-source'`).get() as { seed_id: string | null }).seed_id, null);
+  });
 });

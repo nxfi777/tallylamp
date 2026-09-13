@@ -113,6 +113,13 @@ site after signing in, or an agent calls `tallylamp_report_site_access` after
 seeing authenticated UI. The record contains the canonical origin, state,
 timestamp, and reporter. It contains no cookies or tokens.
 
+These records power the site badges. They are not a complete list of saved logins:
+a missing badge does not mean its cookies were lost. Detection recognises visible
+sign-out controls and Google's signed-in account-menu link. It can miss hidden
+menus or tabs closed before inspection. **Record signed-in site** lets you add a
+missed observation; **Save profile** copies the current records into the snapshot.
+Saving a running browser also refreshes site detection before Chrome closes.
+
 `tallylamp_list_browsers` includes these records, but they describe access at the
 time it was observed: a website may have expired the session by the time another
 agent comes back to use it.
@@ -151,6 +158,13 @@ target is shown beside the browser details. Renaming a browser does not change i
 new save target. The original stays unchanged. From the saved-profile list,
 **Update saved profile** also lets an administrator choose a source browser.
 Updates affect future copies only; browsers already created keep their own data.
+
+To remove a saved profile, choose **Delete** on its row and confirm the popup.
+This removes that snapshot and its metadata, not any browsers created from it.
+Those browsers keep their logins and become unlinked from the deleted profile.
+Their next Save creates a new profile rather than overwriting an older one.
+Only an administrator can delete shared profiles. If disk cleanup fails, the
+profile becomes unavailable immediately and cleanup retries in the background.
 
 The compatibility API calls profiles seeds: `POST /api/v1/seeds` creates one,
 and `PUT /api/v1/seeds/:id` updates it. Both accept `browserId`, `name`, and optional

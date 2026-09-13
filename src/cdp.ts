@@ -14,10 +14,10 @@ export class CdpClient {
    */
   onEvent: ((method: string, params: Record<string, unknown>, sessionId?: string) => void) | null = null;
 
-  constructor(public readonly browserWsUrl: string) {}
+  constructor(public readonly browserWsUrl: string, private readonly timeoutMs = 8_000) {}
 
   async connect(): Promise<void> {
-    this.ws = new WebSocket(this.browserWsUrl, { handshakeTimeout: 8_000 });
+    this.ws = new WebSocket(this.browserWsUrl, { handshakeTimeout: this.timeoutMs });
     await new Promise<void>((resolve, reject) => {
       this.ws!.once("open", () => resolve());
       this.ws!.once("error", reject);
@@ -65,7 +65,7 @@ export class CdpClient {
           this.pending.delete(id);
           reject(new Error(`CDP timeout ${method}`));
         }
-      }, 8_000);
+      }, this.timeoutMs);
       timer.unref?.();
       this.pending.set(id, { resolve, reject, timer });
       this.ws!.send(JSON.stringify(payload));
@@ -96,7 +96,7 @@ export async function browserWsUrl(cdpHttp: string): Promise<string> {
 }
 
 export async function listPages(cdpHttp: string): Promise<Array<{ id: string; url: string; title: string; type: string; webSocketDebuggerUrl?: string }>> {
-  const res = await fetch(`${cdpHttp}/json/list`);
+  const res = await fetch(`${cdpHttp}/json/list`, { signal: AbortSignal.timeout(2_000) });
   return (await res.json()) as Array<{ id: string; url: string; title: string; type: string; webSocketDebuggerUrl?: string }>;
 }
 

@@ -957,10 +957,10 @@ function siteAccessSection(b) {
           )),
         )
       : h("div", { class: "sub" },
-          "No sign-ins detected yet. Sites with visible sign-out controls are recorded automatically. If a site is missed, record it below."),
+          "No sign-ins recorded yet. Your browser may still contain logins. If detection misses a site, record it below."),
     h("button", { class: "btn site-add", onClick: () => addSite(b) }, "Record signed-in site"),
     h("div", { class: "sub" },
-      "Detection uses visible sign-out controls, not cookies or tokens. It can miss sites or be wrong; you can correct the list. Sessions may expire."),
+      "Detection uses visible sign-out or supported account controls, not cookies or tokens. It can miss sites; you can correct the list. Sessions may expire."),
   );
 }
 
@@ -1870,6 +1870,7 @@ async function seedsView() {
     h("div", { class: "top" },
       h("div", {}, h("h1", {}, "Saved profiles"), h("div", { class: "sub" }, "Start independent browsers with saved logins and metadata. Changes in one browser do not affect another. Update a saved profile explicitly to change future copies.")),
     ),
+    h("p", { class: "sub" }, "Badges show detected or reported sign-ins, not every saved login. A missing badge does not mean a login was lost."),
     h("table", { class: "table" },
       h("thead", {}, h("tr", {}, h("th", {}, "Profile"), h("th", {}, "Recorded sites"), h("th", {}, "Saved"), h("th", {}, "Actions"))),
       h("tbody", {},
@@ -1880,11 +1881,12 @@ async function seedsView() {
           h("td", {}, s.name, h("div", { class: "sub" }, [s.metadata?.project, s.metadata?.purpose].filter(Boolean).join(" · "))),
           h("td", {}, sitePills(s) || h("span", { class: "sub" }, "None recorded")),
           h("td", { title: s.updated_at || s.created_at }, ago(s.updated_at || s.created_at)),
-          h("td", {}, h("button", {
+          h("td", {}, h("div", { class: "row" }, h("button", {
             class: "btn",
             "aria-label": `Create browser from ${s.name}`,
             onClick: () => createFromTemplate(s),
-          }, "Create browser"), " ", h("button", { class: "btn", disabled: !state.browsers.length, onClick: () => saveProfileTemplate(null, s) }, "Update saved profile")),
+          }, "Create browser"), " ", h("button", { class: "btn", disabled: !state.browsers.length, onClick: () => saveProfileTemplate(null, s) }, "Update saved profile"), " ",
+            h("button", { class: "btn danger", "aria-label": `Delete saved profile ${s.name}`, onClick: () => deleteSavedProfile(s) }, "Delete"))),
         )),
       ),
     ),
@@ -1905,6 +1907,17 @@ async function editProfilePermissions(agent) {
     await api(`/api/v1/agents/${agent.id}`, { method: "PATCH", body: { scopes } });
   });
   if (answers) { await render(); flash(`Profile permissions saved for ${agent.name}.`, true); }
+}
+
+async function deleteSavedProfile(profile) {
+  if (!confirm(`Delete saved profile "${profile.name}"?\n\nThis removes the reusable snapshot and its metadata. Existing browsers and their logins stay unchanged. You will no longer be able to create browsers from this saved profile.\n\nThis cannot be undone.`)) return;
+  await act(async () => {
+    const result = await api(`/api/v1/seeds/${profile.id}`, { method: "DELETE", body: { confirmName: profile.name } });
+    await render();
+    flash(result.cleanupPending
+      ? `${profile.name} removed from saved profiles. Disk cleanup is pending and will retry automatically. Existing browsers were not changed.`
+      : `${profile.name} deleted. Existing browsers and their logins were not changed.`, !result.cleanupPending);
+  });
 }
 
 async function createFromTemplate(template) {

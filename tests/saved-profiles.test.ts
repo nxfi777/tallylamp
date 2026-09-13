@@ -6,6 +6,7 @@ import { json, startTestServer, type TestCtx } from "./helpers.js";
 import { reportSiteAccess, listSiteAccess } from "../src/site-access.js";
 import { createAgent, DEFAULT_AGENT_SCOPES } from "../src/auth.js";
 import { answerRequest, requestBrowser } from "../src/lending.js";
+import { getDb } from "../src/db.js";
 
 let ctx: TestCtx;
 const admin = { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] } as const;
@@ -43,6 +44,23 @@ describe("reusable saved profiles", () => {
     assert.equal(readFileSync(marker(second.id), "utf8"), "original");
     assert.equal(readFileSync(marker(source.id), "utf8"), "original");
     assert.equal(readFileSync(path.join(ctx.browsers.listSeeds().find(s => s.id === seed.id)!.path, "fixture.txt"), "utf8"), "original");
+  });
+
+  it("refreshes site observations before a running browser is snapshotted", async () => {
+    const source = create("Just signed in");
+    await ctx.browsers.ensureRunning(source.id);
+    const manager = ctx.browsers as unknown as { siteDetector: { scan: (id: string, pages: unknown[], running: () => boolean, force?: boolean) => Promise<void> } };
+    const original = manager.siteDetector.scan;
+    manager.siteDetector.scan = async (id, _pages, running, force) => {
+      if (!force) return;
+      assert.equal(force, true);
+      assert.equal(running(), true, "detection must run before Chrome stops");
+      reportSiteAccess(id, { origin: "https://www.google.com", name: "Google", state: "confirmed" }, admin);
+    };
+    try {
+      const saved = await ctx.browsers.snapshotSeed(source.id, "Fresh sign-in", admin);
+      assert.equal(ctx.browsers.listSeeds().find(s => s.id === saved.id)?.signedInSites[0].name, "Google");
+    } finally { manager.siteDetector.scan = original; }
   });
 
   it("updating a saved profile changes future copies only and keeps its id", async () => {
@@ -126,5 +144,80 @@ describe("reusable saved profiles", () => {
     await answerRequest(ctx.browsers, owner.agent, { requestId: pending.requestId!, decision: "grant" });
     ctx.browsers.assertAccess(borrower.agent, source, "control");
     await assert.rejects(ctx.browsers.saveProfile(source.id, borrower.agent), /borrowed browsers cannot be copied/);
+  });
+
+  it("deletes only the confirmed snapshot and detaches save targets without falling back to an older profile", async () => {
+    const source = create("Delete source");
+    writeFileSync(marker(source.id), "kept browser data");
+    reportSiteAccess(source.id, { origin: "https://example.com", state: "confirmed" }, admin);
+    const older = await ctx.browsers.snapshotSeed(source.id, "Older", admin);
+    const saved = await ctx.browsers.snapshotSeed(source.id, "Delete me", admin);
+    const copy = create("Existing copy", saved.id);
+    await ctx.browsers.ensureRunning(copy.id);
+    const response = await json(`${ctx.url}/api/v1/seeds/${saved.id}`, {
+      method: "DELETE", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmName: "Delete me" }),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, { deleted: true, cleanupPending: false });
+    assert.equal(existsSync(saved.path), false);
+    assert.equal(existsSync(older.path), true);
+    assert.equal(ctx.browsers.linkedProfile(source.id), null, "must not silently target Older after deletion");
+    assert.equal(ctx.browsers.linkedProfile(copy.id), null);
+    assert.ok(ctx.browsers.runtime(copy.id), "existing Chrome is not stopped");
+    assert.equal(readFileSync(marker(copy.id), "utf8"), "kept browser data");
+    assert.equal(readFileSync(marker(source.id), "utf8"), "kept browser data");
+    assert.equal(listSiteAccess(copy.id).length, 1);
+    assert.throws(() => create("Cannot reload deleted", saved.id), /not found/);
+    assert.equal(getDb().prepare(`SELECT 1 FROM seed_site_access WHERE seed_id = ?`).get(saved.id), undefined);
+  });
+
+  it("requires current-name confirmation and administrator access before deletion", async () => {
+    const saved = await ctx.browsers.snapshotSeed(create("Confirmation source").id, "Confirm this", admin);
+    for (const confirmName of [undefined, "Old name"]) {
+      const response = await json(`${ctx.url}/api/v1/seeds/${saved.id}`, {
+        method: "DELETE", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" }, body: JSON.stringify({ confirmName }),
+      });
+      assert.equal(response.status, 400);
+    }
+    const writer = createAgent({ name: "No deletion", scopes: [...DEFAULT_AGENT_SCOPES, "seed:use", "seed:write"] });
+    const denied = await json(`${ctx.url}/api/v1/seeds/${saved.id}`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${writer.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ confirmName: "Confirm this" }),
+    });
+    assert.equal(denied.status, 403);
+    assert.equal(existsSync(saved.path), true);
+    assert.ok(ctx.browsers.listSeeds().some(s => s.id === saved.id));
+  });
+
+  it("keeps failed disk cleanup durable and retries it without restoring the deleted profile", async () => {
+    const saved = await ctx.browsers.snapshotSeed(create("Cleanup source").id, "Cleanup", admin);
+    const manager = ctx.browsers as unknown as { removeSnapshot: (file: string) => Promise<void> };
+    const original = manager.removeSnapshot;
+    manager.removeSnapshot = async () => { throw new Error("fixture disk failure"); };
+    try {
+      assert.deepEqual(await ctx.browsers.deleteSeed(saved.id, "Cleanup", admin), { deleted: true, cleanupPending: true });
+      assert.ok(!ctx.browsers.listSeeds().some(s => s.id === saved.id));
+      assert.ok(getDb().prepare(`SELECT 1 FROM deleted_profile_snapshots WHERE id = ?`).get(saved.id));
+    } finally { manager.removeSnapshot = original; }
+    await ctx.browsers.cleanupDeletedProfiles();
+    assert.equal(existsSync(saved.path), false);
+    assert.equal(getDb().prepare(`SELECT 1 FROM deleted_profile_snapshots WHERE id = ?`).get(saved.id), undefined);
+  });
+
+  it("refuses deletion while the same profile is being updated", async () => {
+    const source = create("Concurrent source");
+    const saved = await ctx.browsers.snapshotSeed(source.id, "Concurrent", admin);
+    const manager = ctx.browsers as unknown as { copyProfile: (from: string, to: string) => Promise<void> };
+    const original = manager.copyProfile;
+    let release!: () => void;
+    let entered!: () => void;
+    const copying = new Promise<void>(resolve => { entered = resolve; });
+    manager.copyProfile = async (from, to) => { entered(); await new Promise<void>(resolve => { release = resolve; }); await original.call(ctx.browsers, from, to); };
+    const saving = ctx.browsers.snapshotSeed(source.id, "Concurrent", admin, { seedId: saved.id });
+    try {
+      await copying;
+      await assert.rejects(ctx.browsers.deleteSeed(saved.id, "Concurrent", admin), /being updated/);
+      assert.ok(ctx.browsers.listSeeds().some(s => s.id === saved.id));
+    } finally { release(); await saving; manager.copyProfile = original; }
   });
 });

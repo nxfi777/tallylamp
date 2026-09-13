@@ -153,6 +153,13 @@ CREATE TABLE IF NOT EXISTS browser_site_access (
   UNIQUE(browser_id, origin)
 );
 
+-- Removed snapshots are no longer loadable. Disk cleanup retries across restarts.
+CREATE TABLE IF NOT EXISTS deleted_profile_snapshots (
+  id TEXT PRIMARY KEY,
+  path TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 -- Manual removals must survive detector and service restarts.
 CREATE TABLE IF NOT EXISTS browser_site_detection_dismissals (
   browser_id TEXT NOT NULL,
@@ -276,8 +283,8 @@ export function getDb(): DatabaseSync {
   db.exec(SCHEMA);
   migrate(db);
   db.exec(INDEXES);
-  db.exec(`INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '5')`);
-  db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
+  db.exec(`INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '6')`);
+  db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
   return db;
 }
 
@@ -315,6 +322,19 @@ function migrate(database: DatabaseSync): void {
     if (cols.has(column)) continue;
     database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
     cols.add(column);
+  }
+  // Migrate legacy save targets once. Repeating this would resurrect an older
+  // target after the user explicitly deletes a browser's linked saved profile.
+  if (!database.prepare(`SELECT 1 FROM meta WHERE key = 'profile_links_backfilled'`).get()) {
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      database.exec(`UPDATE browsers SET seed_id = (
+        SELECT id FROM seeds WHERE created_from_browser_id = browsers.id
+        ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT 1
+      ) WHERE seed_id IS NULL`);
+      database.prepare(`INSERT INTO meta(key, value) VALUES ('profile_links_backfilled', '1')`).run();
+      database.exec("COMMIT");
+    } catch (e) { database.exec("ROLLBACK"); throw e; }
   }
   // Any OAuth token minted by an older build was bound to the admin principal with
   // full scopes and no audience. Those are not recoverable as connector grants.

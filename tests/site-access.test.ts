@@ -40,6 +40,22 @@ describe("profile site inventory", () => {
     assert.equal(observe("Sign out", true, "about:"), null);
   });
 
+  it("recognises Google's signed-in account menu without recording account details or trusting lookalike domains", () => {
+    const observe = (host: string, href: string, visible = true) => runInNewContext(SIGN_IN_OBSERVATION, {
+      URL, location: { protocol: "https:", hostname: host, href: `https://${host}/`, origin: `https://${host}` },
+      document: { querySelectorAll: () => [{ getClientRects: () => visible ? [{}] : [], getAttribute: (name: string) => name === "href" ? href : null, innerText: "" }] },
+      getComputedStyle: () => ({ visibility: "visible", opacity: "1" }),
+    });
+    const accountLink = "https://accounts.google.com/SignOutOptions?hl=en";
+    assert.equal(observe("www.google.com", accountLink).signedIn, true);
+    assert.equal(observe("www.google.com", accountLink).name, "Google");
+    assert.equal(observe("mail.google.com", accountLink).signedIn, true);
+    assert.equal(observe("www.google.com.evil.test", accountLink).signedIn, false);
+    assert.equal(observe("www.google.com", "https://accounts.google.com.evil.test/SignOutOptions").signedIn, false);
+    assert.equal(observe("www.google.com", "https://accounts.google.com/ServiceLogin").signedIn, false);
+    assert.equal(observe("www.google.com", accountLink, false).signedIn, false);
+  });
+
   it("prefills the manual form from the viewer's active tab, not the cached URL", async () => {
     const source = readFileSync(new URL("../dashboard/app.js", import.meta.url), "utf8");
     const functions = ["browserView", "siteAccessSection", "currentOrigin", "addSite"].map(name => {
@@ -99,22 +115,50 @@ describe("profile site inventory", () => {
     assert.match(message, /unavailable/);
   });
 
+  it("dashboard saved-profile deletion requires confirmation and cancel sends no request", async () => {
+    const source = readFileSync(new URL("../dashboard/app.js", import.meta.url), "utf8");
+    const code = source.match(/^async function deleteSavedProfile\([\s\S]*?^}/m)![0];
+    const calls: Array<{ url: string; method: string; body: { confirmName: string } }> = [];
+    let accept = false;
+    let prompt = "";
+    const sandbox = { profile: { id: "test-profile", name: "Main" },
+      confirm: (text: string) => { prompt = text; return accept; },
+      api: async (url: string, options: { method: string; body: { confirmName: string } }) => { calls.push({ url, ...options }); return { cleanupPending: false }; },
+      act: (fn: () => Promise<void>) => fn(), render: async () => {}, flash: () => {},
+    };
+    await runInNewContext(`${code}\ndeleteSavedProfile(profile)`, sandbox);
+    assert.equal(calls.length, 0);
+    assert.match(prompt, /Main/);
+    assert.match(prompt, /Existing browsers and their logins stay unchanged/);
+    accept = true;
+    await runInNewContext(`${code}\ndeleteSavedProfile(profile)`, sandbox);
+    assert.equal(calls[0].method, "DELETE");
+    assert.equal(calls[0].url, "/api/v1/seeds/test-profile");
+    assert.equal(calls[0].body.confirmName, "Main");
+  });
+
   it("automatically records a signal once, with system provenance, and respects manual removal", async () => {
     const created = await json(`${ctx.url}/api/v1/browsers`, {
       method: "POST", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
       body: JSON.stringify({ name: "Detected sites", start: false }),
     });
     const id = (created.body as { browser: { id: string } }).browser.id;
+    let signedIn = false;
     const ws = new WebSocketServer({ port: 0, host: "127.0.0.1" });
     await new Promise<void>(resolve => ws.once("listening", resolve));
     ws.on("connection", client => client.on("message", raw => {
       const message = JSON.parse(String(raw));
-      client.send(JSON.stringify({ id: message.id, result: { result: { value: { origin: "https://example.com", signedIn: true } } } }));
+      client.send(JSON.stringify({ id: message.id, result: { result: { value: { origin: "https://example.com", signedIn } } } }));
     }));
     try {
       const detector = new SiteDetector();
       const pages = [{ type: "page", url: "https://example.com/account", webSocketDebuggerUrl: `ws://127.0.0.1:${(ws.address() as { port: number }).port}` }];
       await detector.scan(id, pages, () => true);
+      assert.deepEqual(listSiteAccess(id), []);
+      signedIn = true;
+      await detector.scan(id, pages, () => true);
+      assert.deepEqual(listSiteAccess(id), [], "periodic detection is throttled");
+      await detector.scan(id, pages, () => true, true);
       const sites = listSiteAccess(id);
       assert.equal(sites.length, 1);
       assert.equal(sites[0].reportedBy.type, "system");

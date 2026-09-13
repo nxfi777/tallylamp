@@ -71,6 +71,7 @@ export class BrowserManager {
   private profileSaves = new Map<string, Promise<SavedProfileResult>>();
   private savingSeeds = new Set<string>();
   private resumeReservations = new Set<string>();
+  private snapshotCleanup = new Set<string>();
   private mcpAttached = new Map<string, number>();
   private viewers = new Map<string, number>();
   private fakeClosers = new Map<string, () => Promise<void>>();
@@ -737,6 +738,7 @@ export class BrowserManager {
   }
 
   async reapIdle(): Promise<void> {
+    await this.cleanupDeletedProfiles();
     const now = Date.now();
     for (const [id, rt] of this.runtimes) {
       // A start in flight owns a freshly created proxy that is not yet paired with a runtime;
@@ -813,6 +815,12 @@ export class BrowserManager {
         if (wasRunning) {
           const runtime = this.runtimes.get(browserId)!;
           const fake = config.fakeChrome;
+          // A save can happen immediately after sign-in, before periodic polling.
+          // Refresh the inventory before closing Chrome; copy credentials even if
+          // a page cannot be inspected (badges are observations, not the profile).
+          try {
+            await this.siteDetector.scan(browserId, await listPages(runtime.cdpUrl), () => this.runtimes.get(browserId) === runtime, true);
+          } catch { log.warn("save-time site detection unavailable; keeping recorded sites", { browserId }); }
           await this.stopInternal(browserId);
           if (!fake && (runtime.chrome.signalCode !== null || runtime.chrome.exitCode !== 0)) {
             throw Err.browserUnavailable("Chrome did not close cleanly; no saved profile was published. Retry Save profile.");
@@ -870,9 +878,52 @@ export class BrowserManager {
     if (row.seed_id) {
       return getDb().prepare(`SELECT id, name FROM seeds WHERE id = ?`).get(row.seed_id) as { id: string; name: string } | undefined ?? null;
     }
-    // Upgrade existing 0.2.0 source browsers, which were not linked on Save.
-    return getDb().prepare(`SELECT id, name FROM seeds WHERE created_from_browser_id = ? ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT 1`)
-      .get(browserId) as { id: string; name: string } | undefined ?? null;
+    return null;
+  }
+
+  async deleteSeed(id: string, confirmName: unknown, principal: Principal) {
+    if (principal.type !== "admin") throw Err.unauthorized("only an administrator can delete shared saved profiles");
+    const seed = getDb().prepare(`SELECT name, path FROM seeds WHERE id = ?`).get(id) as { name: string; path: string } | undefined;
+    if (!seed) throw Err.notFound("saved profile not found");
+    if (confirmName !== seed.name) throw Err.invalid("confirm the current saved profile name before deleting; reload if it changed");
+    if (this.savingSeeds.has(id)) throw Err.browserUnavailable("saved profile is being updated; retry after saving finishes");
+    this.assertSnapshotPath(seed.path);
+    const db = getDb();
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.prepare(`INSERT INTO deleted_profile_snapshots(id, path, created_at) VALUES (?, ?, ?)`).run(id, seed.path, nowIso());
+      db.prepare(`UPDATE browsers SET seed_id = NULL WHERE seed_id = ?`).run(id);
+      db.prepare(`DELETE FROM seed_site_access WHERE seed_id = ?`).run(id);
+      db.prepare(`DELETE FROM seeds WHERE id = ?`).run(id);
+      db.exec("COMMIT");
+    } catch (e) { db.exec("ROLLBACK"); throw e; }
+    audit({ actorType: principal.type, actorId: principal.id, action: "seed.deleted", targetType: "seed", targetId: id });
+    hub.emitEvent("profile.deleted", { id, name: seed.name });
+    await this.cleanupDeletedProfiles(id);
+    return { deleted: true, cleanupPending: !!getDb().prepare(`SELECT 1 FROM deleted_profile_snapshots WHERE id = ?`).get(id) };
+  }
+
+  private assertSnapshotPath(snapshotPath: string): void {
+    const relative = path.relative(seedDir(""), snapshotPath);
+    if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw Err.invalid("saved snapshot path is outside profile storage");
+  }
+
+  protected async removeSnapshot(snapshotPath: string): Promise<void> {
+    this.assertSnapshotPath(snapshotPath);
+    await rm(snapshotPath, { recursive: true, force: true });
+  }
+
+  async cleanupDeletedProfiles(id?: string): Promise<void> {
+    const jobs = getDb().prepare(`SELECT id, path FROM deleted_profile_snapshots ${id ? "WHERE id = ?" : ""} LIMIT 5`).all(...(id ? [id] : [])) as Array<{ id: string; path: string }>;
+    for (const job of jobs) {
+      if (this.snapshotCleanup.has(job.id)) continue;
+      this.snapshotCleanup.add(job.id);
+      try {
+        await this.removeSnapshot(job.path);
+        getDb().prepare(`DELETE FROM deleted_profile_snapshots WHERE id = ?`).run(job.id);
+      } catch (e) { log.warn("deleted snapshot cleanup will retry", { id: job.id, error: (e as Error).message }); }
+      finally { this.snapshotCleanup.delete(job.id); }
+    }
   }
 
   async saveProfile(browserId: string, principal: Principal, options: { name?: string; metadata?: unknown; asNew?: boolean; profileId?: string; updateOnly?: boolean } = {}) {

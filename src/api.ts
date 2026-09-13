@@ -446,6 +446,10 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     res.json({ seed });
   }));
 
+  api.delete("/api/v1/seeds/:id", requireAdmin, asyncRoute(async (req, res) => {
+    res.json(await browsers.deleteSeed(req.params.id, req.body?.confirmName, req.principal!));
+  }));
+
   api.get("/api/v1/audit", requireAdmin, (_req, res) => {
     res.json({ events: listAudit() });
   });
