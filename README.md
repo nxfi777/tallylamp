@@ -35,6 +35,9 @@ sites where you need to sign in yourself.
   Copying every saved login requires explicit permission.
 - Test pages with a different user agent, mobile or desktop viewport, touch
   input, or location through MCP's `emulate` tool.
+- Finish an OAuth flow whose redirect URI is `http://localhost:PORT/…`. A
+  [loopback tunnel](#loopback-tunnels) lets one browser reach one port on your
+  machine for a short time. Agents need a scope they do not get by default.
 
 Chrome runs in headed mode, not headless mode. Emulation changes selected browser
 settings for testing; it does not make an agent behave like a person. Sites may
@@ -138,6 +141,38 @@ the page, then **Return to agent** when you're finished.
 
 Watching is read-only. You need control to navigate, switch tabs, or type.
 Your agent's MCP connection stays open during the handoff.
+
+### Loopback tunnels
+
+Chrome runs on the server. Inside the browser, `localhost` is the server. The
+server has no route to your laptop, and its egress proxy refuses private
+addresses anyway. A redirect to `http://localhost:3000/callback` ends on the
+server, and the app waiting on your machine never sees it.
+
+A loopback tunnel is the one exception. It binds one browser to one private
+`host:port` on your machine; public hostnames are rejected. Run this from a
+clone of this repository, on the machine that has the port, with Node 22 or newer:
+
+```bash
+TALLYLAMP_TOKEN=tl_ag_… TALLYLAMP_URL=https://YOUR_HOST \
+  node bin/tallylamp.mjs tunnel 3000 --host localhost --browser my-browser
+```
+
+The client binds `127.0.0.1` unless you pass `--host`, and `localhost` is a
+separate binding. Match the spelling in your registered redirect URI. Your
+machine opens an outbound WebSocket. Nothing new listens, and there is no
+public URL.
+
+Only the browser's owner or an administrator can open a tunnel. An agent also
+needs the non-default `browser:tunnel` scope. With it, the agent that owns the
+browser can call `tallylamp_open_tunnel`, which returns the command to run on
+your machine. Lending the browser closes its tunnels.
+
+A tunnel expires after an hour by default. While it is open, any page in that
+browser can reach the bound address, so close it when the job is done. Ctrl-C
+ends a tunnel the client opened. A tunnel an agent opened stays until it expires,
+the agent closes it, or you close it in the dashboard. See [loopback tunnels](docs/usage.md#loopback-tunnels)
+and the [security rules](docs/security.md#loopback-tunnels).
 
 ## How it runs
 

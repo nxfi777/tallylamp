@@ -37,6 +37,9 @@ password. You choose when to upgrade the application.
 - Watch a browser session live to inspect what the agent is doing.
 - Test pages with different user agents, mobile or desktop viewports, touch
   input, and locations through MCP's `emulate` tool.
+- Finish an OAuth flow whose redirect URI is `http://localhost:PORT/…`, through
+  a short-lived loopback tunnel to one private address on your machine. Agents
+  need a scope they do not get by default.
 
 ## Dependencies for Tallylamp
 
@@ -63,6 +66,21 @@ Ask your agent to create a browser and open a site. Choose **Watch** in the
 dashboard to see it, **Take control** to use it yourself, and **Return to agent**
 when you're done. Tallylamp blocks agent actions that change the browser while
 you have control.
+
+## Reach localhost on your own machine
+
+Chrome runs in the Railway container, so `localhost` inside the browser means
+the container. A redirect to `http://localhost:PORT/callback` ends there, and
+the app waiting on your machine never sees it.
+
+A loopback tunnel binds one browser to one private `host:port` on your machine.
+Your machine dials out, with no new listener and no public URL. Only the
+browser's owner or an administrator can open one, and an agent also needs the
+non-default `browser:tunnel` scope. Lending the browser closes its tunnels.
+A tunnel expires after an hour by default. While it is open, any page in that
+browser can reach that address, so close it when the job is done. The
+[tunnel guide](https://github.com/nxfi777/tallylamp/blob/main/docs/usage.md#loopback-tunnels)
+has the command to run on your machine.
 
 ## Updates are your choice
 
