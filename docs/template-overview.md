@@ -66,7 +66,7 @@ you have control.
 
 ## Updates are your choice
 
-The template uses the public `ghcr.io/nxfi777/tallylamp:0.3.0` image, pinned
+The template uses the public `ghcr.io/nxfi777/tallylamp:0.4.0` image, pinned
 to its digest. Automatic image updates are disabled. Pushing source code or
 publishing a new release does not upgrade your deployment.
 
@@ -89,6 +89,10 @@ Agents can load, modify, and update profiles through MCP. Enable loading and
 saving separately under **Agents → Profile permissions**. Saving requires
 `seed:write`; borrowing a browser never permits exporting its logins. Saved
 profiles contain every login, so share them only with agents you trust.
+
+Delete a saved profile through its confirmation popup without deleting existing
+browsers or signing them out. Site badges show detected or reported sign-ins,
+not every saved login. A missing badge does not mean a login was lost.
 
 Chrome needs memory. Start with a cap of two browsers and budget roughly
 1–2 GB per active browser, plus the server. Measure your own workload before

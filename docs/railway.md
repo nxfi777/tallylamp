@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.3.0` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.4.0` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -133,24 +133,30 @@ Then publish and add its real deploy URL to the README and website.
 
 ## Releasing and upgrading
 
-The current release is [0.3.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.3.0)
+The current release is [0.4.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.4.0)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:60bf057d9d130dcaf496510cc4ac9a631787631513e69f8ceae96c5ccedf507a
+ghcr.io/nxfi777/tallylamp@sha256:5c26ea041e9a84b71b166590fe2a7a8e6228b4949c0173b22ae3b2b1a567c005
 ```
 
-The [0.3.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/34717721785)
-passed 197 application tests, 7 headed Chrome tests, and running-container checks
+The [0.4.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/34727873042)
+passed 205 application tests, 7 headed Chrome tests, and running-container checks
 before publishing the same artifact. The container checks exercised MCP
 save/load/update, session and persistent cookies, metadata, automatic reconnection,
-Save as new, and independence between existing browsers. Anonymous registry access,
+Save as new, independence between existing browsers, and confirmed snapshot deletion
+without stopping or signing out existing browsers. Anonymous registry access,
 the manifest digest, and version/source-revision labels were verified afterward.
 
-The Railway template pins the `0.3.0` digest for new installations. Existing
+The Railway template pins the `0.4.0` digest for new installations. Existing
 deployments keep their selected image. Railway redeploy persistence and unique
 passwords across two template installations were checked for `0.1.1`, not repeated
-for `0.3.0`. These checks do not certify every external MCP client.
+for `0.4.0`. These checks do not certify every external MCP client.
+
+Version 0.4.0 uses database schema 6. It adds durable deleted-snapshot cleanup
+and a one-time migration for legacy save targets. Back up `/data` before upgrading.
+Older code may relink a browser to an older snapshot after its target was deleted;
+restore a compatible backup before rolling back.
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing
