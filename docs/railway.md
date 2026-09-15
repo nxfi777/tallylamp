@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.4.0` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.5.0` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -138,30 +138,35 @@ Then publish and add its real deploy URL to the README and website.
 
 ## Releasing and upgrading
 
-The current release is [0.4.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.4.0)
+The current release is [0.5.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.5.0)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:5c26ea041e9a84b71b166590fe2a7a8e6228b4949c0173b22ae3b2b1a567c005
+ghcr.io/nxfi777/tallylamp@sha256:2708748f0c4db245b78a4ed586e72ebf5acd87dab09981c13eeb0030a0a98a35
 ```
 
-The [0.4.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/34727873042)
-passed 205 application tests, 7 headed Chrome tests, and running-container checks
-before publishing the same artifact. The container checks exercised MCP
-save/load/update, session and persistent cookies, metadata, automatic reconnection,
-Save as new, independence between existing browsers, and confirmed snapshot deletion
-without stopping or signing out existing browsers. Anonymous registry access,
-the manifest digest, and version/source-revision labels were verified afterward.
+The [0.5.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35035507641)
+passed 228 application tests, 8 headed Chrome tests, and running-container checks
+before publishing the same artifact. The Chrome checks include an authenticated
+upstream proxy and refusal without direct fallback. The container checks also
+exercised MCP save/load/update, cookies, metadata, reconnection, independent profile
+copies, and confirmed snapshot deletion. Anonymous registry access, the manifest
+digest, and version/source-revision labels were verified afterward. The image's
+source revision is `8934c2894d2254de1b9122b3618757a1c5805dc9`.
 
-The Railway template pins the `0.4.0` digest for new installations. Existing
+The Railway template pins the `0.5.0` digest for new installations. Its published
+configuration and proxy instructions were read back after the update. Existing
 deployments keep their selected image. Railway redeploy persistence and unique
 passwords across two template installations were checked for `0.1.1`, not repeated
-for `0.4.0`. These checks do not certify every external MCP client.
+for `0.5.0`. These checks do not certify every external MCP client or proxy provider.
 
-Version 0.4.0 uses database schema 6. It adds durable deleted-snapshot cleanup
-and a one-time migration for legacy save targets. Back up `/data` before upgrading.
-Older code may relink a browser to an older snapshot after its target was deleted;
-restore a compatible backup before rolling back.
+Version 0.5.0 uses database schema 7. It adds a nullable `browsers.proxy_json`
+column; existing browsers keep their direct route unless a proxy is configured.
+Credentials are stored unencrypted in that column. Back up and protect `/data`
+before upgrading. Older versions ignore proxy settings and can send traffic
+directly, so do not downgrade a proxied browser and expect its route to hold.
+Restore a compatible backup and review routing before rolling back. See the
+[0.5.0 release notes](release-0.5.0.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing

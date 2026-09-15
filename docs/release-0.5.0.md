@@ -32,8 +32,16 @@ Do not roll a proxied browser back to older code and expect the route to remain
 enforced. Versions before 0.5.0 ignore proxy settings and can send traffic directly.
 Restore a compatible backup and review routing before a rollback.
 
-The release workflow builds and tests the Linux amd64 image before publishing
-`ghcr.io/nxfi777/tallylamp:0.5.0`. Use the verified digest recorded in the
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35035507641)
+passed 228 application tests, 8 headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.5.0` for Linux amd64. Anonymous
+registry access and version/source-revision labels were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:2708748f0c4db245b78a4ed586e72ebf5acd87dab09981c13eeb0030a0a98a35
+```
+
+The same digest is recorded in the
 [release and upgrade notes](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md#releasing-and-upgrading). The Railway
 template pins that artifact for new installations; existing installations do
 not upgrade automatically.
