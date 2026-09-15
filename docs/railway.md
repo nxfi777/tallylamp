@@ -44,6 +44,11 @@ copying the whole file into Railway can override deployment defaults.
 
 ## Browser and session settings
 
+Upstream proxies are configured per browser, through the dashboard, API, or MCP.
+Do not set a shared `HTTP_PROXY` variable or add provider credentials to the
+template. Browser proxy settings persist in SQLite on `/data`; credentials are
+unencrypted at rest. See [proxy setup and limits](proxies.md).
+
 | Name | Required | Notes |
 | --- | --- | --- |
 | `TALLYLAMP_MAX_BROWSERS` | no | default 4; Chrome is memory-heavy |

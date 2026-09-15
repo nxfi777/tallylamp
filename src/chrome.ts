@@ -164,6 +164,7 @@ export async function launchChrome(opts: {
   profileDir: string;
   downloadDir: string;
   proxyPort?: number;
+  upstreamProxy?: boolean;
   windowSize?: string;
 }): Promise<ChromeRuntime> {
   mkdirSync(opts.profileDir, { recursive: true });
@@ -237,6 +238,10 @@ export async function launchChrome(opts: {
     // <-loopback> removes the implicit localhost bypass so pages cannot reach
     // sibling CDP/viewer ports. Our process still talks to CDP directly.
     args.push("--proxy-bypass-list=<-loopback>");
+  }
+  if (opts.upstreamProxy) {
+    // HTTP proxies do not carry UDP. Do not let QUIC/WebRTC silently use a direct route.
+    args.push("--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
   }
   if (!existsSync(path.join(opts.profileDir, "Default", "Preferences"))) args.push("about:blank");
 

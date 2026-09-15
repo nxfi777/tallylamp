@@ -82,7 +82,7 @@ function askFor(title, fields, submitLabel, submit) {
           e.preventDefault();
           if (submitting) return;
           const out = {};
-          for (const [name, el] of inputs) out[name] = el.value.trim();
+          for (const [name, el] of inputs) out[name] = el.dataset.preserveWhitespace ? el.value : el.value.trim();
           submitting = true;
           const button = form.querySelector('button[type="submit"]');
           button.disabled = true;
@@ -97,7 +97,8 @@ function askFor(title, fields, submitLabel, submit) {
         const id = `field-${f.name}`;
         const input = f.options ? h("select", { id, name: f.name, required: !!f.required },
           ...f.options.map(option => h("option", { value: option.value, selected: option.value === (f.value || "") }, option.label))) : h("input", {
-          id, name: f.name, type: "text", value: f.value || "",
+          id, name: f.name, type: f.type || "text", value: f.value || "",
+          "data-preserve-whitespace": f.preserveWhitespace ? "true" : false,
           required: !!f.required,
           placeholder: f.placeholder || "", maxlength: String(f.maxLength || 120), autocomplete: "off",
         });
@@ -1168,6 +1169,10 @@ async function browserView(id, seq) {
           h("dt", {}, "Watchers"), h("dd", {}, String(b.viewers ?? 0)),
         ),
         h("button", { class: "btn", onClick: () => editBrowser(b) }, "Edit profile"),
+        h("h2", {}, "Proxy"),
+        h("p", { class: "sub" }, b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? " · authenticated" : ""}` : "Direct · no upstream proxy"),
+        h("button", { class: "btn", disabled: !["stopped", "crashed"].includes(b.status) || b.savingProfile || human, onClick: () => editProxy(b) }, "Configure proxy"),
+        h("p", { class: "sub" }, ["stopped", "crashed"].includes(b.status) ? "Settings apply on the next start. Tunnels keep their own route." : "Stop the browser before changing its proxy."),
         h("h2", {}, "Signed-in sites"),
         sitesPanel,
         // On the browser itself, not on a settings page: these two controls are only ever
@@ -1975,6 +1980,7 @@ async function createBrowser(seedId = "") {
       hint: "Copies every saved login and its metadata into an independent browser. Sites may ask you to sign in again." },
     { name: "project", label: "Project", placeholder: "Use saved profile's project, if any", hint: "Leave blank to keep the saved metadata." },
     { name: "purpose", label: "What is it for?", placeholder: "Use saved profile's purpose, if any", maxLength: 200 },
+    ...proxyFields(),
   ], "Create browser", async (values) => {
     const { name, project, purpose } = values;
     created = await api("/api/v1/browsers", {
@@ -1983,6 +1989,7 @@ async function createBrowser(seedId = "") {
         name: name || undefined,
         persistent: true,
         seedId: values.seedId || undefined,
+        proxy: proxyFromFields(values),
         metadata: {
           source: "dashboard",
           ...(project ? { project } : {}),
@@ -1992,6 +1999,38 @@ async function createBrowser(seedId = "") {
     });
   });
   if (answers) go(`/browsers/${created.browser.id}`);
+}
+
+function proxyFields(proxy) {
+  return [
+    { name: "proxyServer", label: "Proxy server (optional)", value: proxy?.server || "", placeholder: "https://proxy.example.com:8443", maxLength: 2048,
+      hint: "HTTP or HTTPS CONNECT proxy. Leave blank for direct access. No credentials in this URL; SOCKS is not supported." },
+    { name: "proxyUsername", label: "Proxy username", placeholder: "Optional", maxLength: 1024, preserveWhitespace: true },
+    { name: "proxyPassword", label: "Proxy password", type: "password", maxLength: 1024, preserveWhitespace: true,
+      hint: proxy?.hasAuthentication ? "Re-enter both credentials to keep authentication. They are never shown here." : "Supply both credentials, or leave both blank. Stored in the service database; not copied into saved profiles." },
+  ];
+}
+
+function proxyFromFields(values) {
+  if (!values.proxyServer) {
+    if (values.proxyUsername || values.proxyPassword) throw new Error("Enter a proxy server, or clear its credentials for direct access.");
+    return null;
+  }
+  return { server: values.proxyServer, ...(values.proxyUsername || values.proxyPassword ? { username: values.proxyUsername, password: values.proxyPassword } : {}) };
+}
+
+async function editProxy(b) {
+  const answers = await askFor("Configure proxy", proxyFields(b.proxy), "Save proxy", async (values) => {
+    if (b.proxy?.hasAuthentication && values.proxyServer && !values.proxyUsername && !values.proxyPassword) {
+      throw new Error("Re-enter the proxy credentials. To remove authentication, clear the server and save, then configure it without credentials.");
+    }
+    await api(`/api/v1/browsers/${b.id}`, { method: "PATCH", body: { proxy: proxyFromFields(values) } });
+  });
+  if (answers) {
+    flash("Proxy settings saved. Start the browser to use them.", true);
+    await refresh();
+    void render();
+  }
 }
 
 async function editBrowser(b) {

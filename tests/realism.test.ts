@@ -89,6 +89,87 @@ describe("browser realism differential", { skip: !chromeAvailable }, () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("routes headed Chrome through an authenticated upstream and never falls back on rejection", async () => {
+    const { launchChrome, stopRuntime } = await import("../src/chrome.js");
+    const { CdpClient, browserWsUrl, evaluate } = await import("../src/cdp.js");
+    const { startEgressProxy } = await import("../src/egress-proxy.js");
+    const { createServer } = await import("node:http");
+    const { createConnection } = await import("node:net");
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const privateSetting = process.env.TALLYLAMP_ALLOW_PRIVATE_NETWORK;
+    process.env.TALLYLAMP_ALLOW_PRIVATE_NETWORK = "1"; // Local fixture endpoints only.
+    const dir = mkdtempSync(join(tmpdir(), "tallylamp-real-proxy-"));
+    let hits = 0;
+    const origin = createServer((_req, res) => { hits++; res.end("proxied-chrome-ok"); });
+    const upstream = createServer();
+    const peers = new Set<import("node:stream").Duplex>();
+    const authorities: string[] = [];
+    let reject = false;
+    let rejections = 0;
+    let rt: Awaited<ReturnType<typeof launchChrome>> | undefined;
+    let cdp: InstanceType<typeof CdpClient> | undefined;
+    let egress: Awaited<ReturnType<typeof startEgressProxy>> | undefined;
+    try {
+      await new Promise<void>(r => origin.listen(0, "127.0.0.1", r));
+      const port = (origin.address() as { port: number }).port;
+      upstream.on("connect", (req, client, head) => {
+        peers.add(client); client.on("error", () => client.destroy());
+        client.on("close", () => peers.delete(client));
+        if (reject || req.headers["proxy-authorization"] !== "Basic cHJveHktdXNlcjpwcm94eS1wYXNz") {
+          rejections++; client.end("HTTP/1.1 407 Proxy Authentication Required\r\n\r\n"); return;
+        }
+        authorities.push(req.url!);
+        const peer = createConnection({ host: "127.0.0.1", port });
+        peers.add(peer); peer.on("error", () => client.destroy());
+        peer.on("close", () => { peers.delete(peer); client.destroy(); });
+        client.on("close", () => peer.destroy());
+        peer.on("connect", () => {
+          client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+          if (head.length) peer.write(head);
+          client.pipe(peer); peer.pipe(client);
+        });
+      });
+      await new Promise<void>(r => upstream.listen(0, "127.0.0.1", r));
+      egress = await startEgressProxy({ upstream: {
+        server: `http://127.0.0.1:${(upstream.address() as { port: number }).port}`,
+        username: "proxy-user", password: "proxy-pass",
+      } });
+      rt = await launchChrome({ profileDir: dir, downloadDir: join(dir, "dl"), proxyPort: egress.port, upstreamProxy: true });
+      cdp = new CdpClient(await browserWsUrl(rt.cdpUrl));
+      await cdp.connect();
+      await evaluate(cdp, `location.href = 'http://127.0.0.1:${port}/first'`);
+      for (let attempt = 0; ; attempt++) {
+        if (await evaluate(cdp, `document.body?.textContent === 'proxied-chrome-ok'`)) break;
+        assert.ok(attempt < 100, "proxied page did not load");
+        await new Promise(r => setTimeout(r, 50));
+      }
+      assert.ok(authorities.includes(`127.0.0.1:${port}`), "Chrome bypassed the local proxy");
+      assert.ok(hits > 0);
+      // Let the favicon settle before measuring whether the refused navigation went direct.
+      await new Promise(r => setTimeout(r, 250));
+      reject = true;
+      const before = hits;
+      await evaluate(cdp, `location.href = 'http://127.0.0.1:${port}/rejected'`);
+      for (let attempt = 0; ; attempt++) {
+        if (rejections > 0 && await evaluate(cdp, `document.readyState === 'complete' && document.body?.textContent !== 'proxied-chrome-ok'`)) break;
+        assert.ok(attempt < 100, "refused proxy request did not finish");
+        await new Promise(r => setTimeout(r, 50));
+      }
+      assert.equal(hits, before, "a rejected proxy request reached the origin directly");
+    } finally {
+      await cdp?.close();
+      if (rt) await stopRuntime(rt);
+      await egress?.close();
+      for (const peer of peers) peer.destroy();
+      await Promise.all([new Promise<void>(r => origin.close(() => r())), new Promise<void>(r => upstream.close(() => r()))]);
+      rmSync(dir, { recursive: true, force: true });
+      if (privateSetting === undefined) delete process.env.TALLYLAMP_ALLOW_PRIVATE_NETWORK;
+      else process.env.TALLYLAMP_ALLOW_PRIVATE_NETWORK = privateSetting;
+    }
+  });
 });
 
 describe("gpu flags", () => {

@@ -236,6 +236,20 @@ private/link-local/metadata targets, then tunnels. Chrome performs e2e TLS.
 No HTTP MITM. WebRTC/UDP is not covered by an HTTP proxy; documented
 limitation.
 
+### Follow-up: per-browser upstream proxies, 16 September 2026
+
+The local safety proxy now chains to an optional HTTP or HTTPS upstream using
+CONNECT. Both the upstream and destination are resolved locally and pinned to
+checked IPs; website TLS remains in Chrome. A matching loopback tunnel takes
+precedence, and an upstream failure never falls back to a direct connection.
+Proxy settings stay with the browser rather than its saved profile templates.
+
+Proxied browsers disable QUIC and WebRTC's non-proxied UDP at launch. This does
+not turn the HTTP proxy into an OS-level network sandbox. Local transport tests
+cover authentication, TLS identity, fragmented requests, WebSockets and failure
+handling. The release's headed-Chrome job also checks proxy routing and refusal
+without direct fallback. See [proxy limits and credential storage](proxies.md).
+
 ## Huemint palette
 
 Huemint transformer API via local skill

@@ -8,6 +8,7 @@ It walks through hosting Tallylamp, connecting an agent, and trying a browser ha
 | Deploy or configure a Railway service | [Railway setup](railway.md) |
 | Connect an MCP client | [Client setup and test status](mcp-compatibility.md) |
 | Watch, take control, record, or reuse a profile | [User guide](usage.md) |
+| Route a browser through an HTTP or HTTPS proxy | [Per-browser proxies](proxies.md) |
 | Understand permissions and network access | [Security model](security.md) |
 | Understand the server and browser lifecycle | [Architecture](architecture.md) |
 | Check what the realism tests establish | [Browser realism](browser-realism.md) |
@@ -17,4 +18,4 @@ It walks through hosting Tallylamp, connecting an agent, and trying a browser ha
 Their dates matter: they include earlier findings and later corrections.
 
 For maintainers, the [launch plan](launch.md) tracks release work and the
-[template overview](template-overview.md) holds the draft Railway listing.
+[template overview](template-overview.md) holds the published Railway listing copy.

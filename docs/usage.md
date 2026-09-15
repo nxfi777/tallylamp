@@ -3,6 +3,8 @@
 Start with the [setup and connection instructions](../README.md#get-started).
 Once an agent has opened a browser, use the dashboard to watch it or take control.
 
+To give one browser a separate network route, see [per-browser proxies](proxies.md).
+
 ## Watch and take control
 
 Sign into the dashboard with the administrator secret. Tallylamp stores the
@@ -224,7 +226,12 @@ by default. Chrome still handles TLS directly with the destination through CONNE
 `TALLYLAMP_ALLOW_PRIVATE_NETWORK=1` disables the private-network restriction.
 WebRTC/UDP traffic is outside the HTTP proxy's coverage.
 
-Each browser has its own proxy, which lets a tunnel apply to just that browser.
+Each browser has its own local safety proxy, which lets a tunnel apply to just
+that browser. An optional [upstream HTTP/HTTPS proxy](proxies.md) changes its
+web route without replacing those checks. DNS stays local and tunnels take
+precedence. Failed upstream connections return 502 rather than falling back to
+direct access. When an upstream is set, Chrome disables QUIC and WebRTC's
+non-proxied UDP; the setting is not a system-wide VPN.
 
 ### Loopback tunnels
 

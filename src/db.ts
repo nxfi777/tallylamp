@@ -283,8 +283,8 @@ export function getDb(): DatabaseSync {
   db.exec(SCHEMA);
   migrate(db);
   db.exec(INDEXES);
-  db.exec(`INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '6')`);
-  db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
+  db.exec(`INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '7')`);
+  db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
   return db;
 }
 
@@ -307,6 +307,7 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   // profile over WITHOUT the owner answering, on the strength of it having gone idle. A
   // browser holding a banking login must never be lent because its owner stopped talking.
   ["browsers", "lendable", "INTEGER NOT NULL DEFAULT 0"],
+  ["browsers", "proxy_json", "TEXT"],
   ["seeds", "metadata_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["seeds", "updated_at", "TEXT"],
 ];

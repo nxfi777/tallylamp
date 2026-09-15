@@ -1,8 +1,13 @@
-# Tallylamp launch plan
+# Tallylamp launch record
 
-Updated 7 September 2026. The repository and the 0.1.1 container image are public.
-The [Railway template](https://railway.com/deploy/tallylamp) is published and
-passed fresh-install and profile-persistence checks. The website remains to be built.
+The original plan below was written on 7 September 2026 for release 0.1.1.
+It records launch decisions and tests from that date, not the current release state.
+
+As of 16 September, the [website](https://tallylamp.dev) and
+[Railway template](https://railway.com/deploy/tallylamp) are public. The website
+has its own [repository](https://github.com/nxfi777/tallylamp-web) and deploys
+separately. Current image digests, test evidence, and upgrade instructions live
+in [the release notes](railway.md#releasing-and-upgrading).
 
 ## Repository decision
 
@@ -62,7 +67,7 @@ and the agent continuing afterward. Use a test account. Show profile persistence
 across a restart in a second clip or an unambiguous edited sequence. Do not promise
 a setup time or monthly bill until a fresh install has been measured.
 
-## Release work in order
+## Original release checklist (historical)
 
 1. Finish and verify the repository preparation. The README now has setup and
    connection instructions; longer operating notes live in `docs/usage.md`.
@@ -97,7 +102,7 @@ Railway supports template creation and publication through its dashboard and
 its own secret through a [template variable function](https://docs.railway.com/templates/create).
 Creation and marketplace publication are separate steps.
 
-## Website brief
+## Original website brief
 
 The page should answer what Tallylamp does, show it working, and help someone
 deploy their own instance. Use a static site; the marketing page needs no user

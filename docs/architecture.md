@@ -29,11 +29,24 @@ control the same browsers through an authenticated dashboard.
 
 Browsers run as processes inside one container. Each has separate profile and
 download directories, a loopback debugging port, a sanitized environment, and
-its own egress proxy. They share the container's isolation boundary.
+its own local egress proxy. They share the container's isolation boundary.
 
 A proxy per browser adds one loopback listener to each runtime. It also lets the
 server identify which browser made a connection, so a private-address tunnel
 can be restricted to that browser. Chrome receives the proxy port at launch.
+
+For outbound web traffic, the route is:
+
+```text
+Chrome → local safety proxy → matching browser tunnel, if one exists
+                           → vetted destination via saved HTTP/HTTPS proxy
+                           → vetted destination directly, if no proxy is set
+```
+
+The service resolves and checks both the destination and upstream proxy, then
+connects to the checked IPs. An upstream failure ends the request; it never
+selects the direct route as a fallback. Chrome handles website TLS through
+CONNECT. The [proxy guide](proxies.md) covers authentication and protocol limits.
 
 ## Data model
 
@@ -42,6 +55,7 @@ can be restricted to that browser. Chrome receives the proxy port at launch.
 | Administrator | `ADMIN_SECRET` + HttpOnly session cookie |
 | Agent principal | `agents` + hashed `credentials` |
 | Browser resource | `browsers` row (survives process death) |
+| Upstream proxy | `browsers.proxy_json`; includes unencrypted credentials, excluded from public views |
 | Owner | `owner_type` / `owner_id` |
 | Descriptive metadata | `metadata_json` (optional, not identity) |
 | Declared website access | `browser_site_access` (origin + observed state; no credential material) |
@@ -72,6 +86,8 @@ Stopping Chrome does not delete a persistent profile. Deleting a browser does.
 Profile templates copy both the Chrome profile and its declared website-access
 manifest. A clone downgrades inherited `confirmed` entries to `expected` because
 copying bytes cannot prove that a remote site still accepts the session.
+Proxy settings stay with the original browser and are not included in a snapshot.
+Changing them requires a stopped browser and its owner or an administrator.
 
 ## Viewer
 

@@ -115,6 +115,17 @@ connection gets its own resolution and check.
 WebRTC/UDP is outside the HTTP CONNECT proxy's coverage. Each browser has its own
 proxy, allowing the server to apply tunnel bindings to that browser's traffic.
 
+An optional [upstream HTTP/HTTPS proxy](proxies.md) sits behind this local proxy,
+not in place of it. Tallylamp checks and pins both the upstream IP and the website
+IP. DNS runs locally; failed upstream requests never fall back to direct access.
+Loopback tunnels retain precedence. Proxied browsers disable QUIC and WebRTC's
+non-proxied UDP at launch, but this is not an OS-level network sandbox.
+
+Proxy credentials are write-only in API/MCP responses and excluded from audit
+details and Chrome arguments. They are stored **unencrypted in SQLite**, so the
+data directory and its backups must be protected. Profile templates do not copy
+proxy settings. A borrower inherits use of the route, not permission to edit it.
+
 ## Loopback tunnels
 
 A hosted Chrome resolves `localhost` inside its own container. An OAuth provider

@@ -199,6 +199,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
         persistent: req.body?.persistent !== false,
         metadata: req.body?.metadata,
         seedId: req.body?.seedId,
+        proxy: req.body?.proxy,
       });
       if (req.body?.start !== false) await browsers.ensureRunning(row.id);
       res.status(201).json({ browser: browsers.publicView(browsers.row(row.id)) });
@@ -218,12 +219,15 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
   api.patch("/api/v1/browsers/:id", (req, res) => {
     const body = req.body ?? {};
     let updated = browsers.row(req.params.id);
+    if (Object.prototype.hasOwnProperty.call(body, "proxy")) {
+      updated = browsers.updateProxy(req.params.id, body.proxy, req.principal!);
+    }
     if (Object.prototype.hasOwnProperty.call(body, "name")) {
       updated = browsers.updateName(req.params.id, body.name, req.principal!);
     }
     if (Object.prototype.hasOwnProperty.call(body, "metadata")) {
       updated = browsers.updateMetadata(req.params.id, body.metadata, req.principal!);
-    } else if (!Object.prototype.hasOwnProperty.call(body, "name")) {
+    } else if (!Object.prototype.hasOwnProperty.call(body, "name") && !Object.prototype.hasOwnProperty.call(body, "proxy")) {
       // Backwards compatibility for the original endpoint, which accepted metadata directly.
       updated = browsers.updateMetadata(req.params.id, body, req.principal!);
     }

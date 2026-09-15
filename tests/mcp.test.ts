@@ -135,6 +135,30 @@ describe("MCP", () => {
     assert.ok(text.includes("tallylamp_list_profile_templates"), text);
     assert.ok(text.includes("tallylamp_save_profile"), text);
     assert.ok(text.includes("tallylamp_update_profile"), text);
+    const tools = rpcResult(listed.body)?.tools;
+    for (const name of ["tallylamp_create_browser", "tallylamp_update_browser"]) {
+      assert.ok(tools?.find((tool) => tool.name === name)?.inputSchema.properties?.proxy);
+    }
+  });
+
+  it("creates and updates proxy settings through MCP without returning credentials", async () => {
+    const init = await mcp("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "proxy-test", version: "1" } }, ctx.agentToken);
+    const headers = { "MCP-Session-Id": init.headers.get("mcp-session-id")! };
+    const call = async (name: string, args: Record<string, unknown> = {}) => {
+      const response = await mcp("tools/call", { name, arguments: args }, ctx.agentToken, headers);
+      const result = rpcResult(response.body) as { isError?: boolean; content: Array<{ text: string }> };
+      assert.ok(!result.isError, JSON.stringify(result));
+      assert.ok(!JSON.stringify(result).includes("proxy-test-secret"));
+      return JSON.parse(result.content[0].text);
+    };
+    const proxy = { server: "http://proxy.example:8080", username: "proxy-test-user", password: "proxy-test-secret" };
+    const created = await call("tallylamp_create_browser", { proxy });
+    assert.deepEqual(created.proxy, { server: proxy.server, hasAuthentication: true });
+    assert.deepEqual(JSON.parse(ctx.browsers.row(created.browserId).proxy_json!), proxy);
+    await call("tallylamp_stop_browser", { browserId: created.browserId });
+    const updated = await call("tallylamp_update_browser", { browserId: created.browserId, proxy: null });
+    assert.equal(updated.proxy, null);
+    await call("tallylamp_delete_browser", { browserId: created.browserId });
   });
 
   it("sends browser-fallback and persistent-session guidance during initialization, before any browser is bound", async () => {

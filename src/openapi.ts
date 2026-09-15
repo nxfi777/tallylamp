@@ -1,3 +1,16 @@
+const proxyInput = {
+  type: ["object", "null"], required: ["server"], additionalProperties: false,
+  description: "HTTP/HTTPS CONNECT proxy. Null means direct. Updates replace all settings. Credentials are stored in SQLite but never returned. See docs/proxies.md.",
+  properties: {
+    server: { type: "string", description: "http://host:port or https://host:port, without credentials or path" },
+    username: { type: "string", maxLength: 1024, writeOnly: true },
+    password: { type: "string", maxLength: 1024, writeOnly: true },
+  },
+};
+const browserInput = { type: "object", properties: {
+  name: { type: "string" }, metadata: { type: "object" }, proxy: proxyInput,
+} };
+
 export const openApiSpec = {
   openapi: "3.1.0",
   info: {
@@ -17,11 +30,15 @@ export const openApiSpec = {
     "/status": { get: { summary: "Authenticated deployment status", responses: { "200": { description: "ok" } } } },
     "/browsers": {
       get: { summary: "List browsers", responses: { "200": { description: "ok" } } },
-      post: { summary: "Create a browser", responses: { "201": { description: "created" } } },
+      post: { summary: "Create a browser", requestBody: { content: { "application/json": { schema: { ...browserInput, properties: { ...browserInput.properties,
+        persistent: { type: "boolean", default: true }, start: { type: "boolean", default: true }, seedId: { type: "string" },
+      } } } } }, responses: { "201": { description: "created; browser.proxy contains only server and hasAuthentication, or null" } } },
     },
     "/browsers/{id}": {
       get: { summary: "Get browser", responses: { "200": { description: "ok" } } },
-      patch: { summary: "Rename a browser or edit descriptive metadata", responses: { "200": { description: "ok" } } },
+      patch: { summary: "Rename a browser, edit metadata, or replace its proxy", description: "Proxy edits require an owner/admin and a stopped browser. Omitted proxy stays unchanged; null removes it. Credentials are never returned.",
+        requestBody: { content: { "application/json": { schema: browserInput } } },
+        responses: { "200": { description: "ok" }, "400": { description: "invalid proxy settings" }, "403": { description: "not the owner or missing scope" }, "409": { description: "stop the browser or return human control before changing its proxy" } } },
       delete: { summary: "Delete browser and profile", responses: { "204": { description: "deleted" } } },
     },
     "/browsers/{id}/sites": {

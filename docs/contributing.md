@@ -12,13 +12,20 @@
   eligible browsers can also be granted after an idle timeout because Tallylamp
   cannot wake an idle or crashed owner. A grant permits driving, never deletion.
 - CDP and the viewer backend bind loopback. Do not publish 9222.
-- A loopback tunnel is the only way a browser reaches a private address. It is
+- Under the default network policy, a loopback tunnel is the only way a browser
+  reaches a private address. `TALLYLAMP_ALLOW_PRIVATE_NETWORK=1` is an operator
+  override. A tunnel is
   one browser to one `host:port`, gated on the non-default `browser:tunnel`
   scope. The authority must be one the egress proxy would refuse. Public names
   are rejected because they would redirect traffic meant for a real site. The
   egress proxy is per browser, which is what makes that scoping enforceable.
   Lending a browser closes its tunnels: the binding is keyed on the browser, not
   on who is driving, so a borrower would otherwise inherit the owner's machine.
+- Keep upstream proxy routing behind the local safety proxy. Resolve and pin both
+  endpoints, check tunnels first, and never fall back to direct access after a
+  proxy failure. Proxy credentials must not reach public views, logs, or Chrome
+  arguments. Settings belong to the browser, not its profile template; edits
+  require a stopped browser and owner/admin permission. See [proxies](proxies.md).
 - `TALLYLAMP_FAKE_CHROME=1` is for tests. Do not ship it.
 - Refresh `docs/research.md` if you bump Chrome, chrome-devtools-mcp, or the
   MCP SDK; run `npm test` and the realism job.

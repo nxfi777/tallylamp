@@ -37,6 +37,7 @@ password. You choose when to upgrade the application.
 - Watch a browser session live to inspect what the agent is doing.
 - Test pages with different user agents, mobile or desktop viewports, touch
   input, and locations through MCP's `emulate` tool.
+- Give one browser its own HTTP or HTTPS proxy without changing the others.
 - Finish an OAuth flow whose redirect URI is `http://localhost:PORT/…`, through
   a short-lived loopback tunnel to one private address on your machine. Agents
   need a scope they do not get by default.
@@ -82,9 +83,27 @@ browser can reach that address, so close it when the job is done. The
 [tunnel guide](https://github.com/nxfi777/tallylamp/blob/main/docs/usage.md#loopback-tunnels)
 has the command to run on your machine.
 
+## Use a proxy for one browser
+
+Enter the proxy server and optional username/password in **New browser**.
+For an existing browser, stop it, choose **Configure proxy**, save, and start
+it again. The API and MCP tools accept the same per-browser settings.
+No shared proxy variable or credential is needed in Railway.
+
+Settings persist on `/data` but are not copied into saved profile templates.
+Only the owner or an administrator can edit them. HTTP and HTTPS CONNECT
+proxies are supported; SOCKS and PAC are not. DNS stays on the server, loopback
+tunnels keep their own route, and proxy failures never fall back to direct access.
+
+Proxy credentials are hidden from API responses but stored unencrypted in
+SQLite. Protect the volume and its backups, and prefer an HTTPS proxy so the
+proxy login is encrypted in transit. The [proxy guide](https://github.com/nxfi777/tallylamp/blob/main/docs/proxies.md)
+covers connection limits. A proxy is not a VPN or a guarantee that sites will
+accept automation.
+
 ## Updates are your choice
 
-The template uses the public `ghcr.io/nxfi777/tallylamp:0.4.0` image, pinned
+The template uses the public `ghcr.io/nxfi777/tallylamp:0.5.0` image, pinned
 to its digest. Automatic image updates are disabled. Pushing source code or
 publishing a new release does not upgrade your deployment.
 
@@ -129,6 +148,7 @@ Tallylamp does not bypass CAPTCHAs or guarantee that sites will accept automatio
 - [Source code and setup](https://github.com/nxfi777/tallylamp)
 - [Browser realism and emulation limits](https://github.com/nxfi777/tallylamp/blob/main/docs/browser-realism.md)
 - [Railway configuration](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md)
+- [Per-browser proxy setup](https://github.com/nxfi777/tallylamp/blob/main/docs/proxies.md)
 - [Security model](https://github.com/nxfi777/tallylamp/blob/main/docs/security.md)
 - [MCP compatibility](https://github.com/nxfi777/tallylamp/blob/main/docs/mcp-compatibility.md)
 - [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)

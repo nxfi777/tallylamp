@@ -14,6 +14,7 @@ import { requireScope, type Principal } from "./auth.js";
 import { launchChrome, stopRuntime, type ChromeRuntime, chromeVersion, clearSingletonLocks, parseSize } from "./chrome.js";
 import { browserWsUrl, listPages, CdpClient } from "./cdp.js";
 import { startEgressProxy, type EgressProxy } from "./egress-proxy.js";
+import { parseBrowserProxy, proxyView } from "./browser-proxy.js";
 import { dialTunnel, dropTunnelsFor } from "./tunnels.js";
 import { startFakeChrome } from "./fake-chrome.js";
 import { activeGrant, grantsFor } from "./lending.js";
@@ -52,6 +53,8 @@ export type BrowserRow = {
   metadata_json: string;
   labels_json: string;
   lendable: number;
+  /** Internal, may contain credentials. Never serialize the raw browser row. */
+  proxy_json: string | null;
 };
 
 export type ControlState = {
@@ -293,11 +296,13 @@ export class BrowserManager {
     name?: string;
     persistent?: boolean;
     metadata?: unknown;
+    proxy?: unknown;
     seedId?: string;
     clientName?: string;
     clientVersion?: string;
   }): BrowserRow {
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
+    const proxy = parseBrowserProxy(input.proxy);
     if (input.principal.type === "agent") {
       const own = this.list({ ownerType: "agent", ownerId: input.principal.id }).length;
       if (own >= input.principal.maxBrowsers) {
@@ -341,8 +346,8 @@ export class BrowserManager {
       .prepare(
         `INSERT INTO browsers(
           id, name, slug, owner_type, owner_id, created_by_type, created_by_principal_id, created_via,
-          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?)`,
+          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -361,6 +366,7 @@ export class BrowserManager {
         input.clientVersion ?? null,
         JSON.stringify(metadata),
         JSON.stringify(metadata.labels ?? {}),
+        proxy ? JSON.stringify(proxy) : null,
       );
     if (input.seedId) restoreSiteAccess(input.seedId, id);
     audit({
@@ -423,6 +429,7 @@ export class BrowserManager {
             const proxy = await startEgressProxy({
               browserId: id,
               dial: (host, port) => dialTunnel(id, host, port),
+              upstream: parseBrowserProxy(row.proxy_json ? JSON.parse(row.proxy_json) : null),
             });
             this.proxies.set(id, proxy);
             try {
@@ -430,6 +437,7 @@ export class BrowserManager {
                 profileDir: row.profile_path,
                 downloadDir: downloadDir(id),
                 proxyPort: proxy.port,
+                upstreamProxy: Boolean(row.proxy_json),
               });
             } catch (e) {
               // Chrome never came up, so nothing will ever use this listener.
@@ -545,6 +553,26 @@ export class BrowserManager {
     getDb()
       .prepare(`UPDATE browsers SET client_name = COALESCE(?, client_name), client_version = COALESCE(?, client_version) WHERE id = ?`)
       .run(name ?? null, version ?? null, id);
+  }
+
+  updateProxy(id: string, input: unknown, principal: Principal): BrowserRow {
+    const row = this.row(id);
+    this.assertAccess(principal, row, "control");
+    // A loan grants driving, not permission to change the owner's network route.
+    if (principal.type !== "admin" && (row.owner_type !== "agent" || row.owner_id !== principal.id)) {
+      throw Err.unauthorized("only the owner can change a browser proxy");
+    }
+    if (this.isHumanControlled(id)) throw Err.humanControlling();
+    if (this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) ||
+        !["stopped", "crashed"].includes(row.status)) {
+      throw Err.browserUnavailable("stop the browser before changing its proxy");
+    }
+    const proxy = parseBrowserProxy(input);
+    getDb().prepare(`UPDATE browsers SET proxy_json = ? WHERE id = ?`).run(proxy ? JSON.stringify(proxy) : null, id);
+    audit({ actorType: principal.type, actorId: principal.id, action: "browser.proxy.updated", targetType: "browser", targetId: id,
+      detail: { configured: proxy !== null } });
+    hub.emitEvent("browser.updated", {}, id);
+    return this.row(id);
   }
 
   updateMetadata(id: string, metadata: unknown, principal: Principal): BrowserRow {
@@ -708,6 +736,7 @@ export class BrowserManager {
       },
       reportedClient: row.client_name ? { name: row.client_name, version: row.client_version } : null,
       metadata,
+      proxy: proxyView(parseBrowserProxy(row.proxy_json ? JSON.parse(row.proxy_json) : null)),
       savedProfileId: this.linkedProfile(row.id)?.id ?? null,
       savingProfile: this.profileSaves.has(row.id),
       signedInSites: listSiteAccess(row.id),

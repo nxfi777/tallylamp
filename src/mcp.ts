@@ -79,6 +79,18 @@ Offer a saved profile (called a profile template by the compatibility tools) whe
 
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
+const PROXY_INPUT = {
+  type: ["object", "null"],
+  description: "Per-browser HTTP/HTTPS CONNECT proxy. Null disables it. Replaces all proxy settings, including credentials. Credentials are write-only in responses but stored in the service database. Saved profile templates do not copy proxy settings.",
+  required: ["server"],
+  additionalProperties: false,
+  properties: {
+    server: { type: "string", description: "http://host:port or https://host:port. No credentials or path in this URL. SOCKS/PAC are not supported." },
+    username: { type: "string", description: "Optional Basic-auth username; supply password too. Never put credentials in metadata." },
+    password: { type: "string", description: "Write-only Basic-auth password; supply username too." },
+  },
+};
+
 export const LIFECYCLE_TOOLS: Tool[] = [
   {
     name: "tallylamp_create_browser",
@@ -87,6 +99,7 @@ export const LIFECYCLE_TOOLS: Tool[] = [
       type: "object",
       properties: {
         name: { type: "string", description: "Optional display name" },
+        proxy: PROXY_INPUT,
         persistent: { type: "boolean", description: "Default true: save the profile automatically for reuse after stops. No separate save step. Use false only for an explicitly temporary session; idle expiry can delete its profile." },
         seedId: {
           type: "string",
@@ -110,7 +123,7 @@ export const LIFECYCLE_TOOLS: Tool[] = [
   {
     name: "tallylamp_update_browser",
     description:
-      "Rename a browser profile or replace its descriptive metadata. Neither operation changes website sessions. " +
+      "Rename a browser profile, replace its descriptive metadata, or set/remove its upstream proxy. Proxy changes are owner-only and require stopping the browser first; they take effect on its next start. " +
       "Metadata is descriptive only; do not include secrets, cookies, tokens, credentials or sensitive page content.",
     inputSchema: {
       type: "object",
@@ -119,6 +132,7 @@ export const LIFECYCLE_TOOLS: Tool[] = [
         browserId: { type: "string" },
         name: { type: "string", description: "New display name. The stable browser id and slug do not change." },
         metadata: { type: "object", description: "Replacement metadata (source, project, purpose, task, labels)." },
+        proxy: PROXY_INPUT,
       },
     },
   },
@@ -791,6 +805,7 @@ export class McpGateway {
           name: typeof args.name === "string" ? args.name : undefined,
           persistent: args.persistent !== false,
           metadata: args.metadata,
+          proxy: args.proxy,
           seedId: typeof args.seedId === "string" ? args.seedId : undefined,
           clientName: session.clientInfo?.name,
           clientVersion: session.clientInfo?.version,
@@ -805,6 +820,7 @@ export class McpGateway {
                 name: row.name,
                 slug: row.slug,
                 persistent: row.persistent === 1,
+                proxy: this.browsers.publicView(row).proxy,
                 note: "Browser created and bound to this session. chrome-devtools tools are now available. Metadata is descriptive only; authenticated identity is the agent principal.",
               }),
             },
@@ -827,9 +843,10 @@ export class McpGateway {
       if (name === "tallylamp_update_browser") {
         const browserId = String(args.browserId ?? "");
         if (!browserId) throw Err.invalid("browserId is required");
-        if (!("name" in args) && !("metadata" in args)) throw Err.invalid("pass name, metadata, or both");
+        if (!("name" in args) && !("metadata" in args) && !("proxy" in args)) throw Err.invalid("pass name, metadata, or proxy");
         if (this.browsers.isHumanControlled(browserId)) throw Err.humanControlling();
         let row = this.browsers.row(browserId);
+        if ("proxy" in args) row = this.browsers.updateProxy(browserId, args.proxy, p);
         if ("name" in args) row = this.browsers.updateName(browserId, args.name, p);
         if ("metadata" in args) row = this.browsers.updateMetadata(browserId, args.metadata, p);
         return { content: [{ type: "text", text: JSON.stringify(this.browsers.publicView(row)) }] };

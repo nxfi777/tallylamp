@@ -6,6 +6,8 @@ import { defineRailway, project, service, volume } from "railway/iac";
  * A Railway volume is required: Chrome profiles and the SQLite control
  * database live under /data. Replicas cannot be used with a volume.
  * ADMIN_SECRET must be set as a Railway variable (do not commit it).
+ * Upstream proxies are configured per browser in the dashboard/API, not as
+ * shared Railway variables. Their credentials persist in SQLite on /data.
  */
 export default defineRailway(() => {
   const data = volume("tallylamp-data", { sizeMB: 5120 });

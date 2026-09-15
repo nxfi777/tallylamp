@@ -16,7 +16,7 @@ so the agent can continue where it left off.
 disk. The software is free; you pay for the infrastructure you run it on.
 
 [Website](https://tallylamp.dev) · [Get started](#get-started) · [Connect an agent](#connect-an-agent) ·
-[User guide](docs/usage.md) · [Security model](docs/security.md)
+[User guide](docs/usage.md) · [Per-browser proxies](docs/proxies.md) · [Security model](docs/security.md)
 
 ## When to use it
 
@@ -35,6 +35,8 @@ sites where you need to sign in yourself.
   Copying every saved login requires explicit permission.
 - Test pages with a different user agent, mobile or desktop viewport, touch
   input, or location through MCP's `emulate` tool.
+- Route a browser through its own HTTP or HTTPS proxy, with optional username
+  and password. Other browsers can keep their existing routes.
 - Finish an OAuth flow whose redirect URI is `http://localhost:PORT/…`. A
   [loopback tunnel](#loopback-tunnels) lets one browser reach one port on your
   machine for a short time. Agents need a scope they do not get by default.
@@ -50,7 +52,7 @@ still identify or block automation. Tallylamp does not bypass CAPTCHAs. See the
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tallylamp?referralCode=nxfi777&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
-The template sets up the public `0.4.0` image, a persistent `/data` volume,
+The template sets up a versioned public image, a persistent `/data` volume,
 healthcheck, HTTPS domain, and a generated dashboard password. It pins the image
 digest and leaves automatic upgrades disabled.
 
@@ -80,7 +82,7 @@ docker run --rm --platform linux/amd64 -p 127.0.0.1:8080:8080 \
   -e ADMIN_SECRET \
   -e TALLYLAMP_PUBLIC_URL=http://127.0.0.1:8080 \
   -v tallylamp-data:/data \
-  ghcr.io/nxfi777/tallylamp:0.4.0
+   ghcr.io/nxfi777/tallylamp:0.5.0
 ```
 
 Open <http://127.0.0.1:8080> and log in with that secret. This command binds to
@@ -141,6 +143,33 @@ the page, then **Return to agent** when you're finished.
 
 Watching is read-only. You need control to navigate, switch tabs, or type.
 Your agent's MCP connection stays open during the handoff.
+
+### Per-browser proxies
+
+Set a proxy in **New browser**, or stop an existing browser and choose
+**Configure proxy**. Start it again to use the new route. The same settings
+work through `tallylamp_create_browser`, `tallylamp_update_browser`, and the
+browser create/update API:
+
+```json
+{
+  "proxy": {
+    "server": "https://proxy.example.com:8443",
+    "username": "your-user",
+    "password": "your-password"
+  }
+}
+```
+
+Omit both credentials for a proxy without a login. Set `proxy` to `null` to
+return to direct access. Settings survive restarts but are not copied into
+saved profile templates. Only the owner or an administrator can change them.
+
+HTTP and HTTPS CONNECT proxies are supported; SOCKS and PAC are not. DNS is
+resolved on the server, tunnels take precedence, and a failed proxy request
+never falls back to direct access. Credentials are hidden from responses but
+stored **unencrypted in SQLite**, so protect `/data` and its backups. See the
+[proxy guide](docs/proxies.md) for setup, security, and connection limits.
 
 ### Loopback tunnels
 
@@ -204,9 +233,11 @@ Chrome's debugging port stays on loopback.
 - Browsers in the same container share its isolation boundary, so separate agent
   permissions and browser profiles do not give you the isolation of running each
   browser in its own virtual machine.
-- The egress proxy blocks private networks by default. WebRTC/UDP is a known
-  gap. Optional [loopback tunnels](docs/usage.md#loopback-tunnels) let one browser
-  reach one private address with an explicit scope.
+- The local egress proxy blocks private networks by default, even when a browser
+  uses an upstream proxy. Proxied browsers disable QUIC and WebRTC's non-proxied
+  UDP, but this is not a VPN or an OS network sandbox. Optional
+  [loopback tunnels](docs/usage.md#loopback-tunnels) let one browser reach one
+  private address with an explicit scope.
 - Idle browsers stop to free memory, but persistent profiles remain until you or
   an authorized agent explicitly deletes them. Logged-in profiles and their
   snapshots contain credentials.

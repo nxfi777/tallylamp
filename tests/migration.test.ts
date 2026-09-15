@@ -92,6 +92,18 @@ describe("upgrading an existing database", () => {
     assert.doesNotThrow(() => resetDbForTests(file));
   });
 
+  it("adds proxy settings to existing browsers without changing their direct route", () => {
+    const db = resetDbForTests(file);
+    db.exec(`ALTER TABLE browsers DROP COLUMN proxy_json`);
+    db.exec(`INSERT INTO browsers(id,name,slug,owner_type,owner_id,created_by_type,created_by_principal_id,created_via,created_at,profile_path)
+      VALUES ('direct-browser','Direct','direct-browser','admin','admin','admin','admin','dashboard','2026-01-01','/fixture')`);
+    const migrated = resetDbForTests(file);
+    const cols = (migrated.prepare(`PRAGMA table_info(browsers)`).all() as Array<{ name: string }>).map((c) => c.name);
+    assert.ok(cols.includes("proxy_json"));
+    assert.equal((migrated.prepare(`SELECT proxy_json FROM browsers WHERE id = 'direct-browser'`).get() as { proxy_json: string | null }).proxy_json, null);
+    assert.doesNotThrow(() => resetDbForTests(file));
+  });
+
   it("backfills legacy save targets only once, so deleted targets do not reappear after restart", () => {
     const db = resetDbForTests(file);
     db.exec(`DELETE FROM meta WHERE key = 'profile_links_backfilled';

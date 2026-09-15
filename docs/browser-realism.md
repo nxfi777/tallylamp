@@ -63,8 +63,11 @@ A website may consider browser properties, account history, network reputation,
 and other signals. A difference between a hosted and residential connection does
 not by itself identify which signal caused a challenge.
 
-A static outbound IP gives a deployment a stable network identity. It does not
-guarantee a favourable reputation or prevent future challenges. A persistent
+A direct browser uses the deployment's outbound route. A browser with an
+[upstream proxy](proxies.md) uses that proxy for web connections; its exit IP
+depends on the provider. Neither a static IP nor a proxy guarantees a favourable
+reputation or prevents future challenges. Proxying changes routing, not browser
+fingerprints. A persistent
 profile can retain cookies issued after a person completes a challenge, but the
 site controls their expiry and may ask for verification again.
 
