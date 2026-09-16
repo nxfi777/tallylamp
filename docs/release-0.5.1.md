@@ -21,8 +21,17 @@ Back up `/data` and finish active browser work. A redeploy stops Chrome; the
 data volume keeps persistent browser profiles. This release keeps database
 schema 7 and the proxy behaviour introduced in 0.5.0.
 
-The release workflow tests the Linux amd64 image before publishing
-`ghcr.io/nxfi777/tallylamp:0.5.1`. See the
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35163328002)
+passed 231 application tests, 8 headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.5.1` for Linux amd64. Anonymous
+registry access, the manifest digest, and version/source-revision labels were
+verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:3a7d90ccad442cdd2ce0e8bb298de008d8827cf44ae793f2f7068c631f4d6ead
+```
+
+The Railway template pins this digest for new installations. Existing deployments
+do not upgrade automatically. See the
 [release and upgrade notes](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md#releasing-and-upgrading)
-for the verified digest once publication finishes. Existing Railway installations
-do not upgrade automatically.
+for upgrade steps and the limits of these checks.

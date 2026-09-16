@@ -103,7 +103,7 @@ accept automation.
 
 ## Updates are your choice
 
-The template uses the public `ghcr.io/nxfi777/tallylamp:0.5.0` image, pinned
+The template uses the public `ghcr.io/nxfi777/tallylamp:0.5.1` image, pinned
 to its digest. Automatic image updates are disabled. Pushing source code or
 publishing a new release does not upgrade your deployment.
 
