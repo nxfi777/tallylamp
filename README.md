@@ -48,6 +48,22 @@ still identify or block automation. Tallylamp does not bypass CAPTCHAs. See the
 
 ## Get started
 
+### Browser details, site records, and saved profiles
+
+Persistent browsers keep their cookies and logins automatically. Reopen the same
+browser to use them again; no separate save step is needed.
+
+| Dashboard action | What it does |
+| --- | --- |
+| **Edit browser details** | Changes this browser's name, project, purpose, and task. No saved profile needs to be loaded. |
+| **Record signed-in site** | Adds an observation for agents to find. It does not sign you in or copy cookies. |
+| **Save profile** | Copies all saved logins and storage into a reusable snapshot, or updates the linked snapshot. It is not limited to recorded sites. |
+| **Copy browser ID** | Copies the stable ID used by API and MCP tools. Find it beside Browser ID on the browser page, or in the browser-list menu. |
+
+The dashboard URL uses `/browsers/<id>`. That ID is separate from the browser's
+name-derived slug. Editing browser details changes neither. See the
+[user guide](docs/usage.md#browser-details-and-identity) for details.
+
 ### Railway
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tallylamp?referralCode=nxfi777&utm_medium=integration&utm_source=template&utm_campaign=generic)

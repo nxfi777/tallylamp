@@ -103,6 +103,20 @@ create a browser in the dashboard, sign into sites, stop it, and let the agent
 use that profile later. See [browser lending](architecture.md#lending-a-browser-between-agents)
 for the separate rules for handing a browser between agents.
 
+## Browser details and identity
+
+Choose **Edit browser details** to change a browser's name, project, purpose,
+or task. These details belong to the browser, not a saved profile. The action
+works even when you have never loaded or saved a profile template.
+
+The browser page shows **Browser ID** with a **Copy browser ID** button. The
+browser-list menu offers the same action. Use this ID for API and MCP calls.
+If clipboard access fails, the dashboard shows the ID for manual copying.
+
+In the dashboard URL `/browsers/<id>`, the final segment is the browser ID.
+The browser also has a separate, name-derived slug. Renaming it changes neither
+the ID nor the slug.
+
 ## Persistent profiles
 
 Browsers use `persistent: true` by default. An idle stop ends Chrome but keeps
@@ -119,7 +133,9 @@ These records power the site badges. They are not a complete list of saved login
 a missing badge does not mean its cookies were lost. Detection recognises visible
 sign-out controls and Google's signed-in account-menu link. It can miss hidden
 menus or tabs closed before inspection. **Record signed-in site** lets you add a
-missed observation; **Save profile** copies the current records into the snapshot.
+missed observation. It does not sign you in, copy cookies, or save a profile.
+**Save profile** copies the current records into the snapshot along with all
+saved logins and storage, not just the sites in the inventory.
 Saving a running browser also refreshes site detection before Chrome closes.
 
 `tallylamp_list_browsers` includes these records, but they describe access at the

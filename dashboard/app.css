@@ -553,6 +553,8 @@ input::placeholder { color: var(--muted); }
 .side h2 { font-size: 1rem; margin: 1.1rem 0 0; }
 .kv { display: grid; grid-template-columns: 110px 1fr; gap: 0.35rem 0.6rem; font-size: 0.85rem; }
 .kv dt { color: var(--muted); }
+.browser-id { min-width: 0; overflow-wrap: anywhere; }
+.browser-id .btn { display: block; margin-top: 0.35rem; }
 /* Prose stops being readable somewhere past 75 characters a line. On the security page these
    ran the full width of the window — a 150-character measure. */
 .main > p, .main > .kv { max-width: 60ch; }

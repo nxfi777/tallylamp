@@ -346,15 +346,21 @@ function browserMenu(b) {
       : { label: "Start", onSelect: () => call(`/api/v1/browsers/${b.id}/start`) },
     running && { label: "Restart", onSelect: () => call(`/api/v1/browsers/${b.id}/restart`) },
     "-",
-    { label: "Edit profile…", onSelect: () => editBrowser(b) },
+    { label: "Edit browser details…", onSelect: () => editBrowser(b) },
     { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
     b.savedProfileId && { label: "Save as new profile…", onSelect: () => saveProfileTemplate(b, null, true) },
-    { label: "Copy browser id", onSelect: () => act(async () => {
-      await navigator.clipboard.writeText(b.id);
-      flash(`Copied ${b.id}.`);
-    }) },
+    { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
     { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name) },
   ];
+}
+
+async function copyBrowserId(b) {
+  try {
+    await navigator.clipboard.writeText(b.id);
+    flash("Browser ID copied.", true);
+  } catch {
+    flash(`Could not copy. Select and copy the browser ID: ${b.id}`);
+  }
 }
 
 function sitePills(b, limit = 3) {
@@ -960,6 +966,7 @@ function siteAccessSection(b) {
       : h("div", { class: "sub" },
           "No sign-ins recorded yet. Your browser may still contain logins. If detection misses a site, record it below."),
     h("button", { class: "btn site-add", onClick: () => addSite(b) }, "Record signed-in site"),
+    h("p", { class: "sub" }, "Recording a site adds an inventory note for agents. It does not sign you in or save a copy of your logins."),
     h("div", { class: "sub" },
       "Detection uses visible sign-out or supported account controls, not cookies or tokens. It can miss sites; you can correct the list. Sessions may expire."),
   );
@@ -1153,6 +1160,9 @@ async function browserView(id, seq) {
       h("aside", { class: "side" },
         h("div", { class: "sub" }, "Tallylamp records who created this browser. The rows marked “Reported” come from the client and are not verified."),
         h("dl", { class: "kv" },
+          h("dt", {}, "Browser ID"), h("dd", { class: "browser-id" },
+            h("span", { class: "mono" }, b.id),
+            h("button", { class: "btn tiny", onClick: () => copyBrowserId(b) }, "Copy browser ID")),
           h("dt", {}, "Status"), h("dd", {}, b.status),
           h("dt", {}, "Controller"), h("dd", {}, b.control?.controllerType || "none"),
           h("dt", {}, "Browser data"), h("dd", {}, b.persistent ? "kept when stopped" : "temporary · may be deleted when idle"),
@@ -1168,7 +1178,8 @@ async function browserView(id, seq) {
           h("dt", {}, "MCP attached"), h("dd", {}, String(b.mcpAttached)),
           h("dt", {}, "Watchers"), h("dd", {}, String(b.viewers ?? 0)),
         ),
-        h("button", { class: "btn", onClick: () => editBrowser(b) }, "Edit profile"),
+        h("button", { class: "btn", onClick: () => editBrowser(b) }, "Edit browser details"),
+        h("p", { class: "sub" }, "Save profile copies this browser’s logins and storage into a reusable snapshot for other browsers. Persistent browsers keep their own data automatically."),
         h("h2", {}, "Proxy"),
         h("p", { class: "sub" }, b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? " · authenticated" : ""}` : "Direct · no upstream proxy"),
         h("button", { class: "btn", disabled: !["stopped", "crashed"].includes(b.status) || b.savingProfile || human, onClick: () => editProxy(b) }, "Configure proxy"),
@@ -2035,8 +2046,8 @@ async function editProxy(b) {
 
 async function editBrowser(b) {
   const md = b.metadata || {};
-  const answers = await askFor("Edit profile", [
-    { name: "name", label: "Profile name", value: b.name, hint: "Shown to people and agents. The stable browser id does not change." },
+  const answers = await askFor("Edit browser details", [
+    { name: "name", label: "Browser name", value: b.name, hint: "Changes this browser’s name and metadata, not a saved profile. The browser ID stays the same." },
     { name: "project", label: "Project", value: md.project || "", placeholder: "Optional" },
     { name: "purpose", label: "What is it for?", value: md.purpose || "", placeholder: "Optional", maxLength: 200 },
     { name: "task", label: "Task", value: md.task || "", placeholder: "Optional", maxLength: 200 },
@@ -2077,7 +2088,7 @@ async function addSite(b) {
       label: "Website",
       value: origin,
       placeholder: "mobbin.com",
-      hint: "Only record a site after you can see that this profile is signed in.",
+      hint: "Only record a site after you can see that this browser is signed in. This adds an inventory note, not a copy of its cookies or logins.",
     },
     { name: "name", label: "Service name", value: origin ? new URL(origin).hostname.replace(/^www\./, "") : "", placeholder: "Optional — defaults to the hostname" },
   ], "Record site");
@@ -2087,7 +2098,7 @@ async function addSite(b) {
       method: "POST",
       body: { origin: answers.origin, name: answers.name || undefined, state: "confirmed" },
     });
-    flash(`${result.site.name} recorded. Agents can now find this profile by ${new URL(result.site.origin).hostname}.`);
+    flash(`${result.site.name} recorded. Agents can now find this browser by ${new URL(result.site.origin).hostname}.`);
     await refresh();
     void render();
   });

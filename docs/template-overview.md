@@ -118,9 +118,15 @@ the container. User-agent and device emulation let you test browser settings;
 they do not make an agent behave like a person.
 
 Persistent browsers keep their own data automatically across stops and redeploys.
+**Record signed-in site** only adds an inventory note for agents; it does not
+sign you in or copy cookies. **Edit browser details** changes the browser's name
+and metadata, whether or not you loaded a saved profile. Use **Copy browser ID**
+on the browser page to get its stable API/MCP ID, not its name-derived slug.
+
 **Save profile** creates a reusable snapshot, or updates the browser's linked
 profile. **Save as new profile** creates a separate snapshot. Existing browsers
-stay independent; updates affect future copies only.
+stay independent; updates affect future copies only. A snapshot contains all
+saved logins, not just the sites listed in the inventory.
 
 Agents can load, modify, and update profiles through MCP. Enable loading and
 saving separately under **Agents → Profile permissions**. Saving requires
