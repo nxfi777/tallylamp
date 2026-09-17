@@ -45,8 +45,8 @@ password. You choose when to upgrade the application.
 
 ## Dependencies for Tallylamp
 
-The public Linux amd64 image includes Node.js 22, Google Chrome, and Xvfb.
-The next release also includes ffmpeg and xdotool for Full browser.
+The public Linux amd64 image includes Node.js 22, Google Chrome, Xvfb, ffmpeg,
+and xdotool.
 SQLite runs in the same container; there is no separate database service to set up.
 
 ### Deployment Dependencies
@@ -83,8 +83,7 @@ and extensions you trust.
 Allow agent control is a separate toggle, off by default. It lets the owning
 agent see and use that native UI, including settings and host-file dialogs.
 Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` only if you trust every new agent-owned
-browser with that access. The next published image includes ffmpeg and xdotool
-for this path. The current template still pins `0.5.1`, which does not.
+browser with that access. The published image includes ffmpeg and xdotool.
 
 ## Reach localhost on your own machine
 
@@ -121,12 +120,17 @@ accept automation.
 
 ## Updates are your choice
 
-The template uses the public `ghcr.io/nxfi777/tallylamp:0.5.1` image, pinned
-to its digest. Automatic image updates are disabled. Pushing source code or
-publishing a new release does not upgrade your deployment.
+The current release is `ghcr.io/nxfi777/tallylamp:0.5.2`. Pin this digest:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:1326f0b017063a4ae5eeca02439aa4536a08b57aae2b1698e6d9405ad252f9c7
+```
+
+Automatic image updates are disabled. Pushing source code or publishing a new
+release does not upgrade your deployment.
 
 To upgrade, read the release notes, back up your `/data` volume, then change
-the image reference in Railway to the new release's digest and deploy it.
+the image reference in Railway to that digest and deploy it.
 Redeploying the existing digest keeps the same application version.
 
 ## What to expect
