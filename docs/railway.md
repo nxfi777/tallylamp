@@ -152,9 +152,8 @@ before publishing the same artifact. Anonymous registry access and the manifest
 digest were verified afterward. The image's source revision is
 `7a250c47614188146a0d7704b842844d08bb202e`.
 
-The marketplace listing describes `0.5.2`. The template image source is still
-the previous digest until it is changed in Railway's dashboard change-set API;
-`railway templates publish` updates listing copy, not the image. Existing
+The Railway template pins the `0.5.2` digest for new installations. Its published
+configuration and listing copy were read back after the update. Existing
 deployments keep their selected image. Railway redeploy persistence and unique
 passwords across two template installations were checked for `0.1.1`, not repeated
 for `0.5.2`. These checks do not certify every external MCP client, proxy provider,
