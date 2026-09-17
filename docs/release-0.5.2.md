@@ -1,8 +1,7 @@
 # Tallylamp 0.5.2
 
-This release adds Chrome extension support and a Full browser view. It is not
-published to GHCR yet. Keep existing deployments on `0.5.1` until a digest is
-recorded here.
+This release adds Chrome extension support and a Full browser view. Keep
+existing deployments on `0.5.1` until a digest is recorded here.
 
 ## What changes
 
