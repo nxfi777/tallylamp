@@ -41,10 +41,12 @@ password. You choose when to upgrade the application.
 - Finish an OAuth flow whose redirect URI is `http://localhost:PORT/…`, through
   a short-lived loopback tunnel to one private address on your machine. Agents
   need a scope they do not get by default.
+- Install a Chrome extension from the Web Store in Full browser.
 
 ## Dependencies for Tallylamp
 
 The public Linux amd64 image includes Node.js 22, Google Chrome, and Xvfb.
+The next release also includes ffmpeg and xdotool for Full browser.
 SQLite runs in the same container; there is no separate database service to set up.
 
 ### Deployment Dependencies
@@ -67,6 +69,22 @@ Ask your agent to create a browser and open a site. Choose **Watch** in the
 dashboard to see it, **Take control** to use it yourself, and **Return to agent**
 when you're done. Tallylamp blocks agent actions that change the browser while
 you have control.
+
+## Chrome extensions
+
+Tab view is the page. Full browser is Chrome's toolbar and dialogs. Stop the
+browser, choose Enable extensions, take control, then switch to Full browser
+to install from the Chrome Web Store.
+
+Chrome's own UI can open files on the host and change browser settings. An
+installed extension can read signed-in pages. Use this only with administrators
+and extensions you trust.
+
+Allow agent control is a separate toggle, off by default. It lets the owning
+agent see and use that native UI, including settings and host-file dialogs.
+Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` only if you trust every new agent-owned
+browser with that access. The next published image includes ffmpeg and xdotool
+for this path. The current template still pins `0.5.1`, which does not.
 
 ## Reach localhost on your own machine
 

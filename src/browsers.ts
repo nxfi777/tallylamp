@@ -55,6 +55,8 @@ export type BrowserRow = {
   lendable: number;
   /** Internal, may contain credentials. Never serialize the raw browser row. */
   proxy_json: string | null;
+  extensions_enabled: number;
+  agent_desktop_enabled: number;
 };
 
 export type ControlState = {
@@ -346,8 +348,8 @@ export class BrowserManager {
       .prepare(
         `INSERT INTO browsers(
           id, name, slug, owner_type, owner_id, created_by_type, created_by_principal_id, created_via,
-          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?)`,
+          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json, agent_desktop_enabled
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -367,6 +369,7 @@ export class BrowserManager {
         JSON.stringify(metadata),
         JSON.stringify(metadata.labels ?? {}),
         proxy ? JSON.stringify(proxy) : null,
+        input.principal.type === "agent" && config.agentDesktopDefault ? 1 : 0,
       );
     if (input.seedId) restoreSiteAccess(input.seedId, id);
     audit({
@@ -375,7 +378,7 @@ export class BrowserManager {
       action: "browser.created",
       targetType: "browser",
       targetId: id,
-      detail: { via: input.via, persistent },
+      detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault },
     });
     hub.emitEvent("browser.created", { name, slug, owner: input.principal.id }, id);
     return this.row(id);
@@ -438,6 +441,7 @@ export class BrowserManager {
                 downloadDir: downloadDir(id),
                 proxyPort: proxy.port,
                 upstreamProxy: Boolean(row.proxy_json),
+                extensionsEnabled: Boolean(row.extensions_enabled) && config.fullBrowser,
               });
             } catch (e) {
               // Chrome never came up, so nothing will ever use this listener.
@@ -572,6 +576,32 @@ export class BrowserManager {
     audit({ actorType: principal.type, actorId: principal.id, action: "browser.proxy.updated", targetType: "browser", targetId: id,
       detail: { configured: proxy !== null } });
     hub.emitEvent("browser.updated", {}, id);
+    return this.row(id);
+  }
+
+  updateExtensions(id: string, enabled: boolean, principal: Principal): BrowserRow {
+    if (principal.type !== "admin") throw Err.unauthorized("only the administrator can enable extensions");
+    const row = this.row(id);
+    if (enabled && !config.fullBrowser) throw Err.invalid("extension support requires a real browser on a dedicated Xvfb display");
+    if (this.isHumanControlled(id) || this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) ||
+        !["stopped", "crashed"].includes(row.status)) {
+      throw Err.browserUnavailable("stop the browser before changing extension support");
+    }
+    getDb().prepare("UPDATE browsers SET extensions_enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
+    audit({ actorType: principal.type, actorId: principal.id, action: "browser.extensions.updated", targetType: "browser", targetId: id,
+      detail: { enabled } });
+    hub.emitEvent("browser.updated", {}, id);
+    return this.row(id);
+  }
+
+  updateAgentDesktop(id: string, enabled: boolean, principal: Principal): BrowserRow {
+    if (principal.type !== "admin") throw Err.unauthorized("only the administrator can grant native browser access");
+    const row = this.row(id);
+    if (enabled && !config.fullBrowser) throw Err.invalid("native browser access requires a dedicated Xvfb display");
+    if (enabled && row.owner_type !== "agent") throw Err.invalid("native agent access can only be granted to an agent-owned browser");
+    getDb().prepare("UPDATE browsers SET agent_desktop_enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
+    audit({ actorType: principal.type, actorId: principal.id, action: "browser.desktop-access.updated", targetType: "browser", targetId: id, detail: { enabled } });
+    hub.emitEvent("browser.desktop-access.updated", {}, id);
     return this.row(id);
   }
 
@@ -737,6 +767,8 @@ export class BrowserManager {
       reportedClient: row.client_name ? { name: row.client_name, version: row.client_version } : null,
       metadata,
       proxy: proxyView(parseBrowserProxy(row.proxy_json ? JSON.parse(row.proxy_json) : null)),
+      extensionsEnabled: Boolean(row.extensions_enabled),
+      agentDesktopEnabled: Boolean(row.agent_desktop_enabled),
       savedProfileId: this.linkedProfile(row.id)?.id ?? null,
       savingProfile: this.profileSaves.has(row.id),
       signedInSites: listSiteAccess(row.id),

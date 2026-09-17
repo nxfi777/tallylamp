@@ -10,6 +10,7 @@ import { log } from "./log.js";
 import { hub } from "./events.js";
 import { parseSize } from "./chrome.js";
 import { onUpgrade } from "./upgrades.js";
+import { runDesktopViewer } from "./desktop-viewer.js";
 
 export function issueViewerTicket(browserId: string, sessionId: string, mode: "watch" | "control"): string {
   const token = randomBytes(24).toString("base64url");
@@ -58,7 +59,8 @@ export function attachViewerUpgrade(server: import("node:http").Server, browsers
       const ticket = consumeViewerTicket(token, browserId);
       wss.handleUpgrade(req, socket, head, (ws) => {
         netSocket.setTimeout(0);
-        void runViewer(ws, req, browsers, browserId, ticket.mode);
+        if (url.searchParams.get("surface") === "desktop") runDesktopViewer(ws, browsers, browserId, ticket.mode);
+        else void runViewer(ws, req, browsers, browserId, ticket.mode);
       });
     } catch (e) {
       socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");

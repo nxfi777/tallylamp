@@ -1,0 +1,82 @@
+import { it } from "node:test";
+import assert from "node:assert/strict";
+import { WebSocket } from "ws";
+import { startTestServer, json } from "./helpers.js";
+import { listPages } from "../src/cdp.js";
+import { getAgent } from "../src/auth.js";
+import { agentDesktop } from "../src/agent-desktop.js";
+
+// Explicit opt-in: this launches a real browser and Xvfb. Never silently substitute fake Chrome.
+it("captures real Xvfb frames and types through Chrome's native address bar", {
+  skip: process.platform !== "linux" || process.env.TALLYLAMP_TEST_DESKTOP !== "1",
+  timeout: 60_000,
+}, async () => {
+  const ctx = await startTestServer();
+  const previous = { ...process.env };
+  let ws: WebSocket | undefined;
+  const headers = { Cookie: ctx.cookie, "Content-Type": "application/json" };
+  const until = async (check: () => Promise<boolean> | boolean) => {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      if (await check()) return;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    throw new Error("native desktop smoke test timed out");
+  };
+  try {
+    Object.assign(process.env, { TALLYLAMP_FAKE_CHROME: "0", TALLYLAMP_XVFB: "1",
+      TALLYLAMP_XVFB_SCREEN: "1280,800", TALLYLAMP_WINDOW_SIZE: "1000,700" });
+    const created = await json(`${ctx.url}/api/v1/browsers`, { method: "POST", headers: { Authorization: `Bearer ${ctx.agentToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "native-desktop-smoke", start: false }) });
+    assert.equal(created.status, 201);
+    const id = (created.body as { browser: { id: string } }).browser.id;
+    assert.equal((await json(`${ctx.url}/api/v1/browsers/${id}/extensions`, { method: "PUT", headers, body: JSON.stringify({ enabled: true }) })).status, 200);
+    const rt = await ctx.browsers.ensureRunning(id);
+    const lease = ctx.browsers.acquireControl(id, "human", "admin");
+    const ticket = await json(`${ctx.url}/api/v1/browsers/${id}/viewer-ticket`, { method: "POST", headers, body: JSON.stringify({ mode: "control" }) });
+    ws = new WebSocket(`${ctx.url.replace("http", "ws")}/api/v1/browsers/${id}/view?surface=desktop&ticket=${(ticket.body as { ticket: string }).ticket}`);
+    let frames = 0;
+    let dimensions: unknown;
+    const errors: string[] = [];
+    ws.on("message", (raw, binary) => {
+      if (binary) {
+        const frame = Buffer.from(raw as Buffer);
+        if (frame[0] === 255 && frame[1] === 216 && frame.at(-2) === 255 && frame.at(-1) === 217) frames++;
+      } else {
+        const msg = JSON.parse(String(raw));
+        if (msg.type === "hello") dimensions = msg.content;
+        if (msg.type === "error" || msg.type === "notice") errors.push(msg.message);
+      }
+    });
+    await new Promise<void>((resolve, reject) => { ws!.once("open", resolve); ws!.once("error", reject); });
+    const send = (msg: object) => ws!.send(JSON.stringify(msg));
+    send({ type: "heartbeat", leaseToken: lease.leaseToken });
+    await until(() => frames > 0 || errors.length > 0);
+    assert.deepEqual(errors, []);
+    assert.deepEqual(dimensions, { width: 1280, height: 800 });
+    assert.ok(frames > 0, "ffmpeg must produce actual JPEG frames");
+    const key = (key: string, event: string) => send({ type: "key", key, event });
+    key("Control", "rawKeyDown"); key("l", "rawKeyDown"); key("l", "keyUp"); key("Control", "keyUp");
+    const html = '<title>desktop-smoke</title><input autofocus oninput="document.title=\'typed:\'+this.value">';
+    send({ type: "paste", text: `data:text/html,${encodeURIComponent(html)}` });
+    key("Enter", "rawKeyDown"); key("Enter", "keyUp");
+    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "desktop-smoke"));
+    send({ type: "paste", text: "Native UI" });
+    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "typed:Native UI"));
+    assert.deepEqual(errors, []);
+    ws.close(1000);
+    await until(() => ctx.browsers.viewerCount(id) === 0);
+    assert.equal(ctx.browsers.controlState(id).controllerType, "none");
+    assert.equal((await json(`${ctx.url}/api/v1/browsers/${id}/agent-desktop`, { method: "PUT", headers, body: JSON.stringify({ enabled: true }) })).status, 200);
+    const owner = getAgent(ctx.browsers.row(id).owner_id)!;
+    const native = await agentDesktop(ctx.browsers, owner, id, {}, true);
+    assert.ok(native.image && native.image.length > 100);
+    await agentDesktop(ctx.browsers, owner, id, { action: "type", text: "-agent" }, false);
+    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "typed:Native UI-agent"));
+  } finally {
+    ws?.terminate();
+    await ctx.close();
+    for (const key of ["TALLYLAMP_FAKE_CHROME", "TALLYLAMP_XVFB", "TALLYLAMP_XVFB_SCREEN", "TALLYLAMP_WINDOW_SIZE"]) {
+      if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
+    }
+  }
+});

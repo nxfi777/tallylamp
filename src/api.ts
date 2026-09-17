@@ -172,6 +172,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
       gpu: config.gpu,
       allowPrivateNetwork: config.allowPrivateNetwork,
       xvfb: config.xvfb,
+      fullBrowser: config.fullBrowser,
       oauth: config.oauth,
       // The dashboard tells the operator how long a takeover lasts. Serve the number so that
       // sentence cannot drift from TALLYLAMP_HUMAN_LEASE_TTL_SEC.
@@ -372,6 +373,16 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     }
     const ticket = issueViewerTicket(row.id, req.sessionToken ?? "admin", mode);
     res.json({ ticket, expiresInSec: Math.floor(config.viewerTicketTtlMs / 1000), mode });
+  });
+
+  api.put("/api/v1/browsers/:id/extensions", requireAdmin, (req, res) => {
+    if (typeof req.body?.enabled !== "boolean") throw Err.invalid("enabled must be a boolean");
+    res.json({ browser: browsers.publicView(browsers.updateExtensions(req.params.id, req.body.enabled, req.principal!)) });
+  });
+
+  api.put("/api/v1/browsers/:id/agent-desktop", requireAdmin, (req, res) => {
+    if (typeof req.body?.enabled !== "boolean") throw Err.invalid("enabled must be a boolean");
+    res.json({ browser: browsers.publicView(browsers.updateAgentDesktop(req.params.id, req.body.enabled, req.principal!)) });
   });
 
   api.get(

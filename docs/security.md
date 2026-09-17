@@ -65,7 +65,7 @@ takes control, the first operator loses control access even if their socket is
 still connected. Browser credentials and
 control access carry the authority of the accounts signed into that Chrome.
 
-## What a control viewer can do
+## What a tab control viewer can do
 
 The address bar accepts `http` and `https` only. These requests pass through the
 egress proxy. Schemes such as `file:`, `javascript:`, `chrome:`, and `devtools:`
@@ -83,6 +83,58 @@ Chrome window. The server clamps sizes to the browser's X screen. Resizing uses
 It does not use `Emulation.setDeviceMetricsOverride`, which would alter the
 device metrics reported to the page.
 
+## Optional full-browser control and extensions
+
+The restrictions above describe the default tab viewer. By selecting **Full browser**
+in the dashboard, an administrator can instead view the browser's dedicated
+Xvfb display. This includes Chrome's toolbar, extension popups and native dialogs.
+It never captures a shared host display. Watch sockets still cannot send input;
+control sockets must bind to a current human lease. Input runs through X11 with
+bounded arguments, without a shell. Disconnecting stops capture and releases held
+keys and mouse buttons. Only one full-browser stream runs per browser.
+
+Full-browser control is privileged access. Chrome's native address bar can open
+local files and browser settings; it does not use the tab viewer's URL filter.
+Use it only where dashboard administrators are trusted with those capabilities.
+Paste types up to 2,048 characters into the focused native window. It does not read
+the remote clipboard back. **Fit Chrome window** changes the main window bounds;
+switching back to a control tab viewer lets that viewer size the content again.
+
+Extensions are off by default and require a separate administrator choice for each
+stopped browser. Installed extensions and their data remain in the saved Chrome
+profile. Disabling support skips loading them; it does not remove their saved data.
+Profile copies include extension data but do not inherit the source's enable flag.
+
+Treat extensions as trusted code. They can read signed-in pages, run in the
+background after human control ends, and may change proxy settings or otherwise
+bypass egress restrictions. The human lease blocks agent input, not extension work.
+The egress proxy is not a sandbox for a privileged extension.
+
+### Agent native UI permission
+
+The administrator can grant **Allow agent control** for an agent-owned browser. It is
+stored separately from extension enablement and defaults to off. Only the owning agent
+with both ordinary read and control scopes may use the desktop tools; lending does not
+grant this permission. Copied profiles do not inherit the source's permission.
+
+The optional `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` policy preauthorizes newly created
+agent-owned browsers, including profile copies. Otherwise they start with access off.
+The default is written into the browser record at creation; runtime checks always use
+that saved value. Changing the default does not change existing browsers, and a saved
+revocation is never overridden by it. It does not enable or install extensions.
+
+This permits full native UI access, including host-file dialogs and Chrome settings.
+It is not a sandbox limited to extension popups. Treat this as granting the agent the
+browser process's local-file capabilities; browser ownership checks do not isolate the
+host filesystem from an authorized native operator.
+
+The tools check the actual target browser, not just the MCP session binding. They
+recheck ownership, the saved grant, current agent status/scopes, runtime identity and
+control lease during execution. Human takeover and grant revocation cancel in-flight
+work. Calls are serialized per browser, have input/output and time limits, and clean up
+keys/buttons even on interruption. Raw key-down or button-down operations are not exposed
+to agents. Typed text and screenshots are not included in audit logs.
+
 ## Signed-in-site records
 
 The inventory stores an HTTP(S) origin, display name, observed state, reporter,
@@ -96,7 +148,9 @@ records until the cloned browser checks each site itself.
 ## Private endpoints
 
 - Chrome DevTools Protocol binds to `127.0.0.1` and is not published.
-- The viewer proxies that loopback CDP connection after validating its ticket.
+- The tab viewer uses that loopback CDP connection after validating its ticket.
+  Full-browser viewing uses local capture/input subprocesses and the same ticket checks;
+  it opens no additional public port.
 - `/healthz` returns only `{"status":"ok"}`.
 
 ## Network

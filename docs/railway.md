@@ -23,7 +23,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 | Setting | Value |
 |---|---|
-| Source | Public GHCR image, pinned to a release digest |
+| Source | Public GHCR image, pinned to a release digest. The published `0.5.1` image does not include ffmpeg or xdotool. Full browser needs a later image. |
 | Automatic image updates | Disabled |
 | Healthcheck | `/healthz` |
 | Timeout | 120s recommended (startup healthcheck) |
@@ -89,6 +89,7 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 | `TALLYLAMP_OAUTH_MAX_BROWSERS` | no | Default 2. Browser cap for a new connector agent. |
 | `TALLYLAMP_OAUTH_CLIENT_HOSTS` | no | empty = accept any https client-metadata URL. Comma-separated hostnames to restrict it. |
 | `TALLYLAMP_ADMIN_BEARER` | no | default **off**. Turning it on lets `ADMIN_SECRET` be used as a bearer token, which is a brute-forceable master key. |
+| `TALLYLAMP_AGENT_DESKTOP_DEFAULT` | no | default **off**. When on, new agent-owned browsers start with **Allow agent control**. Existing browsers keep their saved choice. This does not enable or install extensions. Native UI includes host-file dialogs. |
 
 ## Deployment limits
 

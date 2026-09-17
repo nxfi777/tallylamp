@@ -33,6 +33,7 @@ import {
   type RequestRow,
 } from "./lending.js";
 import { reportSiteAccess } from "./site-access.js";
+import { agentDesktop } from "./agent-desktop.js";
 
 const require = createRequire(import.meta.url);
 
@@ -77,6 +78,8 @@ Profiles are saved automatically when persistent is true (the default); no separ
 
 Offer a saved profile (called a profile template by the compatibility tools) when separate browsers need the same prepared setup. Explain that it copies every saved login, and ask for explicit consent before cloning or publishing. tallylamp_save_profile updates the browser's linked saved profile, or creates one if none is linked; pass asNew: true only to save a separate profile. tallylamp_update_profile updates an existing linked profile and refuses to create one accidentally. Both require the non-default seed:write scope and an owned browser; borrowing is not permission to copy its logins. Listing or cloning requires seed:use. A seed:write grant permits replacing shared snapshots loaded into the agent's own browsers, affecting future copies by other authorized agents. Do not bypass a missing permission or ask for administrator credentials; ask the administrator to grant the scope or save through the dashboard instead. A running source briefly pauses and resumes automatically; unsaved page edits may be lost. Finish active work and wait until human control has returned before saving. Updates change future copies, never existing browsers. Check copied sessions in the new browser because they may require a fresh sign-in.
 
+For extension toolbar popups, side panels and native dialogs, use tallylamp_desktop_screenshot followed by tallylamp_desktop_action. Check agentDesktopEnabled in the browser record first. If false, ask the user or administrator to open that browser in the dashboard, go to Extensions, and turn on Allow agent control. Explain that this grants full Chrome UI access, including settings and host-file dialogs. Wait for approval; do not repeatedly retry, change host configuration, or try to grant yourself access. An operator may preauthorize newly created agent-owned browsers with TALLYLAMP_AGENT_DESKTOP_DEFAULT=1; the saved agentDesktopEnabled field is authoritative for each browser. This does not enable or install extensions. Borrowing does not grant native access. Use fresh screenshots to locate controls; screenshot metadata gives image and screen dimensions for coordinate scaling. Never use native input while a human holds control. Do not install, remove or change extension permissions without the user's explicit request. The tools grant full native UI access, not an extension-only sandbox.
+
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
 const PROXY_INPUT = {
@@ -92,6 +95,26 @@ const PROXY_INPUT = {
 };
 
 export const LIFECYCLE_TOOLS: Tool[] = [
+  {
+    name: "tallylamp_desktop_screenshot",
+    description: "See the full Chrome window, including extension toolbar popups, side panels and native dialogs. Requires agentDesktopEnabled on your owned browser; borrowed browsers are excluded. If permission is off, ask the user to open this browser in the dashboard > Extensions > Allow agent control, explain the full native UI and host-file access, then wait for approval. Refused during human control. Returns a JPEG plus imageWidth/imageHeight and screenWidth/screenHeight. Native actions use screen coordinates: multiply image coordinates by screen/image dimensions. Does not start a stopped browser.",
+    inputSchema: { type: "object", additionalProperties: false, properties: { browserId: { type: "string", description: "Defaults to the bound browser." } } },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+  },
+  {
+    name: "tallylamp_desktop_action",
+    description: "Operate extension popups, side panels or Chrome's native UI. First inspect a fresh tallylamp_desktop_screenshot. Requires agentDesktopEnabled on your owned browser and stops on human takeover. If permission is off, ask the user to open this browser in the dashboard > Extensions > Allow agent control, explain the full native UI and host-file access, then wait for approval. Send one atomic action at a time, then inspect the result. x/y are full screen coordinates, not downscaled image pixels. key takes keys such as ['Control','l'] or ['Enter']; type sends up to 2048 characters. openExtensions opens chrome://extensions/. This is privileged full-browser access, not an extension-only sandbox. Only install/remove extensions or change permissions when the user explicitly asks. Cannot enable its own permission or extension support.",
+    inputSchema: { type: "object", additionalProperties: false, required: ["action"], properties: {
+      browserId: { type: "string", description: "Defaults to the bound browser." },
+      action: { type: "string", enum: ["click", "move", "scroll", "type", "key", "openExtensions"] },
+      x: { type: "number", minimum: 0 }, y: { type: "number", minimum: 0 },
+      button: { type: "string", enum: ["left", "middle", "right"] }, doubleClick: { type: "boolean" },
+      deltaX: { type: "number" }, deltaY: { type: "number" },
+      text: { type: "string", minLength: 1, maxLength: 2048 },
+      keys: { type: "array", minItems: 1, maxItems: 4, items: { type: "string" } },
+    } },
+    annotations: { readOnlyHint: false, destructiveHint: true },
+  },
   {
     name: "tallylamp_create_browser",
     description: CREATE_BROWSER_TOOL_DESCRIPTION,
@@ -608,6 +631,8 @@ export class McpGateway {
 
   /** Tools that need no bound browser of their own: they name their target in the arguments. */
   private static readonly UNBOUND_OK = new Set([
+    "tallylamp_desktop_screenshot",
+    "tallylamp_desktop_action",
     "tallylamp_request_browser",
     "tallylamp_list_requests",
     "tallylamp_answer_request",
@@ -798,6 +823,18 @@ export class McpGateway {
   private async callLifecycle(session: Session, name: string, args: Record<string, unknown>) {
     const p = session.principal;
     try {
+      if (name === "tallylamp_desktop_screenshot" || name === "tallylamp_desktop_action") {
+        const id = String(args.browserId ?? session.browserId ?? "");
+        if (!id) throw Err.invalid("pass browserId or bind a browser first");
+        // The target can differ from the binding: authorization and the human guard live
+        // inside agentDesktop and are checked again throughout the native operation.
+        const { image, ...dimensions } = await agentDesktop(this.browsers, p, id, args, name === "tallylamp_desktop_screenshot");
+        logToolActivity(id, name);
+        return { content: [
+          { type: "text" as const, text: JSON.stringify({ browserId: id, ...dimensions, ...(image ? {} : { performed: args.action, note: "Inspect a new desktop screenshot to confirm the result." }) }) },
+          ...(image ? [{ type: "image" as const, mimeType: "image/jpeg", data: image.toString("base64") }] : []),
+        ] };
+      }
       if (name === "tallylamp_create_browser") {
         const row = this.browsers.create({
           principal: p,

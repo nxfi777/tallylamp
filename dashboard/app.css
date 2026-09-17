@@ -417,6 +417,10 @@ input::placeholder { color: var(--muted); }
    what the operator is looking at. Chrome's own strip is browser UI and Page.startScreencast
    only captures page content, so it can never appear in the stream; this is the dashboard's. */
 .stagewrap { display: flex; flex-direction: column; min-width: 0; }
+.viewer-surfaces { padding: 8px 0; flex-wrap: wrap; }
+.viewer-surfaces .btn { min-height: 44px; }
+.viewer-surfaces [aria-pressed="true"] { border-color: var(--focus); font-weight: 600; }
+.stagewrap [hidden] { display: none !important; }
 .tabstrip {
   display: flex; gap: 2px; align-items: stretch;
   /* Fixed height and no wrapping. A strip whose height grows with the tab count moves the
@@ -495,7 +499,8 @@ input::placeholder { color: var(--muted); }
    so fullscreen is 1:1 too. */
 .stagewrap:fullscreen { background: var(--bg); padding: 0; }
 .stagewrap:fullscreen .tabstrip { border-radius: 0; }
-.stagewrap:fullscreen .stage { height: calc(100vh - 68px); border-radius: 0; max-height: none; }
+.stagewrap:fullscreen .stage { flex: 1; min-height: 0; height: auto; border-radius: 0; max-height: none; }
+.stagewrap:fullscreen > :not(.stage) { flex-shrink: 0; }
 /* contain, never cover: cropping a browser you are about to click in would hide the button
    you came for. */
 .stage img, .stage canvas {

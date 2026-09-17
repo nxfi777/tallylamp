@@ -308,6 +308,8 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   // browser holding a banking login must never be lent because its owner stopped talking.
   ["browsers", "lendable", "INTEGER NOT NULL DEFAULT 0"],
   ["browsers", "proxy_json", "TEXT"],
+  ["browsers", "extensions_enabled", "INTEGER NOT NULL DEFAULT 0"],
+  ["browsers", "agent_desktop_enabled", "INTEGER NOT NULL DEFAULT 0"],
   ["seeds", "metadata_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["seeds", "updated_at", "TEXT"],
 ];

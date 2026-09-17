@@ -9,6 +9,7 @@ It walks through hosting Tallylamp, connecting an agent, and trying a browser ha
 | Connect an MCP client | [Client setup and test status](mcp-compatibility.md) |
 | Copy a browser ID or understand browser details | [Browser details and identity](usage.md#browser-details-and-identity) |
 | Watch, take control, record, or reuse a profile | [User guide](usage.md) |
+| Install a Chrome extension or open Full browser | [Chrome extensions](usage.md#chrome-extensions-and-full-browser) |
 | Route a browser through an HTTP or HTTPS proxy | [Per-browser proxies](proxies.md) |
 | Understand permissions and network access | [Security model](security.md) |
 | Understand the server and browser lifecycle | [Architecture](architecture.md) |

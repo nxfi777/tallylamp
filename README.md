@@ -40,6 +40,8 @@ sites where you need to sign in yourself.
 - Finish an OAuth flow whose redirect URI is `http://localhost:PORT/…`. A
   [loopback tunnel](#loopback-tunnels) lets one browser reach one port on your
   machine for a short time. Agents need a scope they do not get by default.
+- Install a Chrome extension in **Full browser**. Optionally let the owning
+  agent use its popup after you turn on **Allow agent control**.
 
 Chrome runs in headed mode, not headless mode. Emulation changes selected browser
 settings for testing; it does not make an agent behave like a person. Sites may
@@ -186,6 +188,49 @@ resolved on the server, tunnels take precedence, and a failed proxy request
 never falls back to direct access. Credentials are hidden from responses but
 stored **unencrypted in SQLite**, so protect `/data` and its backups. See the
 [proxy guide](docs/proxies.md) for setup, security, and connection limits.
+
+### Chrome extensions
+
+**Tab** shows the page. **Full browser** shows Chrome itself: toolbar, popups,
+side panels, and dialogs. Switch it on the browser page. It needs Linux, a
+dedicated Xvfb display, ffmpeg, and xdotool. The Docker image in this
+repository includes those tools. The published `0.5.1` GHCR image does not;
+use a local build, or wait for the next release.
+
+Chrome's own UI can open files on the host and change browser settings. An
+installed extension can read signed-in pages and change proxy settings. The
+egress proxy does not contain a privileged extension. Use this only with
+administrators and extensions you trust.
+
+To install an extension:
+
+1. Stop the browser. Choose **Enable extensions**.
+2. Start it, take control, and open **Full browser**. Use **Fit Chrome window**
+   if the toolbar is clipped.
+3. Open the Chrome Web Store in Chrome's address bar and install it there.
+   Permission dialogs show in this view.
+4. Use the toolbar for popups, or **Manage extensions** for
+   `chrome://extensions/`. Switch back to **Tab** for ordinary work.
+
+Persistent browsers keep installed extensions and their settings. **Disable
+extensions** skips loading them on the next start; it does not uninstall them.
+A copied profile still needs **Enable extensions** on the new browser. There is
+no upload API.
+
+Agents cannot turn extension support on. To let the owning agent use popups,
+turn on **Allow agent control**. That is a second permission. It gives the
+agent the same native UI, including settings and host-file dialogs. Borrowed
+browsers do not get it. Copies do not inherit it.
+
+Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` if you want that permission on for new
+agent-owned browsers. Existing browsers keep whatever you already chose.
+Turning the toggle off still wins. This does not enable extensions.
+
+The agent uses `tallylamp_desktop_screenshot`, then `tallylamp_desktop_action`.
+Coordinates are screen pixels, not the downscaled image. Human control stops
+these tools. If `agentDesktopEnabled` is false, the agent is told to ask you to
+turn the toggle on and wait. Limits and the API are in the
+[user guide](docs/usage.md#chrome-extensions-and-full-browser).
 
 ### Loopback tunnels
 

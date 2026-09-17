@@ -65,6 +65,16 @@ export const openApiSpec = {
     "/browsers/{id}/viewer-ticket": {
       post: { summary: "Mint a short-lived viewer ticket", responses: { "200": { description: "ok" } } },
     },
+    "/browsers/{id}/extensions": {
+      put: { summary: "Enable or disable extensions for a stopped browser (administrator only). Requires a host that supports full-browser viewing.",
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } } } } },
+        responses: { "200": { description: "updated" }, "400": { description: "invalid input or unsupported host" }, "403": { description: "administrator required" }, "409": { description: "stop the browser first" } } },
+    },
+    "/browsers/{id}/agent-desktop": {
+      put: { summary: "Grant or revoke the owning agent's full native browser access (administrator only). Not inherited by borrowed or copied browsers.",
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } } } } },
+        responses: { "200": { description: "updated; revocation interrupts in-flight native work" }, "400": { description: "invalid input or unsupported browser" }, "403": { description: "administrator required" } } },
+    },
     "/agents": {
       get: { summary: "List agent principals", responses: { "200": { description: "ok" } } },
       post: { summary: "Create an agent principal and credential", responses: { "201": { description: "created" } } },

@@ -1010,6 +1010,7 @@ function tunnelSection(tunnels) {
   );
 }
 
+const viewerSurfaces = new Map();
 async function browserView(id, seq) {
   let data;
   try {
@@ -1025,6 +1026,14 @@ async function browserView(id, seq) {
   const b = data.browser;
   const md = b.metadata || {};
   const human = b.control?.controllerType === "human";
+  const surface = state.status?.fullBrowser && viewerSurfaces.get(id) === "desktop" ? "desktop" : "tab";
+  const switchSurface = (next) => {
+    if (next === surface) return;
+    if (next === "desktop" && !confirm("Full browser lets you use Chrome's toolbar and extension popups. It also gives access to Chrome settings and files on the host. Only install extensions you trust.\n\nOpen full browser?")) return;
+    viewerSurfaces.set(id, next);
+    if (viewer) { viewer.cancel(true); viewer = null; }
+    void render();
+  };
   const agentHolds = b.control?.controllerType === "agent";
   // Served by /api/v1/status so the copy cannot drift from TALLYLAMP_HUMAN_LEASE_TTL_SEC.
   const leaseSeconds = state.status?.humanLeaseTtlSec ?? 90;
@@ -1104,10 +1113,22 @@ async function browserView(id, seq) {
     disabled: human ? false : true,
   }, icon(ICON_PLUS));
   const stagewrap = h("div", { class: "stagewrap" },
+    h("div", { class: "row viewer-surfaces", role: "group", "aria-label": "Browser view" },
+      h("button", { class: "btn tiny", "aria-pressed": String(surface === "tab"), onClick: () => switchSurface("tab") }, "Tab"),
+      h("button", { class: "btn tiny", "aria-pressed": String(surface === "desktop"), disabled: !state.status?.fullBrowser,
+        title: state.status?.fullBrowser ? "Show Chrome’s toolbar, popups and dialogs" : "Full browser needs a dedicated Xvfb display on the host",
+        onClick: () => switchSurface("desktop") }, "Full browser"),
+      surface === "desktop" && human ? h("button", { class: "btn tiny", onClick: () => viewer?.openExtensions() }, "Manage extensions") : null,
+      surface === "desktop" && human ? h("button", { class: "btn tiny", onClick: () => viewer?.fitBrowser() }, "Fit Chrome window") : null,
+    ),
     tabstrip,
     h("div", { class: "urlrow" }, backBtn, fwdBtn, reloadBtn, urlInput, fsBtn),
     stage,
   );
+  if (surface === "desktop") {
+    tabstrip.hidden = true;
+    for (const el of [backBtn, fwdBtn, reloadBtn, urlInput]) el.hidden = true;
+  }
   fsBtn.onclick = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else stagewrap.requestFullscreen().catch(() => {});
@@ -1184,6 +1205,32 @@ async function browserView(id, seq) {
         h("p", { class: "sub" }, b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? " · authenticated" : ""}` : "Direct · no upstream proxy"),
         h("button", { class: "btn", disabled: !["stopped", "crashed"].includes(b.status) || b.savingProfile || human, onClick: () => editProxy(b) }, "Configure proxy"),
         h("p", { class: "sub" }, ["stopped", "crashed"].includes(b.status) ? "Settings apply on the next start. Tunnels keep their own route." : "Stop the browser before changing its proxy."),
+        h("h2", {}, "Extensions"),
+        h("p", { class: "sub" }, b.extensionsEnabled ? "Enabled for this profile. To install or manage extensions, take control and open Full browser. Persistent profiles keep extensions and their settings." : "Off for this profile. Stop the browser before enabling extensions."),
+        h("button", { class: "btn", disabled: (!state.status?.fullBrowser && !b.extensionsEnabled) || !["stopped", "crashed"].includes(b.status) || b.savingProfile || human,
+          onClick: () => act(async () => {
+            const enabled = !b.extensionsEnabled;
+            if (enabled && !confirm("Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust.\n\nEnable extension support?")) return;
+            await api(`/api/v1/browsers/${id}/extensions`, { method: "PUT", body: { enabled } });
+            flash(enabled ? "Extension support enabled. Start the browser, take control and open Full browser." : "Extensions disabled on the next start. Their saved data has not been deleted.");
+            await refresh(); void render();
+          }) }, b.extensionsEnabled ? "Disable extensions" : "Enable extensions"),
+        !state.status?.fullBrowser ? h("p", { class: "sub" }, "Unavailable on this host. Full browser needs a real browser with its own Xvfb display.") : null,
+        b.owner.type === "agent" ? h("div", {},
+          h("p", { class: "sub" }, b.agentDesktopEnabled
+            ? "The owning agent can see and use Chrome's native UI, including extension popups. Taking control blocks these tools."
+            : "Agent access is off. Allow it to let the owning agent use extension popups and Chrome's native UI."),
+          h("button", { class: "btn", role: "switch", "aria-label": "Allow agent control", "aria-checked": String(Boolean(b.agentDesktopEnabled)),
+            disabled: !state.status?.fullBrowser && !b.agentDesktopEnabled,
+            onClick: () => act(async () => {
+              const enabled = !b.agentDesktopEnabled;
+              if (enabled && !confirm("This lets the owning agent see and control all of Chrome's native UI, including settings and host-file dialogs. It is broader than access to extension popups. Only allow an agent you trust with that access.\n\nAllow agent control?")) return;
+              await api(`/api/v1/browsers/${id}/agent-desktop`, { method: "PUT", body: { enabled } });
+              flash(enabled ? "Agent native control allowed. Human takeover still blocks its input." : "Agent native control blocked.", true);
+              if (viewer) { viewer.cancel(true); viewer = null; }
+              await refresh(); void render();
+            }) }, `Allow agent control: ${b.agentDesktopEnabled ? "On" : "Off"}`),
+        ) : h("p", { class: "sub" }, "Native agent control is available for agent-owned browsers only."),
         h("h2", {}, "Signed-in sites"),
         sitesPanel,
         // On the browser itself, not on a settings page: these two controls are only ever
@@ -1209,6 +1256,7 @@ async function browserView(id, seq) {
     return;
   }
   void connectViewer(id, human ? "control" : "watch", img, b.control?.leaseToken, status, {
+    surface,
     onActiveTab: (tab) => { b.url = tab?.url || ""; b.title = tab?.title || ""; },
     stage,
     tabstrip,
@@ -1349,7 +1397,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
   let unstick = 0;
   let sizeDebounce = 0;
   let sendTimes = [];
-  let sizingOff = mode !== "control";
+  let sizingOff = mode !== "control" || ui?.surface === "desktop";
   let observer = null;
 
   const sendJson = (obj) => ws && ws.readyState === 1 && ws.send(JSON.stringify(obj));
@@ -1585,7 +1633,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     }
     if (stopped) return;
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(`${proto}://${location.host}/api/v1/browsers/${id}/view?ticket=${encodeURIComponent(ticket)}`);
+    ws = new WebSocket(`${proto}://${location.host}/api/v1/browsers/${id}/view?ticket=${encodeURIComponent(ticket)}&surface=${ui?.surface === "desktop" ? "desktop" : "tab"}`);
 
     ws.binaryType = "arraybuffer";
     ws.addEventListener("message", (ev) => {
@@ -1667,6 +1715,10 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     ws.addEventListener("close", (ev) => {
       clearInterval(beat);
       if (stopped) return;
+      if (ev.code === 1008) {
+        if (!terminal) fail("Full browser is unavailable. Switch to Tab view or close the other full-browser viewer.", false);
+        return;
+      }
       if (ev.code === 1000) return; // a clean close is us navigating away
       if (live) setStatus("The live view dropped. Reconnecting…");
       img.classList.add("stale");
@@ -1768,6 +1820,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     e.stopPropagation();
     if (ws && ws.readyState === 1) ws.send(JSON.stringify(keyMessage(e, true)));
   };
+  const releaseDesktopInput = () => { if (ui?.surface === "desktop") sendJson({ type: "releaseInputs" }); };
 
   /**
    * Paste. The remote Chrome has its own clipboard and it is empty, so forwarding Cmd+V would
@@ -1796,6 +1849,8 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     img.addEventListener("keydown", onKeyDown);
     img.addEventListener("keyup", onKeyUp);
     img.addEventListener("paste", onPaste);
+    img.addEventListener("blur", releaseDesktopInput);
+    img.addEventListener("mouseleave", releaseDesktopInput);
   }
 
   // Hidden tabs get their timers throttled to about once a minute, so coming back to the tab
@@ -1810,7 +1865,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
   document.addEventListener("visibilitychange", onVisible);
 
   viewer = {
-    cancel() {
+    cancel(keepControl = false) {
       stopped = true;
       document.removeEventListener("visibilitychange", onVisible);
       clearTimeout(retry);
@@ -1823,8 +1878,12 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
       img.removeEventListener("keydown", onKeyDown);
       img.removeEventListener("keyup", onKeyUp);
       img.removeEventListener("paste", onPaste);
-      try { ws && ws.close(1000, "navigated away"); } catch { /* already gone */ }
+      img.removeEventListener("blur", releaseDesktopInput);
+      img.removeEventListener("mouseleave", releaseDesktopInput);
+      try { ws && ws.close(keepControl ? 4000 : 1000, keepControl ? "switching view" : "navigated away"); } catch { /* already gone */ }
     },
+    openExtensions() { sendJson({ type: "extensions" }); },
+    fitBrowser() { sendJson({ type: "fitBrowser" }); },
     /** Send one key to the remote page that the stage itself reserves. */
     sendKey(key, code) {
       if (ws && ws.readyState === 1) {

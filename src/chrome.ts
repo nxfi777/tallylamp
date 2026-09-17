@@ -161,6 +161,7 @@ export function clearSingletonLocks(profile: string): void {
 }
 
 export async function launchChrome(opts: {
+  extensionsEnabled?: boolean;
   profileDir: string;
   downloadDir: string;
   proxyPort?: number;
@@ -219,7 +220,7 @@ export async function launchChrome(opts: {
     // each. Measured: 7 renderers and ~1215 MB per browser without these, 5 and ~934 MB
     // with them. Deliberately NOT --renderer-process-limit (measured worse, and it
     // collapses site isolation) and NOT --memory-pressure-off (increases memory).
-    "--disable-extensions",
+    ...(opts.extensionsEnabled ? [] : ["--disable-extensions"]),
     "--disable-component-extensions-with-background-pages",
     "--disable-background-networking",
     "--disable-component-update",

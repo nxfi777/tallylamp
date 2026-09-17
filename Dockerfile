@@ -19,7 +19,7 @@ ENV CHROME_UID=1100 CHROME_GID=1100
 # google-chrome-stable comes from Google's floating apt repo (newest only).
 # Base image and npm dependencies are pinned; Chrome itself is not.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      wget gnupg ca-certificates tini xvfb \
+      wget gnupg ca-certificates tini xvfb ffmpeg xdotool \
       fonts-liberation fonts-noto-color-emoji \
       libasound2 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 \
       libdbus-1-3 libdrm2 libgbm1 libglib2.0-0 libgtk-3-0 libnspr4 \

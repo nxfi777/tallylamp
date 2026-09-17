@@ -8,6 +8,9 @@ import { defineRailway, project, service, volume } from "railway/iac";
  * ADMIN_SECRET must be set as a Railway variable (do not commit it).
  * Upstream proxies are configured per browser in the dashboard/API, not as
  * shared Railway variables. Their credentials persist in SQLite on /data.
+ * Full browser and extension support use dashboard toggles. Do not set
+ * TALLYLAMP_AGENT_DESKTOP_DEFAULT here unless every new agent-owned browser
+ * should get native Chrome UI access.
  */
 export default defineRailway(() => {
   const data = volume("tallylamp-data", { sizeMB: 5120 });

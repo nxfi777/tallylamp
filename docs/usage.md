@@ -46,6 +46,40 @@ On mobile, you can view the fleet and browser status, watch, start or stop a
 browser, and return control. The first release does not aim to provide a full
 remote desktop experience on a phone.
 
+## Chrome extensions and Full browser
+
+Tab view shows the page. Full browser shows Chrome itself. Switch it on the
+browser page after you take control. It needs Linux, a dedicated Xvfb display,
+ffmpeg, and xdotool.
+
+Chrome's own UI can open files on the host and change browser settings. An
+installed extension can read signed-in pages and change proxy settings. The
+egress proxy does not contain a privileged extension.
+
+Stop the browser, choose **Enable extensions**, start it, take control, and
+open **Full browser**. Fit the Chrome window if the toolbar is clipped. Install
+from the Chrome Web Store in Chrome's address bar. **Manage extensions** opens
+`chrome://extensions/`. Switch back to Tab for ordinary work.
+
+Persistent browsers keep installed extensions and their settings. Disable
+extensions to skip loading them on the next start; that does not uninstall them.
+A copied profile still needs Enable extensions on the new browser.
+
+**Allow agent control** is a second permission, off by default, for the owning
+agent only. Borrowed browsers do not get it. Copies do not inherit it. Set
+`TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` if you want it on for new agent-owned
+browsers. Existing browsers keep their saved choice. Turning the toggle off
+still wins. This does not enable extensions.
+
+The agent uses `tallylamp_desktop_screenshot`, then `tallylamp_desktop_action`.
+Coordinates are screen pixels. Human control stops these tools. If
+`agentDesktopEnabled` is false, the agent is told to ask you to turn the toggle
+on and wait. It cannot grant itself access.
+
+Full-browser view is 6 fps, 1600px wide, and one viewer per browser. Watch stays
+read-only. Paste is 2,048 characters. Taking control or turning the permission
+off interrupts in-flight native work.
+
 ### Stream quality
 
 The viewer sends binary JPEG frames. Compared with base64 inside JSON, this saves
