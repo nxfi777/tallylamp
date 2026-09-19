@@ -106,6 +106,12 @@ function idleMs(row: BrowserRow): number {
  * the feature. The requester is told to look elsewhere, not to wait.
  */
 export function lendingBlocker(browsers: BrowserManager, row: BrowserRow, requesterId: string): string | null {
+  // Every lending path runs through here: asking, the idle rule, answering and the candidate
+  // list. A linked browser is somebody's own, signed in as them, so an agent that may use it
+  // must not be able to pass it on. Its owner changes access in the dashboard, and only there.
+  if (row.kind === "linked") {
+    return "this is a person's own browser; only they can give an agent access, from the Tallylamp dashboard";
+  }
   if (row.owner_type !== "agent") return "browser is not owned by an agent";
   if (row.owner_id === requesterId) return "you already own this browser";
   if (browsers.controlState(row.id).controllerType === "human") return "a human is controlling this browser";

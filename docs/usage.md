@@ -98,7 +98,8 @@ for the current limits.
 A linked browser is your own Chrome, Edge, Brave or other Chromium browser,
 reached through the Tallylamp Link extension. Choose **Link your own browser** on
 the Browsers page for the three setup steps. After that, share a tab from the
-extension's side panel and the agent that owns the linked browser can use it.
+extension's side panel and the agents you ticked for it can use it. Change that
+list under **Who can use it** on the browser's page.
 It gets no other tab. [Linked browsers](linked-browsers.md) covers what the agent
 can and cannot reach, and what a linked browser does not support.
 

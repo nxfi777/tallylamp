@@ -16,7 +16,7 @@ Firefox and Safari cannot be linked. Neither gives extensions a debugger API, so
 2. Open `chrome://extensions`, turn on Developer mode, press **Load unpacked** and choose the `tallylamp-link` folder. The extension is not in the Chrome Web Store yet.
 3. Click the Tallylamp Link icon. It opens as a side panel, which stays open while you switch tabs. A browser without side panels shows the same thing as a popup. Enter your server's address. `tallylamp.example.com` is enough. Plain `http://` is only accepted for a server on the same computer.
 4. Press **Connect**. The panel shows a code such as `KXQ7-M2PD`, and the approval page opens in a new tab. Sign in to the dashboard if it asks.
-5. Check the code on the page matches the panel. Pick the agent that may drive this browser, then press **Approve and link**.
+5. Check the code on the page matches the panel. Tick the agents that may use this browser, then press **Approve and link**. **Any agent on this server** covers every agent, including ones you connect later. Leave everything unticked to watch it from the dashboard only.
 
 The panel now says Connected. Nothing is shared yet.
 
@@ -53,8 +53,16 @@ The agent can open new tabs once at least one tab is shared. Those tabs are shar
 Tallylamp did not launch a linked browser and does not hold its profile, so anything that depends on either is refused with an error that says why:
 
 - saving the profile, proxies, tunnels, installing extensions and native desktop access
-- lending. A linked browser is never handed to another agent because its owner went quiet
+- lending. No agent can lend a linked browser or borrow one, whether by asking or by the idle rule
 - the fleet cap. It runs on your machine, so it does not use a slot
+
+## Change who can use it
+
+The administrator owns every linked browser. The agents you ticked are on a list beside it, so they can use its shared tabs but cannot delete it, lend it or change who else gets in. To change the list, open the browser in the dashboard and edit **Who can use it**. An agent you untick loses the browser at its next tool call, even mid-task.
+
+Each client that connects over OAuth gets its own agent, so one app can appear several times, such as three **OpenCode (connector)** entries. The list shows when each was last used, most recent first.
+
+Linked browsers from 0.6.0 were owned by the one agent picked at approval. Upgrading to 0.6.1 moves them to the administrator and puts that agent on the list, so nothing loses access.
 
 Start and restart mean nothing for it. **Hand back its shared tabs** in the dashboard menu stops the agent and detaches from every tab. **Revoke link** disconnects the extension at once and kills its token. Deleting it from Tallylamp changes nothing in the browser itself.
 

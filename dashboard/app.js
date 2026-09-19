@@ -939,6 +939,76 @@ async function homeView() {
  * holding a bank login. Stating the consequence next to the switch is cheaper than a
  * confirmation dialog and it is there before the click rather than after it.
  */
+/**
+ * Choose the agents that may use a linked browser. "Any agent" is its own box rather than a
+ * list entry because it is a different promise: it covers agents connected later, and says so.
+ * Most recently used first, since several connectors from one client share a name and only
+ * their last use tells them apart.
+ */
+function agentPicker(selected, anyAgent) {
+  const chosen = new Set(selected);
+  const agents = state.agents
+    .filter((a) => a.enabled || chosen.has(a.id))
+    .sort((a, b) => String(b.lastSeenAt || "").localeCompare(String(a.lastSeenAt || "")) || String(b.createdAt).localeCompare(String(a.createdAt)));
+  // Two connectors from one app, both new and unused, would otherwise read identically.
+  const repeated = new Set(agents.map((a) => a.name).filter((n, i, all) => all.indexOf(n) !== i));
+  const boxes = [];
+  const any = h("input", {
+    type: "checkbox", id: "pick-any", checked: anyAgent ? "checked" : false,
+    onChange: () => { for (const box of boxes) box.disabled = any.checked; },
+  });
+  const list = h("ul", { class: "agent-pick" },
+    agents.map((a) => {
+      const box = h("input", { type: "checkbox", id: `pick-${a.id}`, value: a.id, checked: chosen.has(a.id) ? "checked" : false, disabled: anyAgent ? "disabled" : false });
+      boxes.push(box);
+      return h("li", {}, box, h("label", { for: `pick-${a.id}` }, a.name,
+        h("span", { class: "sub" }, `${a.lastSeenAt ? `last used ${ago(a.lastSeenAt)}` : "never used"} · added ${ago(a.createdAt)}${repeated.has(a.name) ? ` · ${a.id.slice(-4)}` : ""}${a.enabled ? "" : " · disabled"}`)));
+    }));
+  return {
+    el: h("fieldset", { class: "agent-picker" },
+      h("legend", {}, "Which agents may use it"),
+      h("div", { class: "pick-any" }, any,
+        h("label", { for: "pick-any" }, "Any agent on this server", h("span", { class: "sub" }, "Includes agents you connect later."))),
+      agents.length ? list : h("p", { class: "sub" }, "You have no agents yet. Create one on the Agents page, or tick Any agent."),
+    ),
+    value: () => ({ anyAgent: any.checked, agentIds: any.checked ? [] : boxes.filter((b) => b.checked).map((b) => b.value) }),
+  };
+}
+
+/** "Claude and Codex can use it", in the operator's own agent names. */
+function accessSummary(access, browserName) {
+  if (access.anyAgent) return `Every agent on this server can use ${browserName}, including ones you connect later.`;
+  const names = access.agentIds.map((id) => state.agents.find((a) => a.id === id)?.name || id);
+  if (!names.length) return `No agent can use ${browserName}, so only this dashboard can watch it.`;
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `${list} can use ${browserName}.`;
+}
+
+/** Who may use a linked browser. Only the administrator changes this; agents cannot lend it. */
+function linkedAccessSection(b) {
+  const host = h("div", { class: "linked-access" }, h("div", { class: "sub", role: "status" }, "Loading who can use it…"));
+  api(`/api/v1/browsers/${b.id}/access`).then(({ access }) => {
+    const picker = agentPicker(access.agentIds, access.anyAgent);
+    const save = h("button", {
+      class: "btn",
+      onClick: () => act(async () => {
+        save.disabled = true;
+        save.textContent = "Saving…";
+        try {
+          const out = await api(`/api/v1/browsers/${b.id}/access`, { method: "PUT", body: picker.value() });
+          flash(accessSummary(out.access, b.name), true);
+        } finally {
+          save.disabled = false;
+          save.textContent = "Save";
+        }
+      }),
+    }, "Save");
+    host.replaceChildren(picker.el, h("div", { class: "row" }, save),
+      h("p", { class: "sub" }, "An agent you untick loses this browser at its next tool call. Agents cannot lend a linked browser to each other."));
+  }, (e) => host.replaceChildren(h("div", { class: "err" }, e.message)));
+  return host;
+}
+
 function lendingSection(b) {
   const loans = b.lentTo || [];
   const toggleId = `lendable-${b.id}`;
@@ -1072,6 +1142,8 @@ async function browserView(id, seq) {
   if (seq !== undefined && seq !== renderSeq) return;
   const b = data.browser;
   const md = b.metadata || {};
+  // Somebody's own browser: no profile on this disk, no launch flags, no lending.
+  const linked = b.kind === "linked";
   const human = b.control?.controllerType === "human";
   const surface = state.status?.fullBrowser && viewerSurfaces.get(id) === "desktop" ? "desktop" : "tab";
   const switchSurface = (next) => {
@@ -1233,20 +1305,21 @@ async function browserView(id, seq) {
             h("button", { class: "btn tiny", onClick: () => copyBrowserId(b) }, "Copy browser ID")),
           h("dt", {}, "Status"), h("dd", {}, b.status),
           h("dt", {}, "Controller"), h("dd", {}, b.control?.controllerType || "none"),
-          h("dt", {}, "Browser data"), h("dd", {}, b.persistent ? "kept when stopped" : "temporary · may be deleted when idle"),
-          h("dt", {}, "Save target"), h("dd", {}, b.savedProfileId ? (state.seeds.find(s => s.id === b.savedProfileId)?.name || b.savedProfileId) : "New saved profile"),
+          h("dt", {}, "Browser data"), h("dd", {}, linked ? "on its owner's computer" : b.persistent ? "kept when stopped" : "temporary · may be deleted when idle"),
+          linked ? null : [h("dt", {}, "Save target"), h("dd", {}, b.savedProfileId ? (state.seeds.find(s => s.id === b.savedProfileId)?.name || b.savedProfileId) : "New saved profile")],
           h("dt", {}, "Project"), h("dd", {}, md.project || "—"),
           h("dt", {}, "Purpose"), h("dd", {}, md.purpose || "—"),
           h("dt", {}, "Task"), h("dd", {}, md.task || "—"),
           h("dt", {}, "Reported source"), h("dd", {}, md.source || "—"),
           h("dt", {}, "Reported client"), h("dd", {}, b.reportedClient ? `${b.reportedClient.name} ${b.reportedClient.version || ""}` : "—"),
           h("dt", {}, "Chrome"), h("dd", { class: "mono" }, b.chromeVersion || "—"),
-          h("dt", {}, "Sandbox"), h("dd", { class: b.sandboxStatus === "sandboxed" ? "" : "warn" }, b.sandboxStatus || "unknown"),
-          h("dt", {}, "GPU"), h("dd", {}, b.gpuStatus || "unknown"),
+          linked ? null : [h("dt", {}, "Sandbox"), h("dd", { class: b.sandboxStatus === "sandboxed" ? "" : "warn" }, b.sandboxStatus || "unknown"),
+            h("dt", {}, "GPU"), h("dd", {}, b.gpuStatus || "unknown")],
           h("dt", {}, "MCP attached"), h("dd", {}, String(b.mcpAttached)),
           h("dt", {}, "Watchers"), h("dd", {}, String(b.viewers ?? 0)),
         ),
         h("button", { class: "btn", onClick: () => editBrowser(b) }, "Edit browser details"),
+        linked ? [h("h2", {}, "Who can use it"), linkedAccessSection(b)] : [
         h("p", { class: "sub" }, "Save profile copies this browser’s logins and storage into a reusable snapshot for other browsers. Persistent browsers keep their own data automatically."),
         h("h2", {}, "Proxy"),
         h("p", { class: "sub" }, b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? " · authenticated" : ""}` : "Direct · no upstream proxy"),
@@ -1278,14 +1351,17 @@ async function browserView(id, seq) {
               await refresh(); void render();
             }) }, `Allow agent control: ${b.agentDesktopEnabled ? "On" : "Off"}`),
         ) : h("p", { class: "sub" }, "Native agent control is available for agent-owned browsers only."),
+        ],
         h("h2", {}, "Signed-in sites"),
         sitesPanel,
         // On the browser itself, not on a settings page: these two controls are only ever
         // meaningful next to the thing they hand over.
-        h("h2", {}, "Lending"),
-        lendingSection(b),
-        h("h2", {}, "Loopback tunnels"),
-        tunnelSection(data.tunnels),
+        linked ? null : [
+          h("h2", {}, "Lending"),
+          lendingSection(b),
+          h("h2", {}, "Loopback tunnels"),
+          tunnelSection(data.tunnels),
+        ],
         // h2, not h3: the page went h1 straight to h3, so this section was unreachable by
         // heading navigation.
         h("h2", {}, "Agent tool calls"),
@@ -2470,12 +2546,10 @@ async function pairView(code) {
       h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => go("/") }, "Go to browsers")));
   }
 
-  // The agent most recently heard from is nearly always the one the operator is setting up,
-  // so it is preselected. With several agents and none ever heard from, nothing is: "who may
-  // act as me" is not a question to answer by whichever row the database returned first.
-  const agents = state.agents.filter((a) => a.enabled !== false)
-    .sort((a, b) => String(b.last_seen_at || "").localeCompare(String(a.last_seen_at || "")));
-  const preselect = agents.length === 1 ? agents[0] : agents.find((a) => a.last_seen_at) ?? null;
+  // Nothing is ticked unless there is exactly one agent. "Who may act as me in my own
+  // browser" is a commitment, and a default would make it for the operator.
+  const enabled = state.agents.filter((a) => a.enabled);
+  const picker = agentPicker(enabled.length === 1 ? [enabled[0].id] : [], false);
   const err = h("div", { class: "err", role: "alert" });
   const form = h("form", {
     class: "pair-form",
@@ -2485,15 +2559,15 @@ async function pairView(code) {
       form.approve.disabled = true;
       form.approve.textContent = "Linking…";
       try {
+        const chosen = picker.value();
         const out = await api(`/api/v1/links/pair/${encodeURIComponent(pairing.userCode)}/approve`, {
-          method: "POST", body: { agentId: form.agent && form.agent.value !== "none" ? form.agent.value : undefined, name: form.browserName.value },
+          method: "POST", body: { ...chosen, name: form.browserName.value },
         });
-        const who = agents.find((a) => a.id === form.agent?.value)?.name;
+        const nobody = !chosen.anyAgent && !chosen.agentIds.length;
         say(h("h1", {}, `${out.browser.name} is linked`),
           h("p", { class: "sub" }, "Go back to that browser. The extension now says Connected. Open the tab you want to hand over and press Share this tab."),
-          h("p", { class: "sub" }, who
-            ? `${who} will see it in its browser list as “${out.browser.name}”. It can do nothing there until a tab is shared.`
-            : "No agent was chosen, so only this dashboard can watch it. Link again and pick an agent if you want one to drive it."),
+          h("p", { class: "sub" }, accessSummary(chosen, `“${out.browser.name}”`), " ",
+            nobody ? "Tick agents on its page when you want one to drive it." : "No agent can do anything there until a tab is shared."),
           h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => go("/") }, "Back to browsers")));
       } catch (ex) {
         err.textContent = ex.message;
@@ -2504,13 +2578,8 @@ async function pairView(code) {
   },
     h("label", { for: "pair-name" }, "Name it"),
     h("input", { id: "pair-name", name: "browserName", value: pairing.deviceName, maxlength: "60", required: "required" }),
-    agents.length ? [
-      h("label", { for: "pair-agent" }, "Which agent may drive it"),
-      h("select", { id: "pair-agent", name: "agent", required: "required" },
-        preselect ? null : h("option", { value: "", disabled: "disabled", selected: "selected", hidden: "hidden" }, "Choose an agent…"),
-        agents.map((a) => h("option", { value: a.id, selected: a === preselect ? "selected" : null }, a.name)),
-        h("option", { value: "none" }, "No agent, watch from this dashboard only")),
-    ] : h("p", { class: "sub" }, "You have no agents yet, so this browser will only be watchable from the dashboard. Create an agent first if you want one to drive it."),
+    picker.el,
+    h("p", { class: "sub" }, "Leave everything unticked to watch it from this dashboard only. You can change this later on the browser's page."),
     err,
     h("div", { class: "row pair-actions" },
       h("button", { class: "btn primary", name: "approve", type: "submit" }, "Approve and link"),
@@ -2536,8 +2605,8 @@ async function pairView(code) {
     ),
     h("div", { class: "pair-grant" },
       h("h2", {}, "What linking allows"),
-      h("p", {}, "The agent can see and control tabs that are shared from the extension, one at a time. In those tabs it acts as whoever that browser is signed in as."),
-      h("p", {}, "It cannot reach tabs that were not shared, read the browser's cookie jar, upload files from that computer, or start anything while the browser is closed. You can revoke the link from this dashboard at any time."),
+      h("p", {}, "The agents you tick can see and control tabs that are shared from the extension. In those tabs they act as whoever that browser is signed in as."),
+      h("p", {}, "They cannot reach tabs that were not shared, read the browser's cookie jar, upload files from that computer, lend the browser to another agent, or start anything while it is closed. You can change who can use it, or revoke the link, from this dashboard at any time."),
     ),
     form,
   );

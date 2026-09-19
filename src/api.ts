@@ -21,7 +21,7 @@ import type { BrowserManager } from "./browsers.js";
 import { inbox, answerRequest, revokeGrant } from "./lending.js";
 import { assertMaySeeTunnels, createTunnel, listTunnels, revokeTunnel, tunnelIsConnected } from "./tunnels.js";
 import { audit, listActivity, listAudit } from "./audit.js";
-import { approvePairing, denyPairing, describePairing, dropLinksFor, pollPairing, startPairing } from "./linked.js";
+import { approvePairing, denyPairing, describePairing, dropLinksFor, linkedAccess, pollPairing, setLinkedAccess, startPairing } from "./linked.js";
 import { hub } from "./events.js";
 import { issueViewerTicket } from "./viewer.js";
 import { openApiSpec } from "./openapi.js";
@@ -195,7 +195,9 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
   api.post("/api/v1/links/pair/:code/approve", requireAdmin, (req, res) => {
     const out = approvePairing(browsers, req.principal!, {
       userCode: req.params.code,
-      agentId: typeof req.body?.agentId === "string" && req.body.agentId ? req.body.agentId : undefined,
+      agentIds: req.body?.agentIds,
+      anyAgent: req.body?.anyAgent,
+      agentId: req.body?.agentId,
       name: typeof req.body?.name === "string" ? req.body.name : undefined,
     });
     res.status(201).json({ ...out, browser: browsers.publicView(browsers.row(out.browserId)) });
@@ -204,6 +206,20 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     denyPairing(req.principal!, req.params.code);
     res.json({ ok: true });
   });
+  // Who may use a linked browser. Admin only in both directions: which agents can act as a
+  // person in their own browser is that person's call, never an agent's.
+  api.get("/api/v1/browsers/:id/access", requireAdmin, (req, res) => {
+    if (browsers.row(req.params.id).kind !== "linked") throw Err.invalid("that is not a linked browser");
+    res.json({ access: linkedAccess(req.params.id) });
+  });
+  api.put(
+    "/api/v1/browsers/:id/access",
+    requireAdmin,
+    asyncRoute(async (req, res) => {
+      const access = await setLinkedAccess(browsers, req.principal!, req.params.id, { anyAgent: req.body?.anyAgent, agentIds: req.body?.agentIds });
+      res.json({ access, browser: browsers.publicView(browsers.row(req.params.id)) });
+    }),
+  );
   api.delete("/api/v1/browsers/:id/link", requireAdmin, (req, res) => {
     browsers.row(req.params.id);
     dropLinksFor(req.params.id, "revoked from the dashboard");

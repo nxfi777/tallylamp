@@ -133,19 +133,81 @@ export function describePairing(userCode: string) {
   };
 }
 
+export type LinkedAccess = { anyAgent: boolean; agentIds: string[] };
+
+/** Who may use a linked browser besides the administrator. */
+export function linkedAccess(browserId: string): LinkedAccess {
+  const ids = (getDb().prepare(`SELECT agent_id FROM linked_access WHERE browser_id = ? ORDER BY created_at`).all(browserId) as Array<{ agent_id: string }>)
+    .map((r) => r.agent_id);
+  return { anyAgent: ids.includes("*"), agentIds: ids.filter((id) => id !== "*") };
+}
+
+export function linkedAllows(browserId: string, agentId: string): boolean {
+  return Boolean(getDb().prepare(`SELECT 1 FROM linked_access WHERE browser_id = ? AND agent_id IN (?, '*')`).get(browserId, agentId));
+}
+
+/**
+ * Checked before anything is written, so a typo in one id cannot leave a half-applied list.
+ * A disabled agent is refused rather than silently kept: it cannot sign in, so ticking it
+ * would look like access that does nothing.
+ */
+function checkAgents(ids: string[]): string[] {
+  const unique = [...new Set(ids.filter((id) => typeof id === "string" && id))];
+  for (const id of unique) {
+    const agent = getAgent(id);
+    if (!agent) throw Err.notFound(`agent ${id} not found`);
+    if (agent.type === "agent" && !agent.enabled) throw Err.invalid(`${agent.name} is disabled; enable it on the Agents page first`);
+  }
+  return unique;
+}
+
+function writeAccess(browserId: string, access: LinkedAccess): void {
+  const db = getDb();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.prepare(`DELETE FROM linked_access WHERE browser_id = ?`).run(browserId);
+    const insert = db.prepare(`INSERT INTO linked_access(browser_id, agent_id, created_at) VALUES (?, ?, ?)`);
+    for (const id of access.anyAgent ? ["*"] : access.agentIds) insert.run(browserId, id, nowIso());
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
+
+/**
+ * Replace the list. Every MCP session on the browser is dropped afterwards. Each agent's next
+ * call re-binds through assertAccess, so one that keeps its access carries on and one that
+ * lost it is refused there, rather than driving on until its session happens to end.
+ */
+export async function setLinkedAccess(browsers: BrowserManager, principal: Principal, browserId: string, input: { anyAgent?: unknown; agentIds?: unknown }): Promise<LinkedAccess> {
+  if (principal.type !== "admin") throw Err.unauthorized("only the administrator can change who may use a linked browser");
+  if (browsers.row(browserId).kind !== "linked") throw Err.invalid("that is not a linked browser");
+  const access = { anyAgent: input.anyAgent === true, agentIds: checkAgents(Array.isArray(input.agentIds) ? input.agentIds : []) };
+  const before = linkedAccess(browserId);
+  writeAccess(browserId, access);
+  audit({ actorType: principal.type, actorId: principal.id, action: "browser.link.access", targetType: "browser", targetId: browserId, detail: { before, after: access } });
+  hub.emitEvent("browser.updated", {}, browserId);
+  await browsers.dropSessions(browserId);
+  return linkedAccess(browserId);
+}
+
 export function approvePairing(
   browsers: BrowserManager,
   principal: Principal,
-  input: { userCode: string; agentId?: string; name?: string },
+  input: { userCode: string; agentIds?: unknown; anyAgent?: unknown; agentId?: unknown; name?: string },
 ): { browserId: string; linkId: string } {
   const row = livePairing("user_code", normalizeUserCode(input.userCode));
   if (!row) throw Err.notFound("that code is not waiting for approval; it may have expired. Start again from the extension.");
   if (row.state !== "pending") throw Err.conflict(`this pairing was already ${row.state}`);
-  // The owner is who may drive it. An agent only ever sees browsers it owns or was lent, so
-  // a linked browser left with the admin would be one no agent could reach.
-  const owner = input.agentId ? getAgent(input.agentId) : principal;
-  if (!owner) throw Err.notFound("agent not found");
-  const browser = browsers.createLinked({ owner, approvedBy: principal, name: input.name?.trim() || row.device_name });
+  // `agentId` is the 0.6.0 dashboard's single choice, still accepted from a tab left open
+  // across the upgrade.
+  const requested = Array.isArray(input.agentIds) ? input.agentIds : typeof input.agentId === "string" ? [input.agentId] : [];
+  const access = { anyAgent: input.anyAgent === true, agentIds: checkAgents(requested as string[]) };
+  // The administrator owns every linked browser. Which agents may use it is a list beside it,
+  // not ownership, so none of them can delete it, lend it or change who else gets in.
+  const browser = browsers.createLinked({ approvedBy: principal, name: input.name?.trim() || row.device_name });
+  writeAccess(browser.id, access);
   const linkId = randomBytes(8).toString("hex");
   getDb()
     .prepare(
@@ -160,7 +222,7 @@ export function approvePairing(
     action: "browser.link.approved",
     targetType: "browser",
     targetId: browser.id,
-    detail: { linkId, deviceName: row.device_name, owner: owner.id, remoteAddr: row.remote_addr },
+    detail: { linkId, deviceName: row.device_name, access, remoteAddr: row.remote_addr },
   });
   return { browserId: browser.id, linkId };
 }

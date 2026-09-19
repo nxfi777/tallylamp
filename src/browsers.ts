@@ -18,7 +18,7 @@ import { parseBrowserProxy, proxyView } from "./browser-proxy.js";
 import { dialTunnel, dropTunnelsFor } from "./tunnels.js";
 import { startFakeChrome } from "./fake-chrome.js";
 import { startLinkedRuntime } from "./linked-cdp.js";
-import { dropLinksFor, linkView, liveLink } from "./linked.js";
+import { dropLinksFor, linkedAllows, linkView, liveLink } from "./linked.js";
 import { activeGrant, grantsFor } from "./lending.js";
 import { SiteDetector } from "./site-detection.js";
 import {
@@ -186,7 +186,20 @@ export class BrowserManager {
         )
         .all(p.id, nowIso()) as BrowserRow[]
     ).filter((r) => !seen.has(r.id));
-    return [...owned.map((r) => ({ ...r, lentToMe: false })), ...borrowed.map((r) => ({ ...r, lentToMe: true }))];
+    for (const r of borrowed) seen.add(r.id);
+    const linked = (
+      getDb()
+        .prepare(
+          `SELECT DISTINCT b.* FROM browsers b JOIN linked_access a ON a.browser_id = b.id
+           WHERE b.kind = 'linked' AND a.agent_id IN (?, '*') ORDER BY b.created_at DESC`,
+        )
+        .all(p.id) as BrowserRow[]
+    ).filter((r) => !seen.has(r.id));
+    return [
+      ...owned.map((r) => ({ ...r, lentToMe: false })),
+      ...borrowed.map((r) => ({ ...r, lentToMe: true })),
+      ...linked.map((r) => ({ ...r, lentToMe: false })),
+    ];
   }
 
   /**
@@ -231,6 +244,11 @@ export class BrowserManager {
     const n = (this.mcpAttached.get(id) ?? 1) - 1;
     if (n <= 0) this.mcpAttached.delete(id);
     else this.mcpAttached.set(id, n);
+  }
+
+  /** Drop every MCP session bound to this browser without stopping it. */
+  async dropSessions(id: string): Promise<void> {
+    await this.onGone?.(id);
   }
 
   onBrowserGone(fn: (browserId: string) => Promise<void> | void): void {
@@ -286,6 +304,17 @@ export class BrowserManager {
 
   assertAccess(p: Principal, browser: BrowserRow, kind: "read" | "control" | "delete"): void {
     if (p.type === "admin") return;
+    // A person's own browser. The agents ticked for it in the dashboard may use it, and that is
+    // all they may do: deleting it would also revoke the person's link, which is theirs to do.
+    if (browser.kind === "linked") {
+      if (kind === "delete") throw Err.unauthorized("only the administrator can delete a linked browser");
+      if (!linkedAllows(browser.id, p.id)) {
+        throw Err.unauthorized("this linked browser has not been shared with this agent; its owner can add it on the browser's page in the dashboard");
+      }
+      const scope = kind === "read" ? "browser:read:own" : "browser:control:own";
+      if (!p.scopes.includes(scope) && !p.scopes.includes("*")) throw Err.unauthorized(`missing ${scope}`);
+      return;
+    }
     if (browser.owner_type !== "agent" || browser.owner_id !== p.id) {
       // A live grant is the only thing that opens someone else's browser, and it opens it
       // only for driving. Deleting a browser you were merely lent -- along with its profile,
@@ -399,7 +428,7 @@ export class BrowserManager {
    * profile directory: recoverOnBoot and destroy both touch `profile_path`, and an empty
    * string there is one refactor away from an rm -rf on the wrong path.
    */
-  createLinked(input: { owner: Principal; approvedBy: Principal; name: string }): BrowserRow {
+  createLinked(input: { approvedBy: Principal; name: string }): BrowserRow {
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     const id = randomBytes(8).toString("hex");
     const name = input.name.trim().slice(0, 80) || `linked-${id.slice(0, 6)}`;
@@ -419,8 +448,8 @@ export class BrowserManager {
         id,
         name,
         slug,
-        input.owner.type,
-        input.owner.id,
+        input.approvedBy.type,
+        input.approvedBy.id,
         input.approvedBy.type,
         input.approvedBy.id,
         nowIso(),
@@ -433,9 +462,9 @@ export class BrowserManager {
       action: "browser.created",
       targetType: "browser",
       targetId: id,
-      detail: { via: "dashboard", kind: "linked", owner: input.owner.id },
+      detail: { via: "dashboard", kind: "linked" },
     });
-    hub.emitEvent("browser.created", { name, slug, owner: input.owner.id }, id);
+    hub.emitEvent("browser.created", { name, slug, owner: input.approvedBy.id }, id);
     return this.row(id);
   }
 

@@ -270,6 +270,17 @@ CREATE TABLE IF NOT EXISTS browser_links (
   revoked_at TEXT
 );
 
+-- Which agents may use a linked browser. agent_id '*' means every agent on this server,
+-- including ones connected later. Only an administrator writes here, from the dashboard: a
+-- linked browser is a person's own, so no agent can add itself or anybody else, and lending
+-- is refused for these browsers altogether.
+CREATE TABLE IF NOT EXISTS linked_access (
+  browser_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (browser_id, agent_id)
+);
+
 -- A pairing in flight. The extension holds the device secret and shows the short user code;
 -- a signed-in admin approves the code. Nothing here is a credential: the user code only
 -- names a request, and the device secret can only collect a token somebody else approved.
@@ -365,6 +376,13 @@ function migrate(database: DatabaseSync): void {
     database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
     cols.add(column);
   }
+  // 0.6.0 made the one agent picked at approval the owner of a linked browser. From 0.6.1 an
+  // administrator owns every linked browser and linked_access lists the agents that may use
+  // it, so the agent keeps its access and loses only the owner's rights. Idempotent: once
+  // moved, nothing matches.
+  database.exec(`INSERT OR IGNORE INTO linked_access(browser_id, agent_id, created_at)
+    SELECT id, owner_id, created_at FROM browsers WHERE kind = 'linked' AND owner_type = 'agent'`);
+  database.exec(`UPDATE browsers SET owner_type = 'admin', owner_id = 'admin' WHERE kind = 'linked' AND owner_type = 'agent'`);
   // Migrate legacy save targets once. Repeating this would resurrect an older
   // target after the user explicitly deletes a browser's linked saved profile.
   if (!database.prepare(`SELECT 1 FROM meta WHERE key = 'profile_links_backfilled'`).get()) {

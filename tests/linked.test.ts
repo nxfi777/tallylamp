@@ -6,6 +6,10 @@ import { startTestServer, json, type TestCtx } from "./helpers.js";
 import { createAgent, DEFAULT_AGENT_SCOPES } from "../src/auth.js";
 import { CdpClient, browserWsUrl, listPages } from "../src/cdp.js";
 import { resetRateLimits } from "../src/rate-limit.js";
+import { getDb, resetDbForTests } from "../src/db.js";
+import { dbPath } from "../src/config.js";
+import { linkedAccess } from "../src/linked.js";
+import { candidates, requestBrowser } from "../src/lending.js";
 
 let ctx: TestCtx;
 
@@ -110,13 +114,13 @@ class FakeExtension {
   }
 }
 
-async function pair(agentId?: string, name = "Work laptop"): Promise<{ token: string; browserId: string; userCode: string }> {
+async function pair(access: { agentIds?: string[]; anyAgent?: boolean } = {}, name = "Work laptop"): Promise<{ token: string; browserId: string; userCode: string }> {
   // Starting a pairing is limited to a burst of five per address, and this file is one address.
   resetRateLimits();
   const started = await post("/api/v1/links/pair", { deviceName: name });
   assert.equal(started.status, 200, JSON.stringify(started.body));
   const { deviceCode, userCode } = started.body as { deviceCode: string; userCode: string };
-  const approved = await post(`/api/v1/links/pair/${userCode}/approve`, { agentId }, { Cookie: ctx.cookie, Origin: ctx.url });
+  const approved = await post(`/api/v1/links/pair/${userCode}/approve`, access, { Cookie: ctx.cookie, Origin: ctx.url });
   assert.equal(approved.status, 201, JSON.stringify(approved.body));
   const polled = await post("/api/v1/links/pair/poll", { deviceCode });
   const body = polled.body as { state: string; token: string; browserId: string };
@@ -275,7 +279,7 @@ describe("linked browsers", () => {
 
   it("drives a shared tab through the real chrome-devtools-mcp bridge", async () => {
     const owner = createAgent({ name: "Linked driver", scopes: [...DEFAULT_AGENT_SCOPES], maxBrowsers: 1 });
-    const { token, browserId } = await pair(owner.agent.id, "Driver's Chrome");
+    const { token, browserId } = await pair({ agentIds: [owner.agent.id] }, "Driver's Chrome");
     const ext = await FakeExtension.connect(token, [[1, "https://example.test/dashboard", "Dashboard"]]);
 
     const rpc = (method: string, params: unknown, extra: Record<string, string> = {}) =>
@@ -320,6 +324,90 @@ describe("linked browsers", () => {
     await call("tallylamp_stop_browser", { browserId });
     assert.ok(ext.calls.some((c) => c.method === "unshare.all"));
     assert.equal(ext.tabs.size, 0);
+    ext.close();
+    await ext.closed;
+  });
+
+  it("lets only the ticked agents in, any agent when chosen, and never lets an agent lend it or change the list", async () => {
+    const withBorrow = [...DEFAULT_AGENT_SCOPES, "browser:borrow", "browser:lend"];
+    const a = createAgent({ name: "Ticked", scopes: withBorrow });
+    const b = createAgent({ name: "Also ticked" });
+    const c = createAgent({ name: "Not ticked", scopes: withBorrow });
+    const { browserId } = await pair({ agentIds: [a.agent.id, b.agent.id] });
+    const row = () => ctx.browsers.row(browserId);
+    // Owned by the administrator: the agents are on a list beside it, not its owners.
+    assert.equal(row().owner_type, "admin");
+    ctx.browsers.assertAccess(a.agent, row(), "control");
+    ctx.browsers.assertAccess(b.agent, row(), "read");
+    assert.throws(() => ctx.browsers.assertAccess(c.agent, row(), "control"), /has not been shared with this agent/);
+    assert.throws(() => ctx.browsers.assertAccess(a.agent, row(), "delete"), /only the administrator can delete/);
+    assert.ok(ctx.browsers.listVisible(a.agent).some((r) => r.id === browserId));
+    assert.ok(!ctx.browsers.listVisible(c.agent).some((r) => r.id === browserId));
+
+    // Nobody lends a person's own browser: not by asking, not as a candidate, not by answering.
+    const asked = requestBrowser(ctx.browsers, c.agent, { browserId });
+    assert.equal(asked.state, "unavailable");
+    assert.match((asked as { reason: string }).reason, /person's own browser/);
+    assert.ok(!candidates(ctx.browsers, c.agent).some((r) => r.id === browserId));
+
+    const put = (body: unknown, headers: Record<string, string>) =>
+      json(`${ctx.url}/api/v1/browsers/${browserId}/access`, { method: "PUT", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+    const admin = { Cookie: ctx.cookie, Origin: ctx.url };
+    assert.equal((await put({ anyAgent: true }, { Authorization: `Bearer ${a.token}` })).status, 403, "an agent cannot widen its own access");
+
+    const any = await put({ anyAgent: true }, admin);
+    assert.deepEqual((any.body as { access: unknown }).access, { anyAgent: true, agentIds: [] });
+    ctx.browsers.assertAccess(c.agent, row(), "control");
+    // Any agent includes agents that did not exist when it was chosen.
+    const later = createAgent({ name: "Connected later" });
+    assert.ok(ctx.browsers.listVisible(later.agent).some((r) => r.id === browserId));
+
+    await put({ agentIds: [b.agent.id] }, admin);
+    assert.throws(() => ctx.browsers.assertAccess(a.agent, row(), "control"), /has not been shared/);
+    ctx.browsers.assertAccess(b.agent, row(), "control");
+    assert.equal((await put({ agentIds: ["agt_does_not_exist"] }, admin)).status, 404);
+    assert.deepEqual(linkedAccess(browserId), { anyAgent: false, agentIds: [b.agent.id] }, "a refused change leaves the list as it was");
+  });
+
+  it("moves a 0.6.0 linked browser from its agent owner to the administrator, keeping that agent's access", async () => {
+    const legacy = createAgent({ name: "Picked in 0.6.0" });
+    const { browserId } = await pair();
+    getDb().prepare(`UPDATE browsers SET owner_type = 'agent', owner_id = ? WHERE id = ?`).run(legacy.agent.id, browserId);
+    getDb().prepare(`DELETE FROM linked_access WHERE browser_id = ?`).run(browserId);
+    resetDbForTests(dbPath());
+    assert.equal(ctx.browsers.row(browserId).owner_type, "admin");
+    assert.deepEqual(linkedAccess(browserId), { anyAgent: false, agentIds: [legacy.agent.id] });
+    ctx.browsers.assertAccess(legacy.agent, ctx.browsers.row(browserId), "control");
+  });
+
+  it("cuts a live MCP session when its agent is taken off the list", async () => {
+    const agent = createAgent({ name: "About to lose it", scopes: [...DEFAULT_AGENT_SCOPES] });
+    const { token, browserId } = await pair({ agentIds: [agent.agent.id] }, "Revocable");
+    const ext = await FakeExtension.connect(token, [[1, "https://example.test/", "Example"]]);
+    const rpc = (method: string, params: unknown, extra: Record<string, string> = {}) =>
+      json(`${ctx.url}/mcp`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${agent.token}`, Accept: "application/json, text/event-stream", "Content-Type": "application/json", "MCP-Protocol-Version": "2025-11-25", ...extra },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      });
+    const init = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "linked-revoke", version: "1" } });
+    const session = { "MCP-Session-Id": init.headers.get("mcp-session-id")! };
+    const call = async (name: string, args = {}) => {
+      const res = await rpc("tools/call", { name, arguments: args }, session);
+      const line = String(res.body).split("\n").find((l) => l.trim().startsWith("data:"));
+      const result = (typeof res.body === "object" && res.body ? (res.body as any).result : JSON.parse(line!.trim().slice(5)).result) as { isError?: boolean; content: Array<{ text: string }> };
+      return { isError: Boolean(result.isError), text: result.content.map((c) => c.text).join("\n") };
+    };
+    assert.equal((await call("tallylamp_use_browser", { browserId })).isError, false);
+    assert.equal((await call("list_pages")).isError, false);
+
+    const cut = await json(`${ctx.url}/api/v1/browsers/${browserId}/access`, {
+      method: "PUT", headers: { "Content-Type": "application/json", Cookie: ctx.cookie, Origin: ctx.url }, body: JSON.stringify({ agentIds: [] }),
+    });
+    assert.equal(cut.status, 200);
+    const after = await call("list_pages");
+    assert.equal(after.isError, true, after.text);
+    assert.match(after.text, /No browser is bound/);
     ext.close();
     await ext.closed;
   });

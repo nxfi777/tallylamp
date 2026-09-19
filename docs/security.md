@@ -238,8 +238,14 @@ Delete the browser if a tunnel served content you do not trust.
 
 A linked browser is somebody's own browser and profile. An agent driving a shared
 tab acts as that person on whatever the tab is signed in to, and with the site
-limit off it can navigate the tab to any other site they are signed in to. Approve
-a link only for an agent you would trust with that.
+limit off it can navigate the tab to any other site they are signed in to. Tick
+only agents you would trust with that. **Any agent on this server** also covers
+agents connected later, including every new OAuth connector.
+
+Only an administrator decides which agents may use a linked browser. The
+administrator owns it, and the agents are on a list in `linked_access`, so none
+of them can delete it, change the list, or lend it. Lending is refused for linked
+browsers in every form: asking, the idle rule, and answering a request.
 
 The limits that do hold are enforced in the extension, because the server is the
 party being limited. The extension only attaches to tabs a person shared, only to

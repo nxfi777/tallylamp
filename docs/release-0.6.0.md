@@ -21,7 +21,9 @@ Chromium browser, through a new extension called Tallylamp Link.
   shared tabs** in the dashboard and **Revoke link** all end sharing. If the
   server is unreachable for a minute, the extension hands every tab back.
 - Linked browsers do not use a fleet slot. Saving the profile, proxies, tunnels,
-  lending, extensions and native desktop access are refused for them.
+  automatic lending, extensions and native desktop access are refused for them.
+  (These notes first said all lending was refused. In 0.6.0 the agent that owned
+  a linked browser could still lend it on request. 0.6.1 refuses every form.)
 - The Browsers page has a **Link your own browser** button.
 
 ## Before upgrading

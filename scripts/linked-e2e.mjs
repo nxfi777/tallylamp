@@ -49,7 +49,7 @@ try {
   await inExt(`await chrome.runtime.sendMessage({type:"startPairing", server:"127.0.0.1:${PORT}"}); return 1`);
   let st = await state();
   check("popup -> worker: pairing started, code shown", st.link === "pairing" && /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(st.pairing?.userCode ?? ""), JSON.stringify(st.pairing?.userCode ?? st.error));
-  const approve = await fetch(`${base}/api/v1/links/pair/${st.pairing.userCode}/approve`, { method: "POST", headers: H, body: JSON.stringify({ agentId, name: "E2E Chrome" }) });
+  const approve = await fetch(`${base}/api/v1/links/pair/${st.pairing.userCode}/approve`, { method: "POST", headers: H, body: JSON.stringify({ agentIds: [agentId], name: "E2E Chrome" }) });
   check("dashboard approves the code", approve.status === 201, approve.status);
   for (let i = 0; i < 20 && (st = await state()).link !== "online"; i++) await sleep(500);
   check("extension collects its token and connects", st.link === "online", `${st.link} ${st.error ?? ""}`);
