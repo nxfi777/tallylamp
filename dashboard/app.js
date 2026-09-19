@@ -335,6 +335,30 @@ function showMenu(x, y, items, label) {
 function browserMenu(b) {
   const running = b.status === "running";
   const human = b.control?.controllerType === "human";
+  // Nothing here can start, restart or snapshot somebody's own browser. What an operator can
+  // do from this side is the two things that take access away.
+  if (b.kind === "linked") {
+    return [
+      { label: "Watch", onSelect: () => go(`/browsers/${b.id}`) },
+      "-",
+      running && { label: "Hand back its shared tabs", onSelect: () => call(`/api/v1/browsers/${b.id}/stop`) },
+      b.link && {
+        label: "Revoke link…", danger: true,
+        onSelect: async () => {
+          if (!confirm(`Revoke the link to "${b.name}"?\n\nIts extension is disconnected at once, its token stops working, and every shared tab is handed back. To use it again, press Connect in the extension and approve a new code.`)) return;
+          await act(async () => {
+            await api(`/api/v1/browsers/${b.id}/link`, { method: "DELETE" });
+            await refresh();
+            void render();
+          });
+        },
+      },
+      "-",
+      { label: "Edit browser details…", onSelect: () => editBrowser(b) },
+      { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
+      { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name, true) },
+    ];
+  }
   return [
     { label: "Watch", onSelect: () => go(`/browsers/${b.id}`) },
     human
@@ -488,6 +512,9 @@ function route() {
   if (p.startsWith("/seeds")) return { name: "seeds" };
   if (p.startsWith("/security")) return { name: "security" };
   if (p.startsWith("/login")) return { name: "login" };
+  // Where the extension sends the operator. The code rides in the query so a logged-out visit
+  // survives the sign-in screen with it intact.
+  if (p.startsWith("/pair")) return { name: "pair", code: new URLSearchParams(location.search).get("code") || "" };
   return { name: "home" };
 }
 
@@ -516,8 +543,21 @@ function principal(type, id) {
 
 // Sentence case in the DOM, capitals from CSS. A screen reader spells short all-caps tokens out
 // letter by letter — "L, I, V, E".
+/**
+ * A linked browser is somebody's own, reached through the extension. "stopped" is the wrong
+ * word for it: nothing here can start it, and the question an operator has is whether it is
+ * dialled in and whether anything is shared.
+ */
+function linkStatus(b) {
+  if (!b.link) return "link revoked";
+  if (!b.link.online) return "offline";
+  const n = b.link.sharedTabs.length;
+  return n ? `${n} tab${n === 1 ? "" : "s"} shared` : "online, nothing shared";
+}
+
 function badge(b) {
   if (b.control?.controllerType === "human") return h("span", { class: "badge human" }, "Human");
+  if (b.kind === "linked" && b.status !== "running") return h("span", { class: "badge idle" }, linkStatus(b));
   if (b.status === "running") return h("span", { class: "badge live" }, "Live");
   return h("span", { class: "badge idle" }, b.status || "stopped");
 }
@@ -569,6 +609,9 @@ async function loginView() {
         // with a real navigation, because /oauth/authorize is server-rendered.
         const next = new URLSearchParams(location.search).get("next");
         if (next && next.startsWith("/oauth/authorize")) location.href = next;
+        // Somebody mid-pairing signed in to approve a code. Sending them to the fleet would
+        // drop it, and the extension would sit waiting on an approval nobody can find.
+        else if (route().name === "pair") void render();
         else go("/");
       } catch (ex) {
         err.textContent = ex.message;
@@ -613,7 +656,10 @@ function card(b) {
   // The badge already says the status; this caption said "not running" over a browser that was
   // starting, and over one that had simply never produced a frame.
   const thumb = h("div", { class: "thumb" }, badge(b),
-    b.status === "starting" ? "starting…" : b.status === "stopping" ? "stopping…" : "no live view");
+    b.status === "starting" ? "starting…" : b.status === "stopping" ? "stopping…"
+      // Nothing on this side can wake somebody's laptop, so say who can.
+      : b.kind === "linked" ? (b.link?.online ? "its owner has not shared a tab" : "open this browser to reconnect")
+      : "no live view");
   if (b.status === "running") {
     const img = h("img", { alt: "", loading: "lazy", decoding: "async" });
     img.src = `/api/v1/browsers/${b.id}/thumbnail?t=${Date.now()}`;
@@ -636,7 +682,7 @@ function card(b) {
       // DOM is the detail page, and a fleet card that cannot tell you whose project it is makes
       // you open it to find out. Full value in the title, because the line is clamped.
       project ? h("div", { class: "card-project", title: project }, project) : null,
-      h("h3", {}, b.name),
+      h("h3", {}, b.name, b.kind === "linked" ? h("span", { class: "kind-tag", title: "A person's own browser, linked through the Tallylamp extension" }, "linked") : null),
       // Six identical grey lines was most of what made this card hard to scan. Owner and
       // reported source moved to the detail page; what stays is what tells you whether to click.
       h("div", { class: "meta" },
@@ -826,7 +872,7 @@ function paintBrowsers() {
         "div",
         { class: "sub" },
         state.browsers.length === 0
-          ? "No browsers yet. Create one, or let an agent call tallylamp_create_browser."
+          ? "No browsers yet. Create one, link the browser you already use, or let an agent call tallylamp_create_browser."
           : `Nothing matches “${q}”.`,
       ),
     );
@@ -872,6 +918,7 @@ async function homeView() {
             paintBrowsers();
           },
         }),
+        h("button", { class: "btn secondary", onClick: linkBrowserHelp }, "Link your own browser"),
         h("button", { class: "btn primary", onClick: () => act(createBrowser) }, "New browser"),
       ),
     ),
@@ -1150,7 +1197,7 @@ async function browserView(id, seq) {
         b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
         h("button", { class: "btn", disabled: b.status === "stopped", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, "Stop browser"),
         h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/restart`) }, "Restart"),
-        h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name) }, "Delete"),
+        h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name, b.kind === "linked") }, "Delete"),
       ),
     ),
     // Three short lines, not one dense block. The old banner was a 74-word paragraph that said
@@ -2290,7 +2337,16 @@ async function call(path) {
   });
 }
 
-async function destroyBrowser(id, name) {
+async function destroyBrowser(id, name, linked = false) {
+  // A linked browser's profile lives on its owner's machine and is not touched. Promising
+  // that logins will be lost would be untrue, and would scare people off a harmless cleanup.
+  if (linked) {
+    if (!confirm(`Delete "${name}"?\n\nThis removes it from Tallylamp and revokes its link. Nothing in the browser itself changes: its tabs, logins and history stay exactly as they are.`)) return;
+    return act(async () => {
+      await api(`/api/v1/browsers/${id}`, { method: "DELETE" });
+      go("/");
+    });
+  }
   // Name the browser, and say what actually goes: browsers.ts removes the profile directory AND
   // the download directory, which the old wording never mentioned.
   if (!confirm(`Delete "${name}"?\n\nIts profile and its downloaded files are removed, and its saved logins go with them. You will have to sign in to those sites again. This cannot be undone.`)) return;
@@ -2357,7 +2413,137 @@ function busy(on) {
   }
 }
 
-const TITLES = { home: "Browsers", agents: "Agents", seeds: "Saved profiles", security: "Security state", login: "Sign in" };
+/**
+ * How to link a browser. There is nothing to configure on this side: the extension starts the
+ * pairing and the approval lands at /pair. So this is three steps and the one value the
+ * person has to carry across, with a button to copy it.
+ */
+// Attached to every release under this one name by the release workflow, so "latest" always
+// resolves. The dashboard cannot build a versioned link: config.version is not the release.
+const LINK_EXTENSION_ZIP = "https://github.com/nxfi777/tallylamp/releases/latest/download/tallylamp-link.zip";
+
+function linkBrowserHelp() {
+  const address = location.host;
+  openModal("Link your own browser", (close) => [
+    h("h2", {}, "Link your own browser"),
+    h("p", { class: "sub" }, "Let an agent use a tab in the browser you already have open, with the logins it already has. You pick each tab, and you can take it back at any time."),
+    h("ol", { class: "steps" },
+      h("li", {}, h("a", { href: LINK_EXTENSION_ZIP, rel: "noopener" }, "Download Tallylamp Link"), " and unzip it somewhere it can stay. Chrome reads that folder every time it starts, so not your Downloads folder."),
+      h("li", {}, "In Chrome, Edge, Brave or another Chromium browser, open ", h("code", {}, "chrome://extensions"), ", turn on Developer mode, press Load unpacked and choose the ", h("code", {}, "tallylamp-link"), " folder."),
+      h("li", {}, "Click its toolbar icon and enter this server's address:",
+        h("div", { class: "copyrow" },
+          h("code", {}, address),
+          h("button", { class: "btn secondary", onClick: async (e) => { await navigator.clipboard.writeText(address); e.currentTarget.textContent = "Copied"; } }, "Copy"),
+        )),
+      h("li", {}, "Approve the code it shows you. That page opens by itself."),
+    ),
+    h("p", { class: "sub" }, "Firefox and Safari can't be linked. They give extensions no way to drive a tab."),
+    h("div", { class: "row modal-foot" }, h("button", { class: "btn primary", onClick: () => close() }, "Done")),
+  ]);
+}
+
+/**
+ * Approve or deny a browser that asked to be linked. The decision being made is "may this
+ * agent act as me in that browser", so the page puts those two facts next to each other and
+ * keeps everything else out of the way.
+ */
+async function pairView(code) {
+  const say = (...kids) => layout(h("div", { class: "pair" }, ...kids));
+  if (!code) {
+    return say(h("h1", {}, "Link a browser"),
+      h("p", { class: "sub" }, "This page approves a code from the Tallylamp Link extension. Open the extension in the browser you want to link and press Connect. It brings you back here with the code filled in."),
+      h("div", { class: "row" }, h("button", { class: "btn secondary", onClick: () => go("/") }, "Back to browsers")));
+  }
+  let pairing;
+  try {
+    ({ pairing } = await api(`/api/v1/links/pair/${encodeURIComponent(code)}`));
+  } catch (e) {
+    return say(h("h1", {}, "That code isn't waiting for approval"),
+      h("p", { class: "sub" }, e.status === 404
+        ? "Codes last 10 minutes and work once, so this one has expired or was already used. Press Connect in the extension again to get a new one."
+        : e.message),
+      h("div", { class: "row" }, h("button", { class: "btn secondary", onClick: () => go("/") }, "Back to browsers")));
+  }
+  if (pairing.state !== "pending") {
+    return say(h("h1", {}, pairing.state === "denied" ? "This request was denied" : "This browser is already linked"),
+      h("p", { class: "sub" }, pairing.state === "denied" ? "Nothing was linked. Press Connect in the extension to ask again." : "Nothing more to do here. Share a tab from the extension when you want an agent to use it."),
+      h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => go("/") }, "Go to browsers")));
+  }
+
+  // The agent most recently heard from is nearly always the one the operator is setting up,
+  // so it is preselected. With several agents and none ever heard from, nothing is: "who may
+  // act as me" is not a question to answer by whichever row the database returned first.
+  const agents = state.agents.filter((a) => a.enabled !== false)
+    .sort((a, b) => String(b.last_seen_at || "").localeCompare(String(a.last_seen_at || "")));
+  const preselect = agents.length === 1 ? agents[0] : agents.find((a) => a.last_seen_at) ?? null;
+  const err = h("div", { class: "err", role: "alert" });
+  const form = h("form", {
+    class: "pair-form",
+    onSubmit: async (e) => {
+      e.preventDefault();
+      err.textContent = "";
+      form.approve.disabled = true;
+      form.approve.textContent = "Linking…";
+      try {
+        const out = await api(`/api/v1/links/pair/${encodeURIComponent(pairing.userCode)}/approve`, {
+          method: "POST", body: { agentId: form.agent && form.agent.value !== "none" ? form.agent.value : undefined, name: form.browserName.value },
+        });
+        const who = agents.find((a) => a.id === form.agent?.value)?.name;
+        say(h("h1", {}, `${out.browser.name} is linked`),
+          h("p", { class: "sub" }, "Go back to that browser. The extension now says Connected. Open the tab you want to hand over and press Share this tab."),
+          h("p", { class: "sub" }, who
+            ? `${who} will see it in its browser list as “${out.browser.name}”. It can do nothing there until a tab is shared.`
+            : "No agent was chosen, so only this dashboard can watch it. Link again and pick an agent if you want one to drive it."),
+          h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => go("/") }, "Back to browsers")));
+      } catch (ex) {
+        err.textContent = ex.message;
+        form.approve.disabled = false;
+        form.approve.textContent = "Approve and link";
+      }
+    },
+  },
+    h("label", { for: "pair-name" }, "Name it"),
+    h("input", { id: "pair-name", name: "browserName", value: pairing.deviceName, maxlength: "60", required: "required" }),
+    agents.length ? [
+      h("label", { for: "pair-agent" }, "Which agent may drive it"),
+      h("select", { id: "pair-agent", name: "agent", required: "required" },
+        preselect ? null : h("option", { value: "", disabled: "disabled", selected: "selected", hidden: "hidden" }, "Choose an agent…"),
+        agents.map((a) => h("option", { value: a.id, selected: a === preselect ? "selected" : null }, a.name)),
+        h("option", { value: "none" }, "No agent, watch from this dashboard only")),
+    ] : h("p", { class: "sub" }, "You have no agents yet, so this browser will only be watchable from the dashboard. Create an agent first if you want one to drive it."),
+    err,
+    h("div", { class: "row pair-actions" },
+      h("button", { class: "btn primary", name: "approve", type: "submit" }, "Approve and link"),
+      h("button", {
+        class: "btn secondary", type: "button",
+        onClick: async () => {
+          await api(`/api/v1/links/pair/${encodeURIComponent(pairing.userCode)}/deny`, { method: "POST" }).catch(() => {});
+          say(h("h1", {}, "Request denied"), h("p", { class: "sub" }, "Nothing was linked, and the extension has been told."),
+            h("div", { class: "row" }, h("button", { class: "btn secondary", onClick: () => go("/") }, "Back to browsers")));
+        },
+      }, "Deny"),
+    ),
+  );
+
+  say(
+    h("h1", {}, "Link this browser?"),
+    h("p", { class: "sub" }, "Check this code matches the one in the extension. If you didn't just press Connect there, deny it."),
+    h("div", { class: "pair-code", "aria-label": `Pairing code ${pairing.userCode.split("").join(" ")}` }, pairing.userCode),
+    h("dl", { class: "kv" },
+      h("dt", {}, "Browser"), h("dd", {}, pairing.deviceName),
+      h("dt", {}, "Asking from"), h("dd", { class: "mono" }, pairing.remoteAddr || "unknown address"),
+      h("dt", {}, "Asked"), h("dd", {}, ago(pairing.createdAt)),
+    ),
+    h("div", { class: "pair-grant" },
+      h("h2", {}, "What linking allows"),
+      h("p", {}, "The agent can see and control tabs that are shared from the extension, one at a time. In those tabs it acts as whoever that browser is signed in as."),
+      h("p", {}, "It cannot reach tabs that were not shared, read the browser's cookie jar, upload files from that computer, or start anything while the browser is closed. You can revoke the link from this dashboard at any time."),
+    ),
+    form,
+  );
+}
+
+const TITLES = { pair: "Link a browser", home: "Browsers", agents: "Agents", seeds: "Saved profiles", security: "Security state", login: "Sign in" };
 
 let renderSeq = 0;
 
@@ -2384,6 +2570,7 @@ async function render() {
   if (!ok) return loginView();
   startEvents(); // we are authenticated by here, which is what /api/v1/events requires
   if (r.name === "browser") return browserView(r.id, seq);
+  if (r.name === "pair") return pairView(r.code);
   if (r.name === "agents") return agentsView();
   if (r.name === "seeds") return seedsView();
   if (r.name === "security") return securityView();

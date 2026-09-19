@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Tallylamp Link",
+  "short_name": "Tallylamp",
+  "version": "0.5.2",
+  "description": "Share a tab from this browser with an agent on your own Tallylamp server. You choose the tab, and you can take it back in one click.",
+  "minimum_chrome_version": "125",
+  "permissions": [
+    "debugger",
+    "tabs",
+    "tabGroups",
+    "storage",
+    "alarms",
+    "sidePanel"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Tallylamp Link",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  }
+}

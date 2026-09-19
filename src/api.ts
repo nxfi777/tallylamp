@@ -20,7 +20,8 @@ import { rateLimit } from "./rate-limit.js";
 import type { BrowserManager } from "./browsers.js";
 import { inbox, answerRequest, revokeGrant } from "./lending.js";
 import { assertMaySeeTunnels, createTunnel, listTunnels, revokeTunnel, tunnelIsConnected } from "./tunnels.js";
-import { listActivity, listAudit } from "./audit.js";
+import { audit, listActivity, listAudit } from "./audit.js";
+import { approvePairing, denyPairing, describePairing, dropLinksFor, pollPairing, startPairing } from "./linked.js";
 import { hub } from "./events.js";
 import { issueViewerTicket } from "./viewer.js";
 import { openApiSpec } from "./openapi.js";
@@ -159,9 +160,56 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     res.json({ principal: req.principal });
   });
 
+  // Pairing a linked browser, the extension's half. These two are unauthenticated by design:
+  // the caller is an extension that has no credential yet, which is the whole reason it is
+  // calling. Neither returns anything an approval did not already authorize, and neither reads
+  // a cookie, which is what makes the wildcard CORS below safe rather than lazy -- a
+  // chrome-extension:// origin differs per install, so there is no list to check against.
+  const openCors = (req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "content-type");
+    res.setHeader("Access-Control-Max-Age", "600");
+    if (req.method === "OPTIONS") return void res.status(204).end();
+    next();
+  };
+  app.use("/api/v1/links/pair", (req, res, next) => (req.path === "/" || req.path === "/poll" ? openCors(req, res, next) : next()));
+  app.post("/api/v1/links/pair", (req, res) => {
+    rateLimit(`link-pair:${req.ip}`, 10, 5);
+    res.json(startPairing({ deviceName: req.body?.deviceName, userAgent: req.header("user-agent"), remoteAddr: req.ip }));
+  });
+  app.post("/api/v1/links/pair/poll", (req, res) => {
+    rateLimit(`link-poll:${req.ip}`, 90, 30);
+    res.json(pollPairing(typeof req.body?.deviceCode === "string" ? req.body.deviceCode : ""));
+  });
+
   const api = app;
 
   api.use("/api/v1", requireAuth, csrf);
+
+  // The dashboard's half. Admin only: approving a link grants standing access to somebody's
+  // signed-in browser, which no agent should be able to grant itself.
+  api.get("/api/v1/links/pair/:code", requireAdmin, (req, res) => {
+    rateLimit(`link-lookup:${req.ip}`, 30, 10);
+    res.json({ pairing: describePairing(req.params.code) });
+  });
+  api.post("/api/v1/links/pair/:code/approve", requireAdmin, (req, res) => {
+    const out = approvePairing(browsers, req.principal!, {
+      userCode: req.params.code,
+      agentId: typeof req.body?.agentId === "string" && req.body.agentId ? req.body.agentId : undefined,
+      name: typeof req.body?.name === "string" ? req.body.name : undefined,
+    });
+    res.status(201).json({ ...out, browser: browsers.publicView(browsers.row(out.browserId)) });
+  });
+  api.post("/api/v1/links/pair/:code/deny", requireAdmin, (req, res) => {
+    denyPairing(req.principal!, req.params.code);
+    res.json({ ok: true });
+  });
+  api.delete("/api/v1/browsers/:id/link", requireAdmin, (req, res) => {
+    browsers.row(req.params.id);
+    dropLinksFor(req.params.id, "revoked from the dashboard");
+    audit({ actorType: "admin", actorId: "admin", action: "browser.link.revoked", targetType: "browser", targetId: req.params.id });
+    res.json({ browser: browsers.publicView(browsers.row(req.params.id)) });
+  });
 
   api.get("/api/v1/status", (req, res) => {
     res.json({

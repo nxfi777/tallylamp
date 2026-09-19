@@ -107,3 +107,30 @@ jobs:
         with:
           name: image-digest
           path: image-digest.txt
+
+  # Tallylamp Link, the browser extension for linked browsers, rides along as a release asset
+  # under a fixed name, so /releases/latest/download/tallylamp-link.zip always resolves. It
+  # waits for the image job: a zip should never appear on a release whose server failed its
+  # checks. Only this job can write to the release; the image job cannot.
+  extension:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Package Tallylamp Link
+        run: |
+          mkdir -p .pack
+          cp -R extension .pack/tallylamp-link
+          rm .pack/tallylamp-link/README.md
+          (cd .pack && zip -r -X ../tallylamp-link.zip tallylamp-link)
+          unzip -l tallylamp-link.zip
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" tallylamp-link.zip --repo "$GITHUB_REPOSITORY"

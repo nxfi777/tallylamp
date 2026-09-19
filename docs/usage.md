@@ -93,6 +93,15 @@ JPEG quality from 70 to 55 saved about 18%. Those observations informed the orde
 of the quality adjustments. See the [viewer settings](railway.md#viewer-settings)
 for the current limits.
 
+## Use your own browser
+
+A linked browser is your own Chrome, Edge, Brave or other Chromium browser,
+reached through the Tallylamp Link extension. Choose **Link your own browser** on
+the Browsers page for the three setup steps. After that, share a tab from the
+extension's side panel and the agent that owns the linked browser can use it.
+It gets no other tab. [Linked browsers](linked-browsers.md) covers what the agent
+can and cannot reach, and what a linked browser does not support.
+
 ## Record a page interaction
 
 An agent can call `tallylamp_screencast_start`, perform an interaction, then call

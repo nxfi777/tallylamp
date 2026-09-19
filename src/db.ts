@@ -252,6 +252,40 @@ CREATE TABLE IF NOT EXISTS browser_tunnels (
   bytes_down INTEGER NOT NULL DEFAULT 0
 );
 
+-- The standing credential for ONE linked browser: a person's own Chromium, reached through
+-- the Tallylamp extension over a socket it dials outward. One live row per browser. The
+-- token is minted when the extension claims an approved pairing, so it exists in plaintext
+-- only in that one response and in the extension's storage.
+CREATE TABLE IF NOT EXISTS browser_links (
+  id TEXT PRIMARY KEY,
+  browser_id TEXT NOT NULL,
+  token_hash TEXT UNIQUE,
+  device_name TEXT NOT NULL,
+  user_agent TEXT,
+  approved_by_type TEXT NOT NULL,
+  approved_by_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  connected_at TEXT,
+  last_seen_at TEXT,
+  revoked_at TEXT
+);
+
+-- A pairing in flight. The extension holds the device secret and shows the short user code;
+-- a signed-in admin approves the code. Nothing here is a credential: the user code only
+-- names a request, and the device secret can only collect a token somebody else approved.
+CREATE TABLE IF NOT EXISTS link_pairings (
+  id TEXT PRIMARY KEY,
+  user_code TEXT NOT NULL UNIQUE,
+  device_hash TEXT NOT NULL UNIQUE,
+  device_name TEXT NOT NULL,
+  user_agent TEXT,
+  remote_addr TEXT,
+  state TEXT NOT NULL DEFAULT 'pending',
+  link_id TEXT,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
 `;
 
 // Indexes run AFTER migrate(): an index on a column that only the migration adds would
@@ -269,6 +303,7 @@ CREATE INDEX IF NOT EXISTS idx_requests_browser ON browser_requests(browser_id, 
 CREATE INDEX IF NOT EXISTS idx_requests_requester ON browser_requests(requester_id, state);
 CREATE INDEX IF NOT EXISTS idx_tunnels_browser ON browser_tunnels(browser_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tunnels_authority ON browser_tunnels(browser_id, host, port) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_links_browser ON browser_links(browser_id);
 CREATE INDEX IF NOT EXISTS idx_browser_site_access_browser ON browser_site_access(browser_id);
 CREATE INDEX IF NOT EXISTS idx_seed_site_access_seed ON seed_site_access(seed_id);
 `;
@@ -310,6 +345,10 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   ["browsers", "proxy_json", "TEXT"],
   ["browsers", "extensions_enabled", "INTEGER NOT NULL DEFAULT 0"],
   ["browsers", "agent_desktop_enabled", "INTEGER NOT NULL DEFAULT 0"],
+  // 'managed' is a Chrome this process launches; 'linked' is somebody's own browser reached
+  // through the extension. Everything that needs launch flags, a profile directory or an X
+  // display keys off this, because none of those exist for a browser we did not start.
+  ["browsers", "kind", "TEXT NOT NULL DEFAULT 'managed'"],
   ["seeds", "metadata_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["seeds", "updated_at", "TEXT"],
 ];

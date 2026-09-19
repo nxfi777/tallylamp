@@ -693,3 +693,28 @@ body.busy::before {
 .modal-box .cmd-label { margin: 0.9rem 0 0; }
 .modal-box .modal-foot { margin-top: 1rem; align-items: center; }
 .modal-box .token { margin: 0.5rem 0 0.6rem; }
+
+/* Linked browsers: the approval page and its few extras. One column, read top to bottom:
+   the code to check, who is asking, what it grants, then the decision. */
+.pair { max-width: 34rem; display: flex; flex-direction: column; gap: 1rem; }
+.pair h1 { margin: 0; }
+.pair-code {
+  font: 600 1.9rem/1 var(--mono); letter-spacing: 0.08em; text-align: center;
+  padding: 1.1rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
+}
+.pair-grant { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.85rem 1rem; font-size: 0.875rem; }
+.pair-grant h2 { margin: 0 0 0.35rem; font-size: 0.875rem; }
+.pair-grant p { margin: 0; color: var(--muted); }
+.pair-grant p + p { margin-top: 0.5rem; }
+.pair-form { display: flex; flex-direction: column; gap: 0.3rem; }
+.pair-form label { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+.pair-form select, .pair-form input { width: 100%; }
+.pair-actions { margin-top: 0.9rem; }
+.kind-tag {
+  margin-left: 0.45rem; padding: 0 0.4rem; vertical-align: 0.1em;
+  font-size: 0.7rem; font-weight: 500; color: var(--muted);
+  border: 1px solid var(--line-strong); border-radius: 99px;
+}
+.steps { margin: 1rem 0 0.75rem; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.9rem; }
+.copyrow { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
+.copyrow code { flex: 1; padding: 0.4rem 0.55rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); overflow-wrap: anywhere; }

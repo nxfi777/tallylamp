@@ -133,7 +133,7 @@ export function createApp(browsers: BrowserManager, mcp: McpHandler): express.Ex
   mountApi(app, browsers);
 
   app.use(express.static(dashboardDir));
-  app.get(["/", "/login", "/browsers", "/browsers/:id", "/agents", "/seeds", "/security"], (_req, res) => {
+  app.get(["/", "/login", "/browsers", "/browsers/:id", "/agents", "/seeds", "/security", "/pair"], (_req, res) => {
     res.sendFile(path.join(dashboardDir, "index.html"));
   });
 

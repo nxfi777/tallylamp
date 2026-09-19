@@ -370,6 +370,10 @@ export function enforceAdminSecretRotation(): void {
   if (row) {
     db.prepare(`DELETE FROM sessions`).run();
     const res = db.prepare(`UPDATE credentials SET revoked_at = ? WHERE grant_id IS NOT NULL AND revoked_at IS NULL`).run(nowIso());
+    // A link token is the same kind of thing: standing access that exists only because an
+    // admin holding the OLD secret approved it. Plain SQL, not linked.ts -- this runs at boot,
+    // before any socket exists to cut, and linked.ts already imports this module.
+    db.prepare(`UPDATE browser_links SET revoked_at = ? WHERE revoked_at IS NULL`).run(nowIso());
     audit({
       actorType: "admin",
       actorId: "admin",

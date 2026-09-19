@@ -42,6 +42,8 @@ password. You choose when to upgrade the application.
   a short-lived loopback tunnel to one private address on your machine. Agents
   need a scope they do not get by default.
 - Install a Chrome extension from the Web Store in Full browser.
+- Let an agent use a tab in your own Chrome, with the logins it already has,
+  through the Tallylamp Link extension.
 
 ## Dependencies for Tallylamp
 
@@ -84,6 +86,22 @@ Allow agent control is a separate toggle, off by default. It lets the owning
 agent see and use that native UI, including settings and host-file dialogs.
 Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` only if you trust every new agent-owned
 browser with that access. The published image includes ffmpeg and xdotool.
+
+## Use your own browser
+
+Your agent can also use a tab in your own Chrome, Edge, Brave or other Chromium
+browser. Download [Tallylamp Link](https://github.com/nxfi777/tallylamp/releases/latest/download/tallylamp-link.zip),
+unzip it and load it at `chrome://extensions` with Developer mode on. Enter your
+Railway domain in its side panel, approve the code in the dashboard, then share
+a tab. The extension connects out to your domain, so Railway needs no extra
+variable or port.
+
+The agent gets only the tabs you share, and you can take them back at any time.
+Inside a shared tab it acts as you, on whatever that tab is signed in to. The
+extension blocks the browser-wide cookie jar, other tabs and local files.
+Firefox and Safari cannot be linked. The
+[linked browser guide](https://github.com/nxfi777/tallylamp/blob/main/docs/linked-browsers.md)
+covers the limits.
 
 ## Reach localhost on your own machine
 
@@ -177,6 +195,7 @@ Tallylamp does not bypass CAPTCHAs or guarantee that sites will accept automatio
 - [Browser realism and emulation limits](https://github.com/nxfi777/tallylamp/blob/main/docs/browser-realism.md)
 - [Railway configuration](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md)
 - [Per-browser proxy setup](https://github.com/nxfi777/tallylamp/blob/main/docs/proxies.md)
+- [Linked browsers](https://github.com/nxfi777/tallylamp/blob/main/docs/linked-browsers.md)
 - [Security model](https://github.com/nxfi777/tallylamp/blob/main/docs/security.md)
 - [MCP compatibility](https://github.com/nxfi777/tallylamp/blob/main/docs/mcp-compatibility.md)
 - [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)

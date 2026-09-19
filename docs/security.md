@@ -49,6 +49,19 @@ A `tl_tn_…` token authenticates a WebSocket connection to one tunnel binding.
 It is shown once, stored as a SHA-256 hash in `browser_tunnels`, and refused
 as a bearer credential on both `/api/v1` and `/mcp`.
 
+### Link tokens
+
+A `tl_ln_…` token authenticates the Tallylamp Link extension's WebSocket for one
+[linked browser](linked-browsers.md). It is minted when the extension collects an
+approved pairing, shown once, stored as a SHA-256 hash in `browser_links`, and
+refused as a bearer credential on both `/api/v1` and `/mcp`. It travels in the
+socket's first message, never in the URL. Revoking the link, deleting the browser
+or rotating `ADMIN_SECRET` ends it.
+
+The pairing code a person reads off the extension is not a credential. It names a
+request that only a signed-in administrator can approve, lasts 10 minutes and
+works once.
+
 ### Viewer tickets and control leases
 
 Viewer tickets are 192-bit random values. They are hashed, scoped to one browser,
@@ -220,6 +233,25 @@ Chrome treats `http://127.0.0.1:PORT` as potentially trustworthy, so a page serv
 there can register a service worker and write storage. Those changes survive the
 tunnel's closure, and a later binding to the same authority inherits them.
 Delete the browser if a tunnel served content you do not trust.
+
+## Linked browsers
+
+A linked browser is somebody's own browser and profile. An agent driving a shared
+tab acts as that person on whatever the tab is signed in to, and with the site
+limit off it can navigate the tab to any other site they are signed in to. Approve
+a link only for an agent you would trust with that.
+
+The limits that do hold are enforced in the extension, because the server is the
+party being limited. The extension only attaches to tabs a person shared, only to
+ordinary `http` and `https` pages, and never to its own pages. It refuses CDP
+methods that reach past a shared tab: the browser-wide cookie jar, other tabs,
+other origins' storage, files on disk and download paths. The list is in
+`extension/guard.js`. It never re-attaches after Cancel on Chrome's debugging bar,
+and it hands every tab back if the server is unreachable for a minute.
+
+A compromised server, or a stolen link token, can drive the tabs that are shared
+at that moment and nothing else. It cannot share a tab, and it cannot widen a
+site limit. See [linked browsers](linked-browsers.md).
 
 ## Process isolation
 

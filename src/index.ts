@@ -10,6 +10,7 @@ import { sweepLending } from "./lending.js";
 import { createApp } from "./server.js";
 import { attachViewerUpgrade } from "./viewer.js";
 import { attachTunnelUpgrade, closeAllTunnels, sweepTunnels } from "./tunnels.js";
+import { attachLinkUpgrade, closeAllLinks, sweepLinks } from "./linked.js";
 
 async function main(): Promise<void> {
   process.on("unhandledRejection", (reason) => {
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
   const server = http.createServer(app);
   attachViewerUpgrade(server, browsers);
   attachTunnelUpgrade(server);
+  attachLinkUpgrade(server, browsers);
 
   const reap = setInterval(() => {
     pruneRateLimits();
@@ -66,6 +68,11 @@ async function main(): Promise<void> {
       sweepTunnels();
     } catch (e) {
       log.warn("tunnel sweep failed", { error: (e as Error).message });
+    }
+    try {
+      sweepLinks();
+    } catch (e) {
+      log.warn("link sweep failed", { error: (e as Error).message });
     }
     void mcp.reapIdleSessions().then(() => browsers.reapIdle());
   }, 15_000);
@@ -98,6 +105,7 @@ async function main(): Promise<void> {
     // Kill the bridge children before the browsers, or they outlive the process.
     await mcp.closeAll();
     closeAllTunnels();
+    closeAllLinks();
     await browsers.shutdown();
     process.exit(0);
   };

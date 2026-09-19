@@ -80,6 +80,8 @@ Offer a saved profile (called a profile template by the compatibility tools) whe
 
 For extension toolbar popups, side panels and native dialogs, use tallylamp_desktop_screenshot followed by tallylamp_desktop_action. Check agentDesktopEnabled in the browser record first. If false, ask the user or administrator to open that browser in the dashboard, go to Extensions, and turn on Allow agent control. Explain that this grants full Chrome UI access, including settings and host-file dialogs. Wait for approval; do not repeatedly retry, change host configuration, or try to grant yourself access. An operator may preauthorize newly created agent-owned browsers with TALLYLAMP_AGENT_DESKTOP_DEFAULT=1; the saved agentDesktopEnabled field is authoritative for each browser. This does not enable or install extensions. Borrowing does not grant native access. Use fresh screenshots to locate controls; screenshot metadata gives image and screen dimensions for coordinate scaling. Never use native input while a human holds control. Do not install, remove or change extension permissions without the user's explicit request. The tools grant full native UI access, not an extension-only sandbox.
 
+A browser whose kind is "linked" is a person's own browser, reached through the Tallylamp Link extension. You can only use tabs that person has shared, and link.sharedTabs lists them. If link.online is false, or no tab is shared, you cannot fix that yourself: ask the user to open that browser and press Share this tab in the extension, then continue. A tab may be shared for one site only, and navigating away from it is then refused; ask the user to share it for any site if the task needs that. On a linked browser you cannot upload local files, read the browser-wide cookie jar, resize or close the window, close tabs you did not open, save the profile, or use a proxy or tunnel. The person can stop sharing at any moment, so expect a tab to disappear mid-task and say so plainly when it does. tallylamp_stop_browser hands every shared tab back to them.
+
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
 const PROXY_INPUT = {
@@ -1120,7 +1122,10 @@ export class McpGateway {
     if (!this.browsers.isHumanControlled(row.id)) {
       this.browsers.acquireControl(row.id, "agent", session.principal.id);
     }
-    if (config.fakeChrome) {
+    // The fake stands in for a Chrome we would have launched. A linked browser's endpoint is
+    // the real shim whatever this flag says, so it gets the real bridge -- which is also what
+    // lets the suite prove Puppeteer can actually connect through it.
+    if (config.fakeChrome && row.kind !== "linked") {
       log.info("mcp bound fake browser (no chrome-devtools-mcp child)", { session: session.id, browser: row.id });
       return;
     }

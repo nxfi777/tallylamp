@@ -16,7 +16,7 @@ so the agent can continue where it left off.
 disk. The software is free; you pay for the infrastructure you run it on.
 
 [Website](https://tallylamp.dev) · [Get started](#get-started) · [Connect an agent](#connect-an-agent) ·
-[User guide](docs/usage.md) · [Per-browser proxies](docs/proxies.md) · [Security model](docs/security.md)
+[User guide](docs/usage.md) · [Per-browser proxies](docs/proxies.md) · [Linked browsers](docs/linked-browsers.md) · [Security model](docs/security.md)
 
 ## When to use it
 
@@ -262,6 +262,15 @@ browser can reach the bound address, so close it when the job is done. Ctrl-C
 ends a tunnel the client opened. A tunnel an agent opened stays until it expires,
 the agent closes it, or you close it in the dashboard. See [loopback tunnels](docs/usage.md#loopback-tunnels)
 and the [security rules](docs/security.md#loopback-tunnels).
+
+### Use the browser you already have
+
+An agent can also drive a tab in your own Chrome, Edge, Brave or other Chromium
+browser. Install [Tallylamp Link](https://github.com/nxfi777/tallylamp/releases/latest/download/tallylamp-link.zip),
+approve the browser once in the dashboard, then share tabs one at a time from its
+side panel. One click takes a tab back. It suits sites that challenge a datacenter
+IP, and pages you already have open. It needs Tallylamp 0.6.0 or later. Firefox
+and Safari cannot be linked. See [linked browsers](docs/linked-browsers.md).
 
 ## How it runs
 

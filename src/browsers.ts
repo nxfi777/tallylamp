@@ -17,6 +17,8 @@ import { startEgressProxy, type EgressProxy } from "./egress-proxy.js";
 import { parseBrowserProxy, proxyView } from "./browser-proxy.js";
 import { dialTunnel, dropTunnelsFor } from "./tunnels.js";
 import { startFakeChrome } from "./fake-chrome.js";
+import { startLinkedRuntime } from "./linked-cdp.js";
+import { dropLinksFor, linkView, liveLink } from "./linked.js";
 import { activeGrant, grantsFor } from "./lending.js";
 import { SiteDetector } from "./site-detection.js";
 import {
@@ -57,6 +59,8 @@ export type BrowserRow = {
   proxy_json: string | null;
   extensions_enabled: number;
   agent_desktop_enabled: number;
+  /** 'managed': a Chrome this process launched. 'linked': a person's own browser, via the extension. */
+  kind: string;
 };
 
 export type ControlState = {
@@ -79,7 +83,8 @@ export class BrowserManager {
   private snapshotCleanup = new Set<string>();
   private mcpAttached = new Map<string, number>();
   private viewers = new Map<string, number>();
-  private fakeClosers = new Map<string, () => Promise<void>>();
+  /** Runtimes that are a listener in this process rather than a Chrome to kill: the test fake, and a linked browser's CDP shim. */
+  private shimClosers = new Map<string, () => Promise<void>>();
   /** Notified when a browser stops or is destroyed, so the MCP bridge can be torn down. */
   private onGone?: (browserId: string) => Promise<void> | void;
   /**
@@ -192,6 +197,9 @@ export class BrowserManager {
    */
   setLendable(id: string, lendable: boolean, principal: Principal): BrowserRow {
     const row = this.row(id);
+    // Auto-lending hands a profile over because its owner went quiet. That is a judgement an
+    // operator can make about a Chrome in a container, never about somebody's own browser.
+    if (lendable) this.assertManaged(id, "lending");
     if (principal.type !== "admin") {
       if (row.owner_id !== principal.id) throw Err.unauthorized("browser is owned by another principal");
       requireScope(principal, "browser:lend");
@@ -271,7 +279,9 @@ export class BrowserManager {
    * fingerprint tell than a letterboxed viewer, so every resize request is clamped to this.
    */
   screenSize(id: string): { width: number; height: number } {
-    return this.runtimes.get(id)?.screen ?? config.viewerSize;
+    const screen = this.runtimes.get(id)?.screen;
+    // A linked browser has no X screen to measure; its shim reports 0x0.
+    return screen && screen.width > 0 ? screen : config.viewerSize;
   }
 
   assertAccess(p: Principal, browser: BrowserRow, kind: "read" | "control" | "delete"): void {
@@ -384,6 +394,67 @@ export class BrowserManager {
     return this.row(id);
   }
 
+  /**
+   * A row for a browser this process will never launch. It still gets a (permanently empty)
+   * profile directory: recoverOnBoot and destroy both touch `profile_path`, and an empty
+   * string there is one refactor away from an rm -rf on the wrong path.
+   */
+  createLinked(input: { owner: Principal; approvedBy: Principal; name: string }): BrowserRow {
+    if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
+    const id = randomBytes(8).toString("hex");
+    const name = input.name.trim().slice(0, 80) || `linked-${id.slice(0, 6)}`;
+    let slug = slugify(name, `b-${id.slice(0, 8)}`);
+    if (this.bySlug(slug)) slug = `${slug}-${id.slice(0, 4)}`;
+    if (!isValidName(slug)) slug = `b-${id.slice(0, 8)}`;
+    const profile = profileDir(id);
+    mkdirSync(profile, { recursive: true });
+    getDb()
+      .prepare(
+        `INSERT INTO browsers(
+          id, name, slug, owner_type, owner_id, created_by_type, created_by_principal_id, created_via,
+          created_at, persistent, status, profile_path, metadata_json, labels_json, kind
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'dashboard', ?, 1, 'stopped', ?, ?, '{}', 'linked')`,
+      )
+      .run(
+        id,
+        name,
+        slug,
+        input.owner.type,
+        input.owner.id,
+        input.approvedBy.type,
+        input.approvedBy.id,
+        nowIso(),
+        profile,
+        JSON.stringify(sanitizeMetadata({ purpose: "A person's own browser, shared tab by tab through the Tallylamp extension" })),
+      );
+    audit({
+      actorType: input.approvedBy.type,
+      actorId: input.approvedBy.id,
+      action: "browser.created",
+      targetType: "browser",
+      targetId: id,
+      detail: { via: "dashboard", kind: "linked", owner: input.owner.id },
+    });
+    hub.emitEvent("browser.created", { name, slug, owner: input.owner.id }, id);
+    return this.row(id);
+  }
+
+  /** Things that need launch flags, a profile on this disk, or an X display. */
+  assertManaged(id: string, what: string): void {
+    if (this.row(id).kind === "linked") {
+      throw Err.invalid(`${what} is not available on a linked browser: Tallylamp did not launch it and does not hold its profile`);
+    }
+  }
+
+  /**
+   * The extension's socket went away: the laptop slept, the browser quit, the link was
+   * revoked. Not a crash, and nothing to clean up on the far side, which is already gone.
+   */
+  async linkDropped(id: string): Promise<void> {
+    if (!this.runtimes.has(id)) return;
+    await this.stopInternal(id).catch((e) => log.warn("linked browser stop failed", { id, error: (e as Error).message }));
+  }
+
   async ensureRunning(id: string): Promise<ChromeRuntime> {
     if (this.profileSaves.has(id)) throw Err.browserUnavailable("profile is being saved; retry when saving finishes");
     return this.ensureRunningInternal(id);
@@ -402,7 +473,12 @@ export class BrowserManager {
     // Between runtimes.set() and the finally below an id sits in both maps, so the cap is
     // briefly one stricter than asked -- the safe direction to be wrong in.
     const occupied = new Set([...this.runtimes.keys(), ...this.starting.keys(), ...this.resumeReservations]);
-    if (occupied.size >= config.maxBrowsers && !occupied.has(id)) {
+    // The cap is a memory budget for Chromes on this host. A linked browser runs on somebody
+    // else's machine and costs a listener, so it neither counts nor is refused.
+    const kindOf = (b: string) => (getDb().prepare(`SELECT kind FROM browsers WHERE id = ?`).get(b) as { kind: string } | undefined)?.kind;
+    const linked = kindOf(id) === "linked";
+    for (const other of occupied) if (other !== id && kindOf(other) === "linked") occupied.delete(other);
+    if (!linked && occupied.size >= config.maxBrowsers && !occupied.has(id)) {
       throw Err.fleetFull(`fleet is full (max ${config.maxBrowsers})`);
     }
     const p = this.start(id);
@@ -419,10 +495,24 @@ export class BrowserManager {
     this.setStatus(id, "starting");
     hub.emitEvent("browser.starting", {}, id);
     try {
-      const rt = config.fakeChrome
+      const rt = row.kind === "linked"
+        ? await (async () => {
+            // "Start" cannot launch anything here. Either the extension is dialled in or it
+            // is not, and the agent needs to be told which so it can ask the right person.
+            const peer = liveLink(id);
+            if (!peer) {
+              throw Err.browserUnavailable(
+                `${row.name} is a linked browser and it is offline. Ask its owner to open it and check the Tallylamp extension says Connected.`,
+              );
+            }
+            const shim = await startLinkedRuntime(peer);
+            this.shimClosers.set(id, shim.close);
+            return shim.runtime;
+          })()
+        : config.fakeChrome
         ? await (async () => {
             const fake = await startFakeChrome();
-            this.fakeClosers.set(id, fake.close);
+            this.shimClosers.set(id, fake.close);
             return fake.runtime;
           })()
         : await (async () => {
@@ -453,7 +543,9 @@ export class BrowserManager {
       this.runtimes.set(id, rt);
       let version: string | null = null;
       try {
-        version = await chromeVersion();
+        // chromeVersion() reads the binary on this host, which says nothing about a browser
+        // on somebody's laptop. The extension reported its own.
+        version = row.kind === "linked" ? liveLink(id)?.product ?? null : await chromeVersion();
       } catch {
         /* ignore */
       }
@@ -467,6 +559,11 @@ export class BrowserManager {
       return rt;
     } catch (e) {
       await this.closeProxy(id);
+      if (row.kind === "linked") {
+        // Offline is the ordinary state of a laptop, not a fault to page anybody about.
+        this.setStatus(id, "stopped");
+        throw e;
+      }
       this.setStatus(id, "crashed");
       hub.emitEvent("browser.crashed", { error: (e as Error).message }, id);
       throw e;
@@ -494,10 +591,15 @@ export class BrowserManager {
     const rt = this.runtimes.get(id);
     this.setStatus(id, "stopping");
     if (rt) {
-      const fake = this.fakeClosers.get(id);
+      const fake = this.shimClosers.get(id);
+      // Stopping a linked browser hands every shared tab back. Closing only the listener
+      // would leave the debugger attached and Chrome's "is debugging this browser" bar up,
+      // with nothing on this side able to drive it: the worst of both. Best effort, because
+      // the usual reason for being here is that the far end has already gone.
+      await liveLink(id)?.call("unshare.all", { reason: "stopped from Tallylamp" }).catch(() => undefined);
       if (fake) {
         await fake();
-        this.fakeClosers.delete(id);
+        this.shimClosers.delete(id);
       } else {
         await stopRuntime(rt);
       }
@@ -521,6 +623,10 @@ export class BrowserManager {
     // Bindings survive a stop/start -- a restart is routine and the tunnel is to a machine,
     // not to Chrome -- but they must not outlive the browser they were scoped to.
     dropTunnelsFor(id);
+    // Revoked before the row goes: the extension's token must stop working the moment the
+    // browser it was scoped to stops existing, not at the next sweep.
+    dropLinksFor(id, "browser deleted");
+    getDb().prepare(`DELETE FROM browser_links WHERE browser_id = ?`).run(id);
     getDb().prepare(`DELETE FROM control_leases WHERE browser_id = ?`).run(id);
     getDb().prepare(`DELETE FROM activity_events WHERE browser_id = ?`).run(id);
     getDb().prepare(`DELETE FROM browser_tunnels WHERE browser_id = ?`).run(id);
@@ -561,6 +667,7 @@ export class BrowserManager {
 
   updateProxy(id: string, input: unknown, principal: Principal): BrowserRow {
     const row = this.row(id);
+    this.assertManaged(id, "a proxy");
     this.assertAccess(principal, row, "control");
     // A loan grants driving, not permission to change the owner's network route.
     if (principal.type !== "admin" && (row.owner_type !== "agent" || row.owner_id !== principal.id)) {
@@ -582,6 +689,7 @@ export class BrowserManager {
   updateExtensions(id: string, enabled: boolean, principal: Principal): BrowserRow {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can enable extensions");
     const row = this.row(id);
+    if (enabled) this.assertManaged(id, "installing extensions");
     if (enabled && !config.fullBrowser) throw Err.invalid("extension support requires a real browser on a dedicated Xvfb display");
     if (this.isHumanControlled(id) || this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) ||
         !["stopped", "crashed"].includes(row.status)) {
@@ -597,6 +705,7 @@ export class BrowserManager {
   updateAgentDesktop(id: string, enabled: boolean, principal: Principal): BrowserRow {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can grant native browser access");
     const row = this.row(id);
+    if (enabled) this.assertManaged(id, "native desktop access");
     if (enabled && !config.fullBrowser) throw Err.invalid("native browser access requires a dedicated Xvfb display");
     if (enabled && row.owner_type !== "agent") throw Err.invalid("native agent access can only be granted to an agent-owned browser");
     getDb().prepare("UPDATE browsers SET agent_desktop_enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
@@ -778,6 +887,10 @@ export class BrowserManager {
       sandboxStatus: row.sandbox_status,
       gpuStatus: row.gpu_status,
       lastActivityAt: row.last_activity_at,
+      kind: row.kind === "linked" ? "linked" : "managed",
+      // Null for a managed browser. For a linked one this is what "can I use it right now"
+      // turns on: whether its extension is dialled in, and which tabs its owner has shared.
+      link: row.kind === "linked" ? linkView(row.id) : null,
       control,
       lendable: row.lendable === 1,
       // Who is currently holding a loan of this browser. Provenance stays the authenticated
@@ -810,6 +923,14 @@ export class BrowserManager {
         this.runtimes.delete(id);
         this.windowContents.delete(id);
         await this.closeProxy(id);
+        if (this.row(id).kind === "linked") {
+          // linkDropped() normally gets here first. This is the backstop, and a laptop that
+          // went to sleep has not crashed.
+          this.shimClosers.delete(id);
+          this.setStatus(id, "stopped");
+          hub.emitEvent("browser.stopped", {}, id);
+          continue;
+        }
         this.setStatus(id, "crashed");
         hub.emitEvent("browser.crashed", { reason: "process exited" }, id);
         continue;
@@ -837,6 +958,7 @@ export class BrowserManager {
 
   async snapshotSeed(browserId: string, name: string, principal: Principal,
     options: { seedId?: string; metadata?: unknown } = {}): Promise<SavedProfileResult> {
+    this.assertManaged(browserId, "saving a profile");
     // Publishing makes every login reusable. A loan grants driving, never export.
     // seed:write is an explicit grant to publish owned browsers and overwrite
     // their linked shared snapshot; seed:use alone is deliberately read-only.
@@ -991,6 +1113,7 @@ export class BrowserManager {
     const row = this.row(browserId);
     // Do not disclose another browser's linkage/name before authorization.
     this.assertAccess(principal, row, "control");
+    this.assertManaged(browserId, "saving a profile");
     const linked = this.linkedProfile(browserId);
     const profileId = options.asNew ? undefined : options.profileId ?? linked?.id;
     if (options.updateOnly && !profileId) throw Err.invalid("browser has no saved profile; use tallylamp_save_profile first");

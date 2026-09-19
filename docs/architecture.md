@@ -111,6 +111,17 @@ Callers can inspect `retryable` without parsing the message. Read-only tools
 such as `take_snapshot` and `take_screenshot` keep working, and the MCP session
 stays open.
 
+## Linked browsers
+
+A linked browser is not launched here. The Tallylamp Link extension in a person's
+own Chromium dials out to `/api/v1/links/connect`, and `src/linked-cdp.ts` puts a
+loopback CDP endpoint in front of that socket. It is the third `ChromeRuntime`
+factory beside `launchChrome` and the test fake, so the MCP child, the viewer and
+the thumbnailer reach it the way they reach any other browser. `browsers.kind`
+is `linked` for these rows. They take no fleet slot, have an empty profile
+directory, and refuse everything that needs launch flags or an X display.
+Details are in [linked-browsers.md](linked-browsers.md).
+
 ## Lending a browser between agents
 
 An agent requesting another agent's browser gets `unauthorized` (403) by default.
