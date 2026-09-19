@@ -27,4 +27,19 @@ administrator, and the agent that owned each one goes on its list, so no agent
 loses access. An older image ignores the table, which would leave those browsers
 owned by the administrator and visible to no agent.
 
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35417599332)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.6.1` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:56745b7c579633286816bbdaffbd6c0d0cfdf1cb94390ab08ae7c9dd04d31957
+```
+
+Existing deployments do not upgrade automatically. See the
+[release and upgrade notes](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md#releasing-and-upgrading)
+for upgrade steps.
+
 See [linked browsers](linked-browsers.md#change-who-can-use-it).
