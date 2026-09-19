@@ -34,8 +34,7 @@ password. You choose when to upgrade the application.
 
 - Keep a browser profile ready for an agent's recurring tasks.
 - Take control to sign in, then let the agent continue.
-- Let a colleague clear a 2FA prompt in one browser, without sharing your
-  dashboard password.
+- Let a colleague clear a 2FA prompt in one browser.
 - Watch a browser session live to inspect what the agent is doing.
 - Test pages with different user agents, mobile or desktop viewports, touch
   input, and locations through MCP's `emulate` tool.
@@ -86,7 +85,7 @@ and extensions you trust.
 Allow agent control is a separate toggle, off by default. It lets the owning
 agent see and use that native UI, including settings and host-file dialogs.
 Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` only if you trust every new agent-owned
-browser with that access. The published image includes ffmpeg and xdotool.
+browser with that access.
 
 ## Use your own browser
 
@@ -102,13 +101,10 @@ can take a tab back at any time. Firefox and Safari cannot be linked.
 
 ## Let someone else sign in
 
-If a colleague has to sign in or clear a 2FA prompt, share one browser with them
-instead of your dashboard password. **Share with a person…** on the browser's
-page makes a link that opens only that browser. It works once and expires within
-24 hours, and you can revoke it at any time. The guest can watch the page and, if
-you allow it, take control from the agent. Everything they do goes in the audit
-log under their name. A guest can use every login saved in that browser, so
-share one that holds only what they need.
+**Share with a person…** on a browser's page makes a single-use link to that one
+browser, for a colleague who must clear a 2FA prompt. Revoke it any time; the
+audit log records what they do. A guest can use every login saved in
+that browser, so share one that holds only what they need.
 
 ## Reach localhost on your own machine
 
@@ -119,8 +115,7 @@ the app waiting on your machine never sees it.
 A loopback tunnel binds one browser to one private `host:port` on your machine.
 Your machine dials out, with no new listener and no public URL. Only the
 browser's owner or an administrator can open one, and an agent also needs the
-non-default `browser:tunnel` scope. Lending the browser closes its tunnels.
-A tunnel expires after an hour by default. While it is open, any page in that
+non-default `browser:tunnel` scope. A tunnel expires after an hour by default. While it is open, any page in that
 browser can reach that address, so close it when the job is done. The
 [tunnel guide](https://github.com/nxfi777/tallylamp/blob/main/docs/usage.md#loopback-tunnels)
 has the command to run on your machine.
@@ -133,9 +128,9 @@ it again. The API and MCP tools accept the same per-browser settings.
 No shared proxy variable or credential is needed in Railway.
 
 Settings persist on `/data` but are not copied into saved profile templates.
-Only the owner or an administrator can edit them. HTTP and HTTPS CONNECT
-proxies are supported; SOCKS and PAC are not. DNS stays on the server, loopback
-tunnels keep their own route, and proxy failures never fall back to direct access.
+HTTP and HTTPS CONNECT proxies are supported; SOCKS and PAC are not. DNS stays
+on the server, loopback tunnels keep their own route, and proxy failures never
+fall back to direct access.
 
 Proxy credentials are hidden from API responses but stored unencrypted in
 SQLite. Protect the volume and its backups, and prefer an HTTPS proxy so the
@@ -145,10 +140,10 @@ accept automation.
 
 ## Updates are your choice
 
-The current release is `ghcr.io/nxfi777/tallylamp:0.6.1`. Pin this digest:
+The current release is `ghcr.io/nxfi777/tallylamp:0.7.0`. Pin this digest:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:56745b7c579633286816bbdaffbd6c0d0cfdf1cb94390ab08ae7c9dd04d31957
+ghcr.io/nxfi777/tallylamp@sha256:61818262dab57c3f880a029d5bbc85b42c47d7a21741d34ea34bdb05ca99ef25
 ```
 
 Automatic image updates are disabled. Pushing source code or publishing a new
@@ -156,7 +151,6 @@ release does not upgrade your deployment.
 
 To upgrade, read the release notes, back up your `/data` volume, then change
 the image reference in Railway to that digest and deploy it.
-Redeploying the existing digest keeps the same application version.
 
 ## What to expect
 
@@ -180,9 +174,7 @@ saving separately under **Agents → Profile permissions**. Saving requires
 `seed:write`; borrowing a browser never permits exporting its logins. Saved
 profiles contain every login, so share them only with agents you trust.
 
-Delete a saved profile through its confirmation popup without deleting existing
-browsers or signing them out. Site badges show detected or reported sign-ins,
-not every saved login. A missing badge does not mean a login was lost.
+Site badges show detected or reported sign-ins, not every saved login.
 
 Chrome needs memory. Start with a cap of two browsers and budget roughly
 1–2 GB per active browser, plus the server. Measure your own workload before

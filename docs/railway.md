@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.6.1` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.7.0` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -141,28 +141,31 @@ Then publish and add its real deploy URL to the README and website.
 
 ## Releasing and upgrading
 
-The current release is [0.6.1](https://github.com/nxfi777/tallylamp/releases/tag/v0.6.1)
+The current release is [0.7.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.7.0)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:56745b7c579633286816bbdaffbd6c0d0cfdf1cb94390ab08ae7c9dd04d31957
+ghcr.io/nxfi777/tallylamp@sha256:61818262dab57c3f880a029d5bbc85b42c47d7a21741d34ea34bdb05ca99ef25
 ```
 
-The [0.6.1 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35417599332)
+The [0.7.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35453298714)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, and the zip's manifest version were verified afterward. The image's
-source revision is `2dd17ebb97016fa0a0d7c898d95356eec0c77a7b`.
+source revision is `316cd9f970c2e8d7571a8d48c52b79d17d334bd5`.
 
-The Railway template pins the `0.6.1` digest for new installations. Its published
+The Railway template pins the `0.7.0` digest for new installations. Its published
 configuration and listing copy were read back after the update. Existing
 deployments keep their selected image. Railway redeploy persistence and unique
 passwords across two template installations were checked for `0.1.1`, not repeated
-for `0.6.1`. These checks do not certify every external MCP client, proxy provider,
+for `0.7.0`. These checks do not certify every external MCP client, proxy provider,
 or Chrome extension.
 
-Version 0.6.1 adds the `linked_access` table and moves 0.6.0 linked browsers to
+Version 0.7.0 adds the `browser_guests` and `guest_sessions` tables for guest
+links and scrubs raw session tokens from `viewer_tickets`; older images ignore the
+new tables, and guest links stop working if you roll back. Version 0.6.1 adds the
+`linked_access` table and moves 0.6.0 linked browsers to
 the administrator, keeping their agent on the list. Version 0.6.0 added the
 `browser_links` and `link_pairings` tables and a `browsers.kind` column; existing
 browsers read as `managed`. Version 0.5.2 added
@@ -176,8 +179,9 @@ browser and expect its route to hold. Restore a compatible backup and review
 routing before rolling back. See the [0.5.0 proxy release notes](release-0.5.0.md),
 [0.5.1 dashboard release notes](release-0.5.1.md),
 [0.5.2 extension release notes](release-0.5.2.md),
-[0.6.0 linked-browser release notes](release-0.6.0.md), and
-[0.6.1 linked-browser access notes](release-0.6.1.md).
+[0.6.0 linked-browser release notes](release-0.6.0.md),
+[0.6.1 linked-browser access notes](release-0.6.1.md), and
+[0.7.0 guest-link release notes](release-0.7.0.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing

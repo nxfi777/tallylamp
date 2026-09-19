@@ -51,6 +51,17 @@ changes. If you open the dashboard from an address that is not
 `TALLYLAMP_PUBLIC_URL`, add it to `TALLYLAMP_EXTRA_ORIGINS`. The API already
 required this, and the live view now does too.
 
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35453298714)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.7.0` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:61818262dab57c3f880a029d5bbc85b42c47d7a21741d34ea34bdb05ca99ef25
+```
+
 Existing deployments do not upgrade automatically. See the
 [release and upgrade notes](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md#releasing-and-upgrading)
 for upgrade steps.
