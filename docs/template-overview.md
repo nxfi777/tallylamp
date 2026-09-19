@@ -42,8 +42,7 @@ password. You choose when to upgrade the application.
   a short-lived loopback tunnel to one private address on your machine. Agents
   need a scope they do not get by default.
 - Install a Chrome extension from the Web Store in Full browser.
-- Let an agent use a tab in your own Chrome, with the logins it already has,
-  through the Tallylamp Link extension.
+- Share a tab from your own Chrome, logins included, with your agent.
 
 ## Dependencies for Tallylamp
 
@@ -93,15 +92,11 @@ Your agent can also use a tab in your own Chrome, Edge, Brave or other Chromium
 browser. Download [Tallylamp Link](https://github.com/nxfi777/tallylamp/releases/latest/download/tallylamp-link.zip),
 unzip it and load it at `chrome://extensions` with Developer mode on. Enter your
 Railway domain in its side panel, approve the code in the dashboard, then share
-a tab. The extension connects out to your domain, so Railway needs no extra
-variable or port.
+a tab. It connects out to your domain, so Railway needs no extra setup.
 
-The agent gets only the tabs you share, and you can take them back at any time.
-Inside a shared tab it acts as you, on whatever that tab is signed in to. The
-extension blocks the browser-wide cookie jar, other tabs and local files.
-Firefox and Safari cannot be linked. The
-[linked browser guide](https://github.com/nxfi777/tallylamp/blob/main/docs/linked-browsers.md)
-covers the limits.
+The agent gets only the tabs you share and acts as you inside them. The
+extension blocks the browser-wide cookie jar, other tabs and local files. You
+can take a tab back at any time. Firefox and Safari cannot be linked.
 
 ## Reach localhost on your own machine
 
@@ -138,10 +133,10 @@ accept automation.
 
 ## Updates are your choice
 
-The current release is `ghcr.io/nxfi777/tallylamp:0.5.2`. Pin this digest:
+The current release is `ghcr.io/nxfi777/tallylamp:0.6.0`. Pin this digest:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:1326f0b017063a4ae5eeca02439aa4536a08b57aae2b1698e6d9405ad252f9c7
+ghcr.io/nxfi777/tallylamp@sha256:8c888be461a3c14af1868526a8ca2961c6947a142b43bde0ef59557ba91e36b4
 ```
 
 Automatic image updates are disabled. Pushing source code or publishing a new

@@ -31,4 +31,19 @@ release adds the `browser_links` and `link_pairings` tables and a `browsers.kind
 column. Existing browsers read as `managed`. Older images ignore all three.
 Rotating `ADMIN_SECRET` now revokes every browser link as well.
 
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35415638370)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.6.0` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:8c888be461a3c14af1868526a8ca2961c6947a142b43bde0ef59557ba91e36b4
+```
+
+Existing deployments do not upgrade automatically. See the
+[release and upgrade notes](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md#releasing-and-upgrading)
+for upgrade steps.
+
 See [linked browsers](linked-browsers.md) for setup, limits and testing.

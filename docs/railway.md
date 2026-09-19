@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.5.2` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.6.0` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -105,7 +105,9 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 
 The published template is at [railway.com/deploy/tallylamp](https://railway.com/deploy/tallylamp).
 The listing copy is in [template-overview.md](template-overview.md), including
-Railway's required section headings. `.railway/railway.ts` is a separate project
+Railway's required section headings. Railway refuses listing copy over 10,000
+characters, and the 0.6.0 copy is within a few characters of that, so trim
+before adding a section. `.railway/railway.ts` is a separate project
 configuration example; it does not update the marketplace template.
 
 Create the template from a clean test project using the public release image.
@@ -139,36 +141,40 @@ Then publish and add its real deploy URL to the README and website.
 
 ## Releasing and upgrading
 
-The current release is [0.5.2](https://github.com/nxfi777/tallylamp/releases/tag/v0.5.2)
+The current release is [0.6.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.6.0)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:1326f0b017063a4ae5eeca02439aa4536a08b57aae2b1698e6d9405ad252f9c7
+ghcr.io/nxfi777/tallylamp@sha256:8c888be461a3c14af1868526a8ca2961c6947a142b43bde0ef59557ba91e36b4
 ```
 
-The [0.5.2 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35206121625)
+The [0.6.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35415638370)
 passed application tests, headed Chrome tests, and running-container checks
-before publishing the same artifact. Anonymous registry access and the manifest
-digest were verified afterward. The image's source revision is
-`7a250c47614188146a0d7704b842844d08bb202e`.
+before publishing the same artifact, then attached `tallylamp-link.zip`, the
+linked-browser extension, to the release. Anonymous registry access, the manifest
+digest, and the zip's manifest version were verified afterward. The image's
+source revision is `5ca30ad4cf1be7fa7fbc6e9ab5bb57dc97a3aa0f`.
 
-The Railway template pins the `0.5.2` digest for new installations. Its published
+The Railway template pins the `0.6.0` digest for new installations. Its published
 configuration and listing copy were read back after the update. Existing
 deployments keep their selected image. Railway redeploy persistence and unique
 passwords across two template installations were checked for `0.1.1`, not repeated
-for `0.5.2`. These checks do not certify every external MCP client, proxy provider,
+for `0.6.0`. These checks do not certify every external MCP client, proxy provider,
 or Chrome extension.
 
-Version 0.5.2 adds `browsers.extensions_enabled` and
-`browsers.agent_desktop_enabled`. Older images ignore those columns. Version 0.5.0
+Version 0.6.0 adds the `browser_links` and `link_pairings` tables and a
+`browsers.kind` column; existing browsers read as `managed`. Version 0.5.2 added
+`browsers.extensions_enabled` and `browsers.agent_desktop_enabled`. Older images
+ignore all of these. Version 0.5.0
 added the nullable `browsers.proxy_json` column; existing browsers keep their
 direct route unless a proxy is configured. Credentials are stored unencrypted in
 that column. Back up and protect `/data` before upgrading. Older versions ignore
 proxy settings and can send traffic directly, so do not downgrade a proxied
 browser and expect its route to hold. Restore a compatible backup and review
 routing before rolling back. See the [0.5.0 proxy release notes](release-0.5.0.md),
-[0.5.1 dashboard release notes](release-0.5.1.md), and
-[0.5.2 extension release notes](release-0.5.2.md).
+[0.5.1 dashboard release notes](release-0.5.1.md),
+[0.5.2 extension release notes](release-0.5.2.md), and
+[0.6.0 linked-browser release notes](release-0.6.0.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing
@@ -184,7 +190,10 @@ or command arguments.
 
 The `release image` workflow runs when a GitHub release is published. It checks
 that the `vX.Y.Z` tag matches `package.json`, builds a Linux amd64 image, and tests
-the application and headed Chrome before pushing to GHCR. Normal commits and
+the application and headed Chrome before pushing to GHCR. A second job then
+zips `extension/` and attaches it to the release as `tallylamp-link.zip`; the
+test suite fails if `extension/manifest.json` and `package.json` disagree on the
+version. Normal commits and
 pull requests run CI without publishing an image. Release tags are never replaced
 once an image has been published, and the workflow refuses an existing image
 version. There is no floating `latest` tag.
