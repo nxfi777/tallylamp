@@ -182,7 +182,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     if (!msg || typeof msg !== "object") return;
     if (mode !== "control") return;
     if (msg.type === "heartbeat" && typeof msg.leaseToken === "string") {
-      try { browsers.heartbeatControl(id, msg.leaseToken); boundLease = msg.leaseToken; browsers.touch(id); }
+      try { browsers.heartbeatControl(id, msg.leaseToken, "admin"); boundLease = msg.leaseToken; browsers.touch(id); }
       catch { send({ type: "error", message: "lease expired" }); }
       return;
     }

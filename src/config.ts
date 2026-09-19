@@ -148,6 +148,21 @@ export const config = {
   get sessionTtlMs() { return int("TALLYLAMP_SESSION_TTL_SEC", 86400) * 1000; },
   get viewerTicketTtlMs() { return int("TALLYLAMP_VIEWER_TICKET_TTL_SEC", 60) * 1000; },
   /**
+   * Guest links. A guest is a person handed one browser for one job (a sign-in, a 2FA prompt),
+   * so every clock here is short by default and has a hard ceiling the grant cannot exceed.
+   */
+  get guestDefaultTtlMs() { return int("TALLYLAMP_GUEST_TTL_SEC", 3600) * 1000; },
+  get guestMaxTtlMs() { return int("TALLYLAMP_GUEST_MAX_TTL_SEC", 24 * 3600) * 1000; },
+  /** Longest a guest may hold control continuously before it goes back to the agent. */
+  get guestMaxLeaseMs() { return int("TALLYLAMP_GUEST_MAX_LEASE_SEC", 1800) * 1000; },
+  /** After that, how long before the same guest may take control again. */
+  get guestLeaseCooldownMs() { return int("TALLYLAMP_GUEST_LEASE_COOLDOWN_SEC", 60) * 1000; },
+  get guestsPerBrowser() { return int("TALLYLAMP_GUESTS_PER_BROWSER", 10); },
+  /** Audit rows one guest link may cause over its life. Past this, its actions are refused. */
+  get guestAuditBudget() { return int("TALLYLAMP_GUEST_AUDIT_BUDGET", 1000); },
+  /** Live viewer sockets one guest may hold at once. */
+  get guestMaxViewers() { return int("TALLYLAMP_GUEST_MAX_VIEWERS", 3); },
+  /**
    * How often a viewer socket is asked whether it is still there. A laptop that slept, a
    * network that went away or a hard-killed tab never sends a close frame, so 'close' never
    * fires and the socket counts as a live viewer forever -- which pins ~1 GB of Chrome on the

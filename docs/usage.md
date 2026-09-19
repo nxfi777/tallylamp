@@ -21,6 +21,15 @@ live, agent tools that change the browser return an error asking the agent to
 retry later. The MCP connection stays open. Choose **Return to agent** to release
 the lease when you are done.
 
+### Share one browser with a person
+
+**Share with a person…**, under **Guest links** on a browser's page, makes a
+single-use link for one other person. They can watch that browser and, if you
+allow it, take control of it. They cannot see or change anything else. Use it
+when someone else has to sign in or answer a 2FA prompt. While a guest holds
+control, the page shows who they are, and **Take control** cuts them off. See
+[guest links](guest-access.md).
+
 ### Tabs, navigation, and clipboard
 
 The browser page has a tab strip and address bar above the frame. These controls

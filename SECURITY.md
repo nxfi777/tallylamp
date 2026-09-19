@@ -31,5 +31,17 @@ browser is created, including a new profile copy. It is a trusted-agent deployme
 policy, off by default. It does not alter existing saved choices or override a later
 dashboard revocation. It does not enable or install extensions.
 
+A **guest link** hands one browser to another person. Treat that person as fully
+untrusted apart from holding a valid token for that one browser. The link lets
+them watch and, if allowed, drive that browser, so they can use every login saved
+in its profile. It opens nothing else. The link works once, and a second use is
+audited. Guests are not API principals: `/api/v1`, `/mcp` and the other sockets
+cannot resolve a guest credential. They cannot force a takeover, take control
+from a person, use Full browser, see other tabs, or keep control past
+revocation, expiry or 30 continuous minutes. Share a guest link only for a
+browser that holds nothing beyond what the guest needs, and revoke it when the
+job is done. See [docs/guest-access.md](docs/guest-access.md) and the guest
+section of [docs/security.md](docs/security.md#guest-links).
+
 Report vulnerabilities to the operator of the deployment you are using. There
 is no paid bounty on this repository.

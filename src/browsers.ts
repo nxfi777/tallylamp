@@ -7,7 +7,7 @@ import { getDb, nowIso } from "./db.js";
 import { Err } from "./errors.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
-import { activity, audit } from "./audit.js";
+import { activity, audit, type AuditActor } from "./audit.js";
 import { isValidName, slugify } from "./names.js";
 import { sanitizeMetadata, type BrowserMetadata } from "./metadata.js";
 import { requireScope, type Principal } from "./auth.js";
@@ -20,6 +20,7 @@ import { startFakeChrome } from "./fake-chrome.js";
 import { startLinkedRuntime } from "./linked-cdp.js";
 import { dropLinksFor, linkedAllows, linkView, liveLink } from "./linked.js";
 import { activeGrant, grantsFor } from "./lending.js";
+import { dropGuestsFor, guestIdFromController, guestLeaseEnd, noteGuestControlEnded, startGuestCooldown } from "./guests.js";
 import { SiteDetector } from "./site-detection.js";
 import {
   deleteSiteAccessForBrowser,
@@ -655,6 +656,8 @@ export class BrowserManager {
     // Revoked before the row goes: the extension's token must stop working the moment the
     // browser it was scoped to stops existing, not at the next sweep.
     dropLinksFor(id, "browser deleted");
+    // Before the lease row goes, so a guest viewer told to close finds nothing left to hold.
+    dropGuestsFor(id);
     getDb().prepare(`DELETE FROM browser_links WHERE browser_id = ?`).run(id);
     getDb().prepare(`DELETE FROM control_leases WHERE browser_id = ?`).run(id);
     getDb().prepare(`DELETE FROM activity_events WHERE browser_id = ?`).run(id);
@@ -788,17 +791,27 @@ export class BrowserManager {
 
   controlState(id: string): ControlState {
     const row = getDb()
-      .prepare(`SELECT controller_type, controller_id, expires_at, lease_token FROM control_leases WHERE browser_id = ?`)
+      .prepare(`SELECT controller_type, controller_id, acquired_at, expires_at, lease_token FROM control_leases WHERE browser_id = ?`)
       .get(id) as
-      | { controller_type: string; controller_id: string; expires_at: string; lease_token: string }
+      | { controller_type: string; controller_id: string; acquired_at: string; expires_at: string; lease_token: string }
       | undefined;
-    if (!row || Date.parse(row.expires_at) < Date.now()) {
+    // A guest's lease is only as good as the grant behind it, and it has a ceiling a heartbeat
+    // cannot push past. Checked here, where every reader of the lease already comes, so no
+    // path -- REST, viewer socket, MCP -- can see a guest lease that should have ended.
+    const guestId = row ? guestIdFromController(row.controller_id) : null;
+    const guestEnd = row && guestId ? guestLeaseEnd(guestId, id, row.acquired_at) : null;
+    if (!row || Date.parse(row.expires_at) < Date.now() || guestEnd) {
       if (row) {
         getDb().prepare(`DELETE FROM control_leases WHERE browser_id = ?`).run(id);
+        if (guestId) noteGuestControlEnded(guestId);
+        if (guestId && guestEnd === "max_age") {
+          startGuestCooldown(guestId);
+          audit({ actorType: "guest", actorId: guestId, action: "guest.control.max_age", targetType: "browser", targetId: id });
+        }
         // Expiry used to be silent, so a lease that simply lapsed left the browser in whatever
         // shape the human's viewer had put it. The row is already gone, so a nested
         // controlState() call from a listener returns without emitting again.
-        hub.emitEvent("control.released", { reason: "expired" }, id);
+        hub.emitEvent("control.released", { reason: guestEnd ?? "expired" }, id);
       }
       return { controllerType: "none", controllerId: null, expiresAt: null, leaseToken: null };
     }
@@ -810,54 +823,90 @@ export class BrowserManager {
     };
   }
 
-  acquireControl(id: string, controllerType: "agent" | "human", controllerId: string, opts?: { force?: boolean }): ControlState {
+  /**
+   * `force` displaces anyone and is the administrator's alone. `preemptAgent` is the ordinary
+   * human-takeover rule -- a person may take the browser off an agent, never off another
+   * person -- and is what a guest gets. `actor` is who the audit log names.
+   */
+  acquireControl(
+    id: string,
+    controllerType: "agent" | "human",
+    controllerId: string,
+    opts?: { force?: boolean; preemptAgent?: boolean; actor?: AuditActor },
+  ): ControlState {
     const cur = this.controlState(id);
-    if (cur.controllerType !== "none" && !(cur.controllerType === controllerType && cur.controllerId === controllerId)) {
-      if (!opts?.force) throw Err.alreadyControlled(`${cur.controllerType} ${cur.controllerId} holds control`);
+    const actor: AuditActor = opts?.actor ?? { type: controllerType === "human" ? "admin" : controllerType, id: controllerId };
+    const same = cur.controllerType === controllerType && cur.controllerId === controllerId;
+    if (cur.controllerType !== "none" && !same) {
+      const preempts = Boolean(opts?.preemptAgent) && controllerType === "human" && cur.controllerType === "agent";
+      if (!opts?.force && !preempts) throw Err.alreadyControlled(`${cur.controllerType} ${cur.controllerId} holds control`);
+      const displacedGuest = guestIdFromController(cur.controllerId);
+      if (displacedGuest) noteGuestControlEnded(displacedGuest);
       audit({
-        actorType: controllerType,
-        actorId: controllerId,
-        action: "control.forced",
+        actorType: actor.type,
+        actorId: actor.id,
+        action: opts?.force ? "control.forced" : "control.preempted",
         targetType: "browser",
         targetId: id,
-        detail: { previous: cur },
+        detail: { ...actor.detail, previous: { controllerType: cur.controllerType, controllerId: cur.controllerId } },
       });
     }
     const token = randomBytes(16).toString("hex");
     const expires = new Date(Date.now() + config.humanLeaseTtlMs).toISOString();
+    // Re-taking a lease you already hold keeps its start time: that is what a guest's maximum
+    // continuous hold is measured from, and re-acquiring must not reset it.
     getDb()
       .prepare(
         `INSERT INTO control_leases(browser_id, controller_type, controller_id, lease_token, acquired_at, expires_at, forced)
          VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(browser_id) DO UPDATE SET controller_type=excluded.controller_type, controller_id=excluded.controller_id,
-           lease_token=excluded.lease_token, acquired_at=excluded.acquired_at, expires_at=excluded.expires_at, forced=excluded.forced`,
+         ON CONFLICT(browser_id) DO UPDATE SET
+           acquired_at=CASE WHEN control_leases.controller_type = excluded.controller_type
+                             AND control_leases.controller_id = excluded.controller_id
+                            THEN control_leases.acquired_at ELSE excluded.acquired_at END,
+           controller_type=excluded.controller_type, controller_id=excluded.controller_id,
+           lease_token=excluded.lease_token, expires_at=excluded.expires_at, forced=excluded.forced`,
       )
       .run(id, controllerType, controllerId, token, nowIso(), expires, opts?.force ? 1 : 0);
     hub.emitEvent(controllerType === "human" ? "control.human" : "control.agent", { controllerId }, id);
     if (controllerType === "human") {
-      audit({ actorType: "admin", actorId: controllerId, action: "human.takeover", targetType: "browser", targetId: id });
+      audit({ actorType: actor.type, actorId: actor.id, action: "human.takeover", targetType: "browser", targetId: id, detail: actor.detail });
     }
     return this.controlState(id);
   }
 
-  heartbeatControl(id: string, leaseToken: string): ControlState {
+  /**
+   * Renew a lease. The token alone used to be enough, so anyone who had seen it -- it is in
+   * every publicView -- could keep a lease alive. It now also has to come from the side that
+   * holds it: an administrator renews only an administrator's lease, a guest only its own.
+   */
+  heartbeatControl(id: string, leaseToken: string, by: "admin" | { guestId: string }): ControlState {
     const cur = this.controlState(id);
-    if (cur.leaseToken !== leaseToken) throw Err.unauthorized("invalid control lease");
+    const holderGuest = guestIdFromController(cur.controllerId);
+    const mine = by === "admin" ? cur.controllerType === "human" && !holderGuest : holderGuest === by.guestId;
+    if (!leaseToken || cur.leaseToken !== leaseToken || !mine) {
+      throw Err.unauthorized("invalid control lease");
+    }
     const expires = new Date(Date.now() + config.humanLeaseTtlMs).toISOString();
     getDb().prepare(`UPDATE control_leases SET expires_at = ? WHERE browser_id = ?`).run(expires, id);
     return this.controlState(id);
   }
 
-  releaseControl(id: string, principal?: Principal): ControlState {
+  releaseControl(id: string, actor?: AuditActor): ControlState {
+    const held = getDb().prepare(`SELECT controller_id FROM control_leases WHERE browser_id = ?`).get(id) as
+      | { controller_id: string }
+      | undefined;
+    const heldByGuest = guestIdFromController(held?.controller_id);
     getDb().prepare(`DELETE FROM control_leases WHERE browser_id = ?`).run(id);
+    if (heldByGuest) noteGuestControlEnded(heldByGuest);
     hub.emitEvent("control.released", {}, id);
-    if (principal) {
+    if (actor) {
       audit({
-        actorType: principal.type,
-        actorId: principal.id,
+        actorType: actor.type,
+        actorId: actor.id,
         action: "control.released",
         targetType: "browser",
         targetId: id,
+        detail: actor.detail,
       });
     }
     return this.controlState(id);

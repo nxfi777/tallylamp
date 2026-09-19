@@ -14,6 +14,8 @@ import { resetRateLimits } from "../src/rate-limit.js";
 
 export type TestCtx = {
   url: string;
+  /** The Express app, so a test can register a route of its own after startup. */
+  app: ReturnType<typeof createApp>;
   adminSecret: string;
   browsers: BrowserManager;
   mcp: McpGateway;
@@ -57,6 +59,7 @@ export async function startTestServer(opts?: { adminSecret?: string }): Promise<
 
   return {
     url,
+    app,
     adminSecret: process.env.ADMIN_SECRET!,
     browsers,
     mcp,

@@ -7,6 +7,7 @@ import { pruneRateLimits } from "./rate-limit.js";
 import { pruneAuditEvents } from "./audit.js";
 import { BrowserManager } from "./browsers.js";
 import { sweepLending } from "./lending.js";
+import { sweepGuests } from "./guests.js";
 import { createApp } from "./server.js";
 import { attachViewerUpgrade } from "./viewer.js";
 import { attachTunnelUpgrade, closeAllTunnels, sweepTunnels } from "./tunnels.js";
@@ -73,6 +74,11 @@ async function main(): Promise<void> {
       sweepLinks();
     } catch (e) {
       log.warn("link sweep failed", { error: (e as Error).message });
+    }
+    try {
+      sweepGuests();
+    } catch (e) {
+      log.warn("guest sweep failed", { error: (e as Error).message });
     }
     void mcp.reapIdleSessions().then(() => browsers.reapIdle());
   }, 15_000);

@@ -334,7 +334,7 @@ function showMenu(x, y, items, label) {
 /** The actions that make sense for one browser, given what it is currently doing. */
 function browserMenu(b) {
   const running = b.status === "running";
-  const human = b.control?.controllerType === "human";
+  const human = b.control?.controllerType === "human" && !guestHolds(b);
   // Nothing here can start, restart or snapshot somebody's own browser. What an operator can
   // do from this side is the two things that take access away.
   if (b.kind === "linked") {
@@ -555,8 +555,11 @@ function linkStatus(b) {
   return n ? `${n} tab${n === 1 ? "" : "s"} shared` : "online, nothing shared";
 }
 
+/** A guest link's lease: a person, but never this operator, so never "You have control". */
+const guestHolds = (b) => String(b.control?.controllerId || "").startsWith("guest:");
+
 function badge(b) {
-  if (b.control?.controllerType === "human") return h("span", { class: "badge human" }, "Human");
+  if (b.control?.controllerType === "human") return h("span", { class: "badge human" }, guestHolds(b) ? "Guest" : "Human");
   if (b.kind === "linked" && b.status !== "running") return h("span", { class: "badge idle" }, linkStatus(b));
   if (b.status === "running") return h("span", { class: "badge live" }, "Live");
   return h("span", { class: "badge idle" }, b.status || "stopped");
@@ -691,7 +694,7 @@ function card(b) {
       ),
       sitePills(b),
       h("div", { class: "who" },
-        b.control?.controllerType === "human" ? "Human has control"
+        b.control?.controllerType === "human" ? (guestHolds(b) ? "Guest has control" : "Human has control")
           : b.control?.controllerType === "agent" ? "Agent has control"
           : "No controller",
       ),
@@ -1098,6 +1101,78 @@ function siteAccessSection(b) {
  * so the create path is the CLI, run there. What the operator needs here is the opposite:
  * to see that a hole exists at all, and to close it.
  */
+/**
+ * Guest links: let one more person watch this browser, and take control if allowed, without the
+ * admin secret. The link works only for this browser and can be revoked at any time.
+ */
+function guestSection(b, guests) {
+  const live = guests.filter((g) => g.active);
+  const when = (iso) => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return h("div", { class: "guests" },
+    live.length
+      ? h("ul", { class: "loans" },
+          ...live.map((g) =>
+            h("li", {},
+              h("span", {}, g.label),
+              h("span", { class: g.controlling ? "warn" : "sub" },
+                g.controlling
+                  ? "in control"
+                  : `${g.modes.includes("control") ? "watch + control" : "watch"} · ${g.openedAt ? "opened" : "not opened yet"} · until ${when(g.expiresAt)}`),
+              h("button", {
+                class: "btn tiny danger",
+                onClick: () => act(async () => {
+                  await api(`/api/v1/browsers/${b.id}/guests/${g.id}`, { method: "DELETE" });
+                  flash(`Revoked ${g.label}'s link. Their view closed and control went back.`, true);
+                  await refresh();
+                  void render();
+                }),
+              }, "Revoke"),
+            ),
+          ),
+        )
+      : h("div", { class: "sub" }, "No guest links. Share one to let someone else sign in or clear a 2FA prompt here."),
+    h("button", { class: "btn", disabled: b.savingProfile, onClick: () => shareWithGuest(b) }, "Share with a person…"),
+    h("div", { class: "sub" },
+      "A guest can use every login saved in this browser, not just the site you send them to. Use a browser that holds only what they need."),
+  );
+}
+
+async function shareWithGuest(b) {
+  let created = null;
+  const answers = await askFor("Share this browser with a person", [
+    { name: "label", label: "Who is it for?", required: true, maxLength: 80, placeholder: "Sam, finance", hint: "Shown to them, and in the audit log against everything they do." },
+    { name: "access", label: "They can", value: "control", options: [
+      { value: "control", label: "Watch and take control" },
+      { value: "watch", label: "Watch only" },
+    ] },
+    { name: "ttl", label: "Link expires in", value: "3600", options: [
+      { value: "900", label: "15 minutes" },
+      { value: "3600", label: "1 hour" },
+      { value: "14400", label: "4 hours" },
+      { value: "86400", label: "24 hours" },
+    ] },
+    { name: "hosts", label: "Address bar and tabs", placeholder: "None", maxLength: 400,
+      hint: "Leave empty to keep them on the page you show them. List host names (example.com, accounts.example.com) to let them open those, or * for anywhere. Links on a page still go wherever they point." },
+  ], "Create link", async (values) => {
+    const hosts = values.hosts ? values.hosts.split(/[\s,]+/).filter(Boolean) : [];
+    created = await api(`/api/v1/browsers/${b.id}/guests`, {
+      method: "POST",
+      body: {
+        label: values.label,
+        modes: values.access === "control" ? ["watch", "control"] : ["watch"],
+        expiresInSec: Number(values.ttl),
+        allowedHosts: hosts,
+      },
+    });
+  });
+  if (!answers || !created) return;
+  revealToken("Guest link", created.url, {
+    note: `Send this to ${created.guest.label} privately. It works once: the first browser to open it can ${answers.access === "control" ? "watch and control" : "watch"} ${b.name} until the link expires or you revoke it. If someone else opens it first, revoke it and make a new one.`,
+  });
+  await refresh();
+  void render();
+}
+
 function tunnelSection(tunnels) {
   const live = tunnels || [];
   if (!live.length) {
@@ -1144,7 +1219,11 @@ async function browserView(id, seq) {
   const md = b.metadata || {};
   // Somebody's own browser: no profile on this disk, no launch flags, no lending.
   const linked = b.kind === "linked";
-  const human = b.control?.controllerType === "human";
+  // The operator's own lease. A guest's is a person too, but driving with it would be refused.
+  const human = b.control?.controllerType === "human" && !guestHolds(b);
+  const guests = linked ? [] : (await api(`/api/v1/browsers/${id}/guests`).catch(() => ({ guests: [] }))).guests || [];
+  if (seq !== undefined && seq !== renderSeq) return;
+  const guestInControl = guestHolds(b) ? guests.find((g) => g.controlling) : null;
   const surface = state.status?.fullBrowser && viewerSurfaces.get(id) === "desktop" ? "desktop" : "tab";
   const switchSurface = (next) => {
     if (next === surface) return;
@@ -1289,7 +1368,9 @@ async function browserView(id, seq) {
             "Watching only. Nothing you click or type reaches this browser.",
             // `human` was the only thing computed, so a browser with no controller at all fell
             // into this branch and was told an agent had it.
-            agentHolds
+            guestHolds(b)
+              ? `${guestInControl ? guestInControl.label : "A guest"} has control through a guest link. Take control to cut them off, or revoke the link under Guest links.`
+              : agentHolds
               ? "The agent has control. Press Take control when you need the keyboard."
               : "Nothing has control right now. Press Take control when you need the keyboard.",
           ]
@@ -1357,6 +1438,8 @@ async function browserView(id, seq) {
         // On the browser itself, not on a settings page: these two controls are only ever
         // meaningful next to the thing they hand over.
         linked ? null : [
+          h("h2", {}, "Guest links"),
+          guestSection(b, guests),
           h("h2", {}, "Lending"),
           lendingSection(b),
           h("h2", {}, "Loopback tunnels"),

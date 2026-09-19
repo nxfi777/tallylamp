@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { sha256 } from "./auth.js";
-import { config } from "./config.js";
+import { config, trustedOrigins } from "./config.js";
 import { getDb, nowIso } from "./db.js";
 import { CdpClient } from "./cdp.js";
 import type { BrowserManager } from "./browsers.js";
@@ -11,8 +11,33 @@ import { hub } from "./events.js";
 import { parseSize } from "./chrome.js";
 import { onUpgrade } from "./upgrades.js";
 import { runDesktopViewer } from "./desktop-viewer.js";
+import {
+  guestActor,
+  guestControllerId,
+  guestHomeTarget,
+  guestSessionById,
+  hostAllowed,
+  pinGuestHomeTarget,
+  type Guest,
+} from "./guests.js";
 
-export function issueViewerTicket(browserId: string, sessionId: string, mode: "watch" | "control"): string {
+/** Who opened a viewer socket: an administrator, or one guest on one grant. */
+export type ViewerPrincipal = { kind: "admin" } | { kind: "guest"; guest: Guest; sessionId: string };
+
+/**
+ * The principal a ticket is minted for, as a reference and never as a secret. This column used
+ * to hold the raw dashboard session token, so a read of the database was a live admin session.
+ * "admin" alone is an administrator authenticated by bearer, which has no session to outlive.
+ */
+export function adminTicketRef(sessionToken: string | undefined): string {
+  return sessionToken ? `session:${sha256(sessionToken)}` : "admin";
+}
+
+export function guestTicketRef(sessionId: string): string {
+  return `guest:${sessionId}`;
+}
+
+export function issueViewerTicket(browserId: string, principalRef: string, mode: "watch" | "control"): string {
   const token = randomBytes(24).toString("base64url");
   const id = randomBytes(8).toString("hex");
   const expires = new Date(Date.now() + config.viewerTicketTtlMs).toISOString();
@@ -21,11 +46,38 @@ export function issueViewerTicket(browserId: string, sessionId: string, mode: "w
       `INSERT INTO viewer_tickets(id, browser_id, session_id, token_hash, mode, created_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, browserId, sessionId, sha256(token), mode, nowIso(), expires);
+    .run(id, browserId, principalRef, sha256(token), mode, nowIso(), expires);
   return token;
 }
 
-export function consumeViewerTicket(token: string, browserId: string): { mode: "watch" | "control"; sessionId: string } {
+/**
+ * A ticket is only as good as whoever asked for it. It used to outlive the session that minted
+ * it by its whole TTL: log out, or revoke a guest, and a ticket already in hand still opened.
+ */
+function ticketPrincipal(ref: string, browserId: string, mode: "watch" | "control"): ViewerPrincipal {
+  if (ref === "admin") return { kind: "admin" };
+  if (ref.startsWith("session:")) {
+    const row = getDb()
+      .prepare(`SELECT principal_type, expires_at FROM sessions WHERE token_hash = ?`)
+      .get(ref.slice("session:".length)) as { principal_type: string; expires_at: string } | undefined;
+    if (!row || row.principal_type !== "admin" || Date.parse(row.expires_at) < Date.now()) {
+      throw new Error("the session that requested this ticket has ended");
+    }
+    return { kind: "admin" };
+  }
+  if (ref.startsWith("guest:")) {
+    const s = guestSessionById(ref.slice("guest:".length));
+    if (!s || s.guest.browserId !== browserId) throw new Error("guest access has ended");
+    if (!s.guest.modes.includes(mode)) throw new Error("this guest link does not allow that");
+    return { kind: "guest", guest: s.guest, sessionId: s.sessionId };
+  }
+  throw new Error("invalid viewer ticket");
+}
+
+export function consumeViewerTicket(
+  token: string,
+  browserId: string,
+): { mode: "watch" | "control"; principal: ViewerPrincipal } {
   const row = getDb()
     .prepare(`SELECT id, browser_id, session_id, mode, expires_at, used FROM viewer_tickets WHERE token_hash = ?`)
     .get(sha256(token)) as
@@ -35,9 +87,25 @@ export function consumeViewerTicket(token: string, browserId: string): { mode: "
   if (row.browser_id !== browserId) throw new Error("ticket is for a different browser");
   if (row.used) throw new Error("ticket already used");
   if (Date.parse(row.expires_at) < Date.now()) throw new Error("ticket expired");
-  getDb().prepare(`UPDATE viewer_tickets SET used = 1 WHERE id = ?`).run(row.id);
-  return { mode: row.mode, sessionId: row.session_id };
+  // Conditional, so single use holds even if two upgrades race on one ticket.
+  const took = getDb().prepare(`UPDATE viewer_tickets SET used = 1 WHERE id = ? AND used = 0`).run(row.id);
+  if (Number(took.changes) !== 1) throw new Error("ticket already used");
+  const mode = row.mode === "control" ? "control" : "watch";
+  return { mode, principal: ticketPrincipal(row.session_id, browserId, mode) };
 }
+
+class UpgradeRefused extends Error {
+  constructor(readonly status: 401 | 403 | 429, message: string) {
+    super(message);
+  }
+}
+
+/**
+ * Open viewer sockets per guest. Each one holds a CDP connection and a screencast in Chrome, and
+ * a guest is untrusted: without a cap, a watch-only link and the ticket rate limit were enough
+ * to open sockets until the host ran out of memory.
+ */
+const guestViewers = new Map<string, number>();
 
 export function attachViewerUpgrade(server: import("node:http").Server, browsers: BrowserManager): WebSocketServer {
   // ws defaults maxPayload to 100 MiB. A viewer only ever sends small control JSON, and
@@ -55,15 +123,36 @@ export function attachViewerUpgrade(server: import("node:http").Server, browsers
     netSocket.setTimeout(15_000, () => socket.destroy());
     const browserId = m[1];
     const token = url.searchParams.get("ticket") ?? "";
+    const surface = url.searchParams.get("surface");
     try {
+      // The API has refused foreign origins all along; its socket did not. A browser always
+      // sends Origin on a WebSocket, so a foreign one is a page elsewhere trying to ride a
+      // ticket. An absent one is a non-browser client (the test suite, scripts/check-image),
+      // which a hijacked page cannot be -- and which a guest never is, so guests must send it.
+      const origin = req.headers.origin;
+      const originTrusted = typeof origin === "string" && trustedOrigins().includes(origin.replace(/\/$/, ""));
+      if (origin !== undefined && !originTrusted) throw new UpgradeRefused(403, "foreign origin");
       const ticket = consumeViewerTicket(token, browserId);
+      if (ticket.principal.kind === "guest") {
+        const guest = ticket.principal.guest;
+        if (!originTrusted) throw new UpgradeRefused(403, "guest viewer without an origin");
+        if ((guestViewers.get(guest.id) ?? 0) >= config.guestMaxViewers) throw new UpgradeRefused(429, "too many open viewers");
+        // The desktop surface drives the whole X session with xdotool, chrome://extensions
+        // and all. A guest gets the page and nothing around it.
+        if (surface === "desktop") throw new UpgradeRefused(403, "the desktop surface is not available to guests");
+        if (ticket.mode === "control" && browsers.controlState(browserId).controllerId !== guestControllerId(guest.id)) {
+          throw new UpgradeRefused(403, "guest does not hold control");
+        }
+      }
       wss.handleUpgrade(req, socket, head, (ws) => {
         netSocket.setTimeout(0);
-        if (url.searchParams.get("surface") === "desktop") runDesktopViewer(ws, browsers, browserId, ticket.mode);
-        else void runViewer(ws, req, browsers, browserId, ticket.mode);
+        if (surface === "desktop") runDesktopViewer(ws, browsers, browserId, ticket.mode);
+        else void runViewer(ws, req, browsers, browserId, ticket.mode, ticket.principal);
       });
     } catch (e) {
-      socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+      const status = e instanceof UpgradeRefused ? e.status : 401;
+      const text = status === 403 ? "Forbidden" : status === 429 ? "Too Many Requests" : "Unauthorized";
+      socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`);
       socket.destroy();
       log.warn("viewer upgrade rejected", { error: (e as Error).message });
     }
@@ -71,6 +160,13 @@ export function attachViewerUpgrade(server: import("node:http").Server, browsers
   });
   return wss;
 }
+
+/** What a guest may send from a control viewer regardless of its navigation allowance. */
+const GUEST_INPUT = new Set(["mouse", "key", "paste", "scroll", "reload", "historyGo", "viewport"]);
+/** Not "back" and "forward": those buttons walk the tab's history, which has its own rule. */
+const GUEST_BUTTONS = new Set([undefined, "none", "left", "middle", "right"]);
+/** Tabs a guest may have open before newTab stops working. */
+const GUEST_MAX_TABS = 10;
 
 type TargetRow = { targetId: string; type: string; subtype?: string; title?: string; url?: string };
 
@@ -296,7 +392,9 @@ async function runViewer(
   browsers: BrowserManager,
   browserId: string,
   mode: "watch" | "control",
+  principal: ViewerPrincipal,
 ) {
+  const guest = principal.kind === "guest" ? principal.guest : null;
   let cdp: CdpClient | null = null;
   // The CDP session string for the tab being streamed. Distinct from a screencast frame's
   // numeric ack id, which the old code also called `sessionId` four lines apart.
@@ -338,6 +436,17 @@ async function runViewer(
   let lastCursorAt = 0;
   let lastCursor = "";
   let released: ((ev: unknown) => void) | undefined;
+  /** Guest sockets only: closes the socket the moment the grant or the lease behind it ends. */
+  let guestGuard: ((ev: unknown) => void) | undefined;
+  let guestCheck: NodeJS.Timeout | undefined;
+  let endGuest: ((code: number, reason: string) => void) | undefined;
+  let countedGuestViewer = false;
+  /**
+   * Guest sockets only: per tab, the history entries that existed when this socket first
+   * showed it, apart from the one on screen. Back and forward may not reach those unless the
+   * link allows their host -- they are what the agent or operator browsed before the handoff.
+   */
+  const priorEntries = new Map<string, Set<number>>();
   // Resolved once Chrome is known to be up: screenSize() falls back to the configured window
   // size for a browser with no runtime, and reading it before cdpWs() — which is what starts
   // Chrome — pinned the resize ceiling to 1280x800 instead of the real X screen.
@@ -371,9 +480,20 @@ async function runViewer(
     for (const t of timers) clearTimeout(t);
     timers.clear();
     clearInterval(pinger);
+    clearInterval(guestCheck);
+    if (countedGuestViewer && guest) {
+      countedGuestViewer = false;
+      const n = (guestViewers.get(guest.id) ?? 1) - 1;
+      if (n > 0) guestViewers.set(guest.id, n);
+      else guestViewers.delete(guest.id);
+    }
     if (released) {
       hub.off(`browser:${browserId}`, released);
       released = undefined;
+    }
+    if (guestGuard) {
+      hub.off(`browser:${browserId}`, guestGuard);
+      guestGuard = undefined;
     }
     if (attachedViewer) {
       attachedViewer = false;
@@ -389,7 +509,7 @@ async function runViewer(
       const cur = browsers.controlState(browserId);
       if (cur.controllerType === "human" && cur.leaseToken === boundLease) {
         log.info("viewer left; handing control back", { browserId, code });
-        browsers.releaseControl(browserId);
+        browsers.releaseControl(browserId, guest ? { ...guestActor(guest), detail: { ...guestActor(guest).detail, reason: "viewer left" } } : undefined);
       }
     }
     const sid = pageSession;
@@ -457,6 +577,42 @@ async function runViewer(
   }, config.viewerPingMs);
   // A stray probe must never be the reason a test process refuses to exit.
   pinger.unref?.();
+
+  if (guest && principal.kind === "guest") {
+    guestViewers.set(guest.id, (guestViewers.get(guest.id) ?? 0) + 1);
+    countedGuestViewer = true;
+    const sessionId = principal.sessionId;
+    const end = (code: number, reason: string): void => {
+      if (closed) return;
+      send({ type: "error", message: reason });
+      // Tear down first: close() only starts a handshake, and frames and input must stop now,
+      // not whenever the far end gets round to answering it.
+      teardown(code);
+      try {
+        ws.close(code, reason);
+      } catch {
+        /* ignore */
+      }
+    };
+    endGuest = end;
+    const check = (): void => {
+      if (closed) return;
+      if (!guestSessionById(sessionId)) return end(4001, "guest access ended");
+      if (mode === "control" && browsers.controlState(browserId).controllerId !== guestControllerId(guest.id)) {
+        end(4003, "control ended");
+      }
+    };
+    guestGuard = (ev) => {
+      const e = ev as { type?: string; payload?: { guestId?: unknown } };
+      if (e.type === "guest.revoked" && e.payload?.guestId === guest.id) end(4001, "guest access ended");
+      else if (e.type === "browser.deleted") end(4001, "guest access ended");
+      else if (typeof e.type === "string" && e.type.startsWith("control.")) check();
+    };
+    hub.on(`browser:${browserId}`, guestGuard);
+    // Expiry has no event. Ten seconds is inside one client heartbeat.
+    guestCheck = setInterval(check, 10_000);
+    guestCheck.unref?.();
+  }
 
   try {
     const wsUrl = await browsers.cdpWs(browserId);
@@ -772,6 +928,26 @@ async function runViewer(
       }
     };
 
+    /**
+     * The tab list a socket is shown. A guest sees the tab being streamed and, if the link
+     * allows navigation, the tabs on hosts it allows -- not the titles and URLs of everything
+     * else open in this profile.
+     */
+    const visibleTabs = (): Array<{ targetId: string; title: string; url: string }> =>
+      projectTabs().filter((t) => t.targetId === activeTargetId || guestMaySee(t.targetId, t.url));
+
+    /**
+     * May this socket show a guest this tab? The tab the link was handed over on, a blank tab,
+     * and -- if the link allows navigation -- tabs on its hosts. Every path that picks a tab for
+     * a guest goes through this: selecting one, and the viewer choosing one by itself when the
+     * streamed tab closes or an attach fails, which used to land a guest on whatever was first.
+     */
+    const guestMaySee = (targetId: string, url: string | undefined): boolean => {
+      if (!guest) return true;
+      if (url === "about:blank" || targetId === guestHomeTarget(guest.id)) return true;
+      return guest.allowedHosts.length > 0 && hostAllowed(guest.allowedHosts, url);
+    };
+
     const projectTabs = (): Array<{ targetId: string; title: string; url: string }> =>
       [...targets.values()]
         .filter(isTab)
@@ -790,7 +966,7 @@ async function runViewer(
         setTimeout(() => {
           timers.delete(tabTimer!);
           tabTimer = undefined;
-          send({ type: "tabs", tabs: projectTabs(), activeTargetId });
+          send({ type: "tabs", tabs: visibleTabs(), activeTargetId });
         }, 150),
       );
     };
@@ -811,7 +987,9 @@ async function runViewer(
     const showStartPage = async (sid: string, targetId: string, url: string | undefined): Promise<void> => {
       // The mode is fixed for the life of the socket; the lease is not. Without this an
       // expired lease still let a refollow or a reconnect write into the agent's page.
-      if (!holdsLease() || url !== "about:blank") return;
+      // Not for guests: the start page carries the browser's project and purpose, and tells
+      // its reader to use an address bar a guest may not have.
+      if (guest || !holdsLease() || url !== "about:blank") return;
       let name = browserId;
       let project = "";
       let purpose = "";
@@ -887,10 +1065,25 @@ async function runViewer(
         // session at all and no frames forever. Fall back to any other tab we know of.
         log.warn("viewer attach failed", { targetId, error: (e as Error).message });
         if (my !== epoch) return;
-        const fallback = projectTabs().find((t) => t.targetId !== targetId && t.targetId !== previousTargetId);
+        const fallback = projectTabs().find(
+          (t) => t.targetId !== targetId && t.targetId !== previousTargetId && guestMaySee(t.targetId, t.url),
+        );
         pushTabs();
         if (fallback) await attach(fallback.targetId);
         return;
+      }
+      if (guest && !priorEntries.has(targetId)) {
+        const h = (await cdp!.send("Page.getNavigationHistory", {}, sid).catch(() => null)) as {
+          currentIndex?: number;
+          entries?: Array<{ id: number }>;
+        } | null;
+        // Only a real answer counts. Without one there is no snapshot, and history is refused.
+        if (h && Array.isArray(h.entries)) {
+          const ids = new Set(h.entries.map((e) => e.id));
+          const current = h.entries[h.currentIndex ?? -1]?.id;
+          if (current !== undefined) ids.delete(current);
+          priorEntries.set(targetId, ids);
+        }
       }
       if (my !== epoch) {
         void cdp!.send("Target.detachFromTarget", { sessionId: sid }).catch(noop);
@@ -932,7 +1125,19 @@ async function runViewer(
 
     cdp.onEvent = (method, params, evSession) => {
       if (method === "Target.targetCreated" || method === "Target.targetInfoChanged") {
-        upsert(params.targetInfo as TargetRow | undefined);
+        const info = params.targetInfo as TargetRow | undefined;
+        const fresh = method === "Target.targetCreated" && info !== undefined && !targets.has(info.targetId);
+        upsert(info);
+        // A guest opens tabs without ever sending newTab: a middle-click, a modified click, a
+        // target=_blank link. Each is a renderer on this host, so the cap is enforced here, where
+        // every new tab arrives, and not only on the one message that asks for one. Only once the
+        // guest's lease is bound, so the targets replayed at connect are never touched.
+        if (fresh && guest && holdsLease() && isTab(info) && projectTabs().filter((t) => !closing.has(t.targetId)).length > GUEST_MAX_TABS) {
+          const extra = info.targetId;
+          closing.add(extra);
+          void cdp!.send("Target.closeTarget", { targetId: extra }).catch(() => closing.delete(extra));
+          send({ type: "notice", message: "Close a tab before opening another." });
+        }
         return;
       }
       if (method === "Target.targetDestroyed") {
@@ -942,10 +1147,12 @@ async function runViewer(
         startPageTargets.delete(gone);
         if (gone === activeTargetId) {
           // The agent closed the tab we were streaming. Follow it to another rather than
-          // freezing on the last frame of a page that no longer exists.
-          const next = projectTabs()[0];
+          // freezing on the last frame of a page that no longer exists -- for a guest, only to
+          // a tab its link lets it see, and if there is none, the guest's view is over.
+          const next = projectTabs().find((t) => guestMaySee(t.targetId, t.url));
           activeTargetId = undefined;
           if (next) void attach(next.targetId).catch((e) => log.warn("viewer refollow failed", { error: (e as Error).message }));
+          else if (guest) endGuest?.(4004, "the page you were shown was closed");
         }
         pushTabs();
         return;
@@ -978,10 +1185,26 @@ async function runViewer(
     // blank one for the whole life of a browser whose agent opened its work in a new tab.
     // Prefer the newest tab that has actually gone somewhere.
     const real = tabs.filter((t) => t.url && t.url !== "about:blank");
-    await attach((real.length ? real[real.length - 1] : tabs[0]).targetId);
+    const newest = (real.length ? real[real.length - 1] : tabs[0])!.targetId;
+    if (!guest) {
+      await attach(newest);
+    } else {
+      // A guest lands on the tab its link was handed over on, pinned by its first viewer, so a
+      // reconnect cannot move it to whatever happens to be newest. If that tab has gone, it
+      // gets a tab its link allows, and failing that, nothing.
+      const home = guestHomeTarget(guest.id);
+      if (!home) pinGuestHomeTarget(guest.id, newest);
+      const pinned = guestHomeTarget(guest.id);
+      const pick = tabs.find((t) => t.targetId === pinned) ?? [...tabs].reverse().find((t) => guestMaySee(t.targetId, t.url));
+      if (!pick) {
+        endGuest?.(4004, "the page you were shown was closed");
+        return;
+      }
+      await attach(pick.targetId);
+    }
 
     send({ type: "hello", mode, browserId, screen, content });
-    send({ type: "tabs", tabs: projectTabs(), activeTargetId });
+    send({ type: "tabs", tabs: visibleTabs(), activeTargetId });
 
     if (closed) {
       await cdp.close();
@@ -1133,6 +1356,33 @@ async function runViewer(
       })();
     };
 
+    /**
+     * A guest's allowance. Page input is always theirs; the address bar and the tab strip are
+     * the administrator's to hand out per link. Those only limit what the guest can open
+     * directly: a link on an allowed page still goes where it goes, which docs/guest-access.md
+     * says plainly rather than implying a boundary this is not.
+     */
+    const guestMay = (msg: { type: string; [k: string]: unknown }): boolean => {
+      if (!guest) return true;
+      if (GUEST_INPUT.has(msg.type)) return true;
+      const hosts = guest.allowedHosts;
+      if (msg.type === "navigate") {
+        if (hostAllowed(hosts, safeNavigationUrl(msg.url))) return true;
+        send({ type: "notice", message: "This guest link does not allow opening that address." });
+        return false;
+      }
+      if (hosts.length === 0) return false;
+      if (msg.type === "newTab") {
+        if (projectTabs().length < GUEST_MAX_TABS) return true;
+        send({ type: "notice", message: "Close a tab before opening another." });
+        return false;
+      }
+      if (msg.type === "selectTab" || msg.type === "closeTab") {
+        return typeof msg.targetId === "string" && guestMaySee(msg.targetId, targets.get(msg.targetId)?.url);
+      }
+      return false;
+    };
+
     handle = (msg) => {
       // Only a control socket's traffic counts as a human saying "I am still looking at this".
       // A watch tab heartbeats on a timer whether or not anyone is in front of it, so touching
@@ -1143,7 +1393,7 @@ async function runViewer(
       if (mode === "control") browsers.touch(browserId);
       if (msg.type === "heartbeat" && mode === "control" && typeof msg.leaseToken === "string") {
         try {
-          browsers.heartbeatControl(browserId, msg.leaseToken);
+          browsers.heartbeatControl(browserId, msg.leaseToken, guest ? { guestId: guest.id } : "admin");
           const firstBind = !boundLease;
           boundLease = msg.leaseToken;
           // The client heartbeats on open and every 15s after. Only the first one can have
@@ -1163,6 +1413,8 @@ async function runViewer(
         send({ type: "error", message: "lease expired" });
         return;
       }
+      if (guest && !guestMay(msg)) return;
+      if (guest && msg.type === "mouse" && !GUEST_BUTTONS.has(msg.button as string | undefined)) return;
       // A local token bucket, deliberately not rate-limit.ts: that one signals by throwing an
       // HTTP-shaped error, and a synchronous throw inside a ws message handler with no
       // uncaughtException handler installed takes the process down. Shared by every message
@@ -1270,9 +1522,16 @@ async function runViewer(
           try {
             const { currentIndex, entries } = (await cdp!.send("Page.getNavigationHistory", {}, sid)) as {
               currentIndex: number;
-              entries: Array<{ id: number }>;
+              entries: Array<{ id: number; url?: string }>;
             };
             const target = entries[currentIndex + delta];
+            if (guest && target) {
+              const prior = activeTargetId ? priorEntries.get(activeTargetId) : undefined;
+              if (!prior || (prior.has(target.id) && !hostAllowed(guest.allowedHosts, target.url))) {
+                send({ type: "notice", message: "That page was open before this browser was shared with you." });
+                return;
+              }
+            }
             // Off either end of the history is a no-op, not an error: the buttons stay live
             // rather than needing the client to track history state it cannot see.
             if (target) await cdp!.send("Page.navigateToHistoryEntry", { entryId: target.id }, sid);

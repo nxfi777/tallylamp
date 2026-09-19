@@ -162,6 +162,17 @@ the page, then **Return to agent** when you're finished.
 Watching is read-only. You need control to navigate, switch tabs, or type.
 Your agent's MCP connection stays open during the handoff.
 
+### Let someone else sign in
+
+When the 2FA code goes to a colleague's phone, send them a guest link instead of
+the admin secret. On the browser's page, choose **Share with a person…**. The
+link opens that one browser and nothing else. It works once, expires within 24
+hours, and you can revoke it at any time. The guest can watch and, if you allow
+it, take control from the agent, but never from you. Everything they do is
+recorded in the audit log under their name. A guest can use every login saved in
+that browser, so share one that holds only what they need. See
+[guest links](docs/guest-access.md).
+
 ### Per-browser proxies
 
 Set a proxy in **New browser**, or stop an existing browser and choose

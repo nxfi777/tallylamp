@@ -5,6 +5,7 @@ import { config, trustedOrigins } from "./config.js";
 import { AGENT_SCOPES, authenticateBearer, parseBearer } from "./auth.js";
 import { Err } from "./errors.js";
 import { errorHandler, mountApi, authFromRequest } from "./api.js";
+import { mountGuest } from "./guest-api.js";
 /** Structural, so this module never imports the MCP SDK. */
 export type McpHandler = {
   handle(req: Request, res: Response, principal: import("./auth.js").Principal): Promise<void>;
@@ -130,6 +131,8 @@ export function createApp(browsers: BrowserManager, mcp: McpHandler): express.Ex
     },
   );
 
+  // Before the API and the dashboard: the guest surface shares neither their auth nor their files.
+  mountGuest(app, browsers);
   mountApi(app, browsers);
 
   app.use(express.static(dashboardDir));

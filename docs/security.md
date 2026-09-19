@@ -7,6 +7,10 @@ deployment is exposed to the public internet. Treat websites loaded in Chrome as
 untrusted: an agent with browser control can access the accounts signed into that
 profile. Browsers in one deployment share a container and a Unix user.
 
+The administrator can also hand one browser to another person with a
+[guest link](guest-access.md). Treat that person as fully untrusted apart from
+holding a valid token for that one browser. See [Guest links](#guest-links) below.
+
 ## Credentials
 
 ### Administrator
@@ -62,11 +66,105 @@ The pairing code a person reads off the extension is not a credential. It names 
 request that only a signed-in administrator can approve, lasts 10 minutes and
 works once.
 
+### Guest links
+
+A guest link token (`tl_guest_…`) is shown once and stored as a SHA-256 hash in
+`browser_guests`. It travels in the URL fragment, which browsers do not send, so
+it stays out of server logs, proxy logs and `Referer`. The guest page reads it,
+removes it from the address bar and, only after the guest presses a button,
+exchanges it at `POST /guest/api/v1/session` for a `tallylamp_guest` session
+cookie. The button is there so that link scanners in mail and chat services do
+not use up the link.
+
+The link is single use. The first exchange spends it atomically. A later
+exchange gets the same 401 as any invalid token and is audited as
+`guest.link.reused`, which tells the operator the link got out. The cookie is
+HttpOnly and SameSite=Strict, Secure on HTTPS, scoped to `Path=/guest`, and
+expires with the link. The link token is not a bearer credential anywhere:
+`/api/v1` and `/mcp` refuse it.
+
+Guests are not API principals. Every existing permission check was written for
+two kinds of caller, an administrator and an agent. A number of them restrict
+agents with a `type === "agent"` test and let every other caller through as the
+administrator. A third principal type would have landed on the administrator
+side of each of those checks, on every entry point. So a guest session is read
+only by the guest router under `/guest/api/v1`, from its own cookie on its own
+path. `/api/v1`, `/mcp`, the OAuth pages and the tunnel and link sockets cannot
+resolve it, and they do not receive the cookie. A route added there later is
+closed to guests without anyone having to remember. The guest router takes no
+browser id: the browser is the one on the grant. Every other path under
+`/guest/api` returns the same 403, whether or not it exists.
+
+The guest router requires a trusted `Origin` on every request that changes
+state, with no bearer exemption and no allowance for a missing header. `GET`
+requests refuse a foreign `Origin` or a cross-site `Sec-Fetch-Site`. The guest
+page is served with its own script and stylesheet, never the dashboard bundle,
+under `default-src 'none'; script-src 'self'`, `frame-ancestors 'none'`,
+`Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
+
+A guest can take control only when nobody holds it or an agent does. It can never
+use `force`, and it can never take control from the administrator or another
+guest. Returning control releases only the guest's own lease. The guest's lease
+ends when the link is revoked or expires, or after
+`TALLYLAMP_GUEST_MAX_LEASE_SEC` (30 minutes) of continuous control. That clock
+belongs to the guest, not to one lease. Every way a guest's lease can end
+records when it ended: release, lapse, displacement or expiry. Taking control
+again before `TALLYLAMP_GUEST_LEASE_COOLDOWN_SEC` has passed continues the same
+hold. A guest that reaches the limit must wait out that cooldown. Revoking a
+link, or the guest pressing Leave, deletes its session, releases its lease and
+closes its viewer sockets at once. Expiry is checked on every lease read and
+every 10 seconds on each open guest socket.
+
+A guest viewer is refused the `desktop` surface, since that surface drives the
+whole X display, `chrome://extensions` included. A guest may hold at most
+`TALLYLAMP_GUEST_MAX_VIEWERS` sockets (3) at once and may open at most 10 tabs,
+because each socket holds a CDP connection and a screencast.
+
+A guest sees the tab the link was handed over on. The first viewer pins it for
+the link's lifetime, so a reconnect cannot land the guest on whatever tab is
+newest. A guest also sees blank tabs and, if the link allows navigation, tabs on
+its hosts. Nothing else, including the viewer's own choice of a tab when the
+streamed tab closes or an attach fails. When no permitted tab is left, the
+guest's socket closes. The tab list a guest receives is filtered the same way,
+so it does not reveal the titles and URLs of other open tabs.
+
+Page input, paste, reload and resize are allowed. Back and forward are allowed,
+except into history entries that existed when the guest's viewer first showed
+that tab, unless the link allows their host. Those entries are what the agent or
+operator browsed before the handoff. The mouse's back and forward buttons are
+refused. Navigation, new tabs and tab switching are allowed only for the hosts
+the link lists (subdomains included), for any host with `*`, and not at all by
+default. The start page, which shows the browser's project and purpose, is never
+injected for a guest. The host list limits what a guest can open directly. It is
+not a network boundary: a link on an allowed page still goes where it points.
+
+A guest can use every login saved in the profile it is given. That is the main
+risk of a guest link, and no control in Tallylamp narrows it. Give guests a
+browser that holds only what the job needs.
+
+Everything a guest does is audited with its id and label. The audit table keeps a
+bounded tail of the newest rows, so a guest who could write rows without limit
+could push every other record, including its own, out of the log. Each link
+therefore has an audit budget (`TALLYLAMP_GUEST_AUDIT_BUDGET`, 1,000 rows). An
+action reserves its rows before it runs and is refused with 429 once the budget
+is spent, so nothing a guest does goes unrecorded. Records of refused requests
+are limited to a burst of 20, then 2 a minute, and are dropped rather than
+refused past the budget. Failed link exchanges are recorded by IP behind a rate
+limit of 10 a minute.
+
 ### Viewer tickets and control leases
 
 Viewer tickets are 192-bit random values. They are hashed, scoped to one browser,
 valid for about 60 seconds, and single-use. A ticket authenticates the WebSocket
 upgrade, and its mode determines whether the viewer can watch or drive.
+
+A ticket is bound to whoever minted it: the administrator's dashboard session,
+recorded by hash, or one guest session. It is refused if that session has
+logged out or expired, or if the guest link was revoked, even within the
+ticket's 60 seconds. The upgrade refuses a foreign `Origin` for every caller.
+Browsers always send `Origin` on a WebSocket, so an absent one means a
+non-browser client. That is allowed for administrator tickets, because a
+cross-site page cannot produce it. Guest tickets require a trusted `Origin`.
 
 A watch socket drops mouse, key, scroll, navigation, tab, and resize messages
 on the server, so a valid watch ticket exposes page content without granting
@@ -75,7 +173,9 @@ authority to type, navigate, or change the browser.
 A control socket must heartbeat its lease token. The server checks every message
 that changes the browser against the current lease, so when a second operator
 takes control, the first operator loses control access even if their socket is
-still connected. Browser credentials and
+still connected. A heartbeat must also come from the side holding the lease: an
+administrator renews only an administrator's lease, and a guest only its own. The
+token alone, which appears in every browser view, is not enough. Browser credentials and
 control access carry the authority of the accounts signed into that Chrome.
 
 ## What a tab control viewer can do

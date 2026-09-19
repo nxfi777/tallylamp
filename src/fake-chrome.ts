@@ -122,7 +122,24 @@ export function setFakeTargets(targets: typeof DEFAULT_TARGETS | null): void {
   FAKE_TARGETS = targets ?? DEFAULT_TARGETS;
 }
 
+/** Every open CDP socket, so a test can push an event the way Chrome would. */
+const cdpSockets = new Set<WebSocket>();
+
+/** Send one CDP event to every connected client, e.g. a Target.targetDestroyed. */
+export function emitFakeEvent(method: string, params: Record<string, unknown>): void {
+  for (const ws of cdpSockets) ws.send(JSON.stringify({ method, params }));
+}
+
+let FAKE_HISTORY: { currentIndex: number; entries: Array<{ id: number; url: string; title?: string }> } | null = null;
+
+/** Give Page.getNavigationHistory an answer. Null restores the catch-all empty reply. */
+export function setFakeHistory(history: typeof FAKE_HISTORY): void {
+  FAKE_HISTORY = history;
+}
+
 function attachCdp(ws: WebSocket) {
+  cdpSockets.add(ws);
+  ws.once("close", () => cdpSockets.delete(ws));
   ws.on("message", (raw) => {
     const msg = JSON.parse(String(raw)) as {
       id: number;
@@ -201,6 +218,10 @@ function attachCdp(ws: WebSocket) {
     }
     if (msg.method === "Page.screencastFrameAck" || msg.method === "Page.enable" || msg.method === "Runtime.enable" || msg.method === "Page.stopScreencast" || msg.method === "Input.setIgnoreInputEvents" || msg.method.startsWith("Input.")) {
       ok({});
+      return;
+    }
+    if (msg.method === "Page.getNavigationHistory" && FAKE_HISTORY) {
+      ok(FAKE_HISTORY);
       return;
     }
     if (msg.method === "Page.captureScreenshot") {

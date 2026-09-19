@@ -50,6 +50,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY dashboard ./dashboard
+COPY guest ./guest
 COPY bin ./bin
 COPY --chmod=0755 docker/entrypoint.sh /entrypoint.sh
 RUN chown -R tallylamp:tallylamp /app

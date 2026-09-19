@@ -297,6 +297,47 @@ CREATE TABLE IF NOT EXISTS link_pairings (
   expires_at TEXT NOT NULL
 );
 
+-- A person let into ONE browser to watch it and, if allowed, take control of it. Not a
+-- principal: nothing on /api/v1 or /mcp can resolve one, so a route added there later is
+-- closed to guests without anybody remembering to close it. The token is shown once and
+-- stored only as a hash, like an agent credential.
+CREATE TABLE IF NOT EXISTS browser_guests (
+  id TEXT PRIMARY KEY,
+  browser_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  modes TEXT NOT NULL,
+  allowed_hosts_json TEXT NOT NULL DEFAULT '[]',
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  last_used_at TEXT,
+  -- Single use: set by the first exchange, after which the link opens nothing.
+  token_used_at TEXT,
+  -- The guest's hold on control, measured across leases so giving control back and taking
+  -- it again straight away does not restart the clock.
+  control_since TEXT,
+  control_ended_at TEXT,
+  control_cooldown_until TEXT,
+  -- Audit rows this link has caused. Capped, so an untrusted guest cannot push the log out.
+  audit_count INTEGER NOT NULL DEFAULT 0,
+  audit_exhausted_at TEXT,
+  -- The tab the guest was handed. Its viewers never wander off it to a tab the link does not allow.
+  home_target_id TEXT
+);
+
+-- What exchanging a guest link buys: a cookie scoped to /guest that lasts as long as the link.
+-- Kept apart from the sessions table on purpose, because readSession() is what every admin
+-- surface trusts.
+CREATE TABLE IF NOT EXISTS guest_sessions (
+  id TEXT PRIMARY KEY,
+  guest_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+
 `;
 
 // Indexes run AFTER migrate(): an index on a column that only the migration adds would
@@ -317,6 +358,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tunnels_authority ON browser_tunnels(brows
 CREATE INDEX IF NOT EXISTS idx_links_browser ON browser_links(browser_id);
 CREATE INDEX IF NOT EXISTS idx_browser_site_access_browser ON browser_site_access(browser_id);
 CREATE INDEX IF NOT EXISTS idx_seed_site_access_seed ON seed_site_access(seed_id);
+CREATE INDEX IF NOT EXISTS idx_guests_browser ON browser_guests(browser_id);
+CREATE INDEX IF NOT EXISTS idx_guest_sessions_guest ON guest_sessions(guest_id);
 `;
 
 export function getDb(): DatabaseSync {
@@ -396,6 +439,12 @@ function migrate(database: DatabaseSync): void {
       database.exec("COMMIT");
     } catch (e) { database.exec("ROLLBACK"); throw e; }
   }
+  // Viewer tickets from older builds carried the raw dashboard session token in session_id.
+  // Newer ones hold only a reference; scrub anything else rather than wait for the prune.
+  database.exec(
+    `UPDATE viewer_tickets SET session_id = 'legacy'
+     WHERE session_id <> 'admin' AND session_id NOT LIKE 'session:%' AND session_id NOT LIKE 'guest:%'`,
+  );
   // Any OAuth token minted by an older build was bound to the admin principal with
   // full scopes and no audience. Those are not recoverable as connector grants.
   database.exec(

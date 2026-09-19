@@ -65,6 +65,22 @@ export const openApiSpec = {
     "/browsers/{id}/viewer-ticket": {
       post: { summary: "Mint a short-lived viewer ticket", responses: { "200": { description: "ok" } } },
     },
+    "/browsers/{id}/guests": {
+      get: { summary: "List guest links for this browser, without their tokens (admin only)", responses: { "200": { description: "ok" } } },
+      post: {
+        summary: "Create a guest link: one person, this browser, watch and optionally control (admin only). The token is returned once and the link works once. See docs/guest-access.md.",
+        requestBody: { content: { "application/json": { schema: { type: "object", required: ["label"], additionalProperties: false, properties: {
+          label: { type: "string", maxLength: 80, description: "Who the link is for. Shown to the guest and recorded in the audit log." },
+          modes: { type: "array", items: { enum: ["watch", "control"] }, default: ["watch"] },
+          expiresInSec: { type: "integer", minimum: 60, description: "Default TALLYLAMP_GUEST_TTL_SEC; at most TALLYLAMP_GUEST_MAX_TTL_SEC" },
+          allowedHosts: { type: "array", items: { type: "string" }, maxItems: 20, default: [], description: "Hosts the guest may open from the address bar and tabs. [] = none, [\"*\"] = any." },
+        } } } } },
+        responses: { "201": { description: "created; includes token and url once" }, "400": { description: "invalid input, a linked browser, or too many live links" } },
+      },
+    },
+    "/browsers/{id}/guests/{guestId}": {
+      delete: { summary: "Revoke a guest link: ends its sessions, its lease and its open viewers (admin only)", responses: { "200": { description: "ok" } } },
+    },
     "/browsers/{id}/extensions": {
       put: { summary: "Enable or disable extensions for a stopped browser (administrator only). Requires a host that supports full-browser viewing.",
         requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } } } } },

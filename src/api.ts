@@ -23,7 +23,8 @@ import { assertMaySeeTunnels, createTunnel, listTunnels, revokeTunnel, tunnelIsC
 import { audit, listActivity, listAudit } from "./audit.js";
 import { approvePairing, denyPairing, describePairing, dropLinksFor, linkedAccess, pollPairing, setLinkedAccess, startPairing } from "./linked.js";
 import { hub } from "./events.js";
-import { issueViewerTicket } from "./viewer.js";
+import { adminTicketRef, issueViewerTicket } from "./viewer.js";
+import { createGuest, listGuests, revokeGuest } from "./guests.js";
 import { openApiSpec } from "./openapi.js";
 import { captureScreenshot } from "./cdp.js";
 import { cookieSerialize, readCookie, wwwAuthenticate, startSseKeepalive } from "./http-util.js";
@@ -88,7 +89,9 @@ function requireAuth(req: Request, _res: Response, next: NextFunction): void {
   const p = authFromRequest(req);
   if (!p) return next(Err.unauthenticated());
   req.principal = p;
-  req.sessionToken = cookieToken(req) ?? undefined;
+  // Only when the cookie is what authenticated this request: a bearer caller that also carries a
+  // stale cookie would otherwise mint viewer tickets bound to a session that is not its own.
+  req.sessionToken = parseBearer(req.header("authorization")) ? undefined : (cookieToken(req) ?? undefined);
   next();
 }
 
@@ -412,7 +415,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
   api.post("/api/v1/browsers/:id/control", (req, res) => {
     if (req.principal!.type !== "admin") throw Err.unauthorized("only the administrator can take human control");
     const force = Boolean(req.body?.force);
-    const state = browsers.acquireControl(req.params.id, "human", "admin", { force });
+    const state = browsers.acquireControl(req.params.id, "human", "admin", { force, actor: { type: "admin", id: "admin" } });
     res.json({ control: state });
   });
 
@@ -424,7 +427,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
 
   api.post("/api/v1/browsers/:id/control/heartbeat", (req, res) => {
     if (req.principal!.type !== "admin") throw Err.unauthorized();
-    const state = browsers.heartbeatControl(req.params.id, String(req.body?.leaseToken ?? ""));
+    const state = browsers.heartbeatControl(req.params.id, String(req.body?.leaseToken ?? ""), "admin");
     res.json({ control: state });
   });
 
@@ -435,8 +438,37 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     if (mode === "control" && browsers.controlState(row.id).controllerType !== "human") {
       throw Err.unauthorized("take control before requesting an interactive viewer");
     }
-    const ticket = issueViewerTicket(row.id, req.sessionToken ?? "admin", mode);
+    const ticket = issueViewerTicket(row.id, adminTicketRef(req.sessionToken), mode);
     res.json({ ticket, expiresInSec: Math.floor(config.viewerTicketTtlMs / 1000), mode });
+  });
+
+  // Guest links: let one more person watch, and optionally drive, exactly one browser. Admin
+  // only, because a guest link is a credential for a signed-in profile. The token is in the
+  // response once and never again. What a guest can then do lives in guest-api.ts, not here:
+  // nothing under /api/v1 can resolve a guest at all.
+  api.post("/api/v1/browsers/:id/guests", requireAdmin, (req, res) => {
+    rateLimit("guest-create", 30, 10);
+    const out = createGuest(
+      browsers,
+      req.params.id,
+      {
+        label: req.body?.label,
+        modes: req.body?.modes,
+        expiresInSec: req.body?.expiresInSec,
+        allowedHosts: req.body?.allowedHosts,
+      },
+      { type: "admin", id: "admin" },
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.status(201).json(out);
+  });
+
+  api.get("/api/v1/browsers/:id/guests", requireAdmin, (req, res) => {
+    res.json({ guests: listGuests(browsers, req.params.id) });
+  });
+
+  api.delete("/api/v1/browsers/:id/guests/:guestId", requireAdmin, (req, res) => {
+    res.json({ guest: revokeGuest(browsers, req.params.id, req.params.guestId, { type: "admin", id: "admin" }) });
   });
 
   api.put("/api/v1/browsers/:id/extensions", requireAdmin, (req, res) => {

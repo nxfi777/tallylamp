@@ -34,6 +34,8 @@ password. You choose when to upgrade the application.
 
 - Keep a browser profile ready for an agent's recurring tasks.
 - Take control to sign in, then let the agent continue.
+- Let a colleague clear a 2FA prompt in one browser, without sharing your
+  dashboard password.
 - Watch a browser session live to inspect what the agent is doing.
 - Test pages with different user agents, mobile or desktop viewports, touch
   input, and locations through MCP's `emulate` tool.
@@ -97,6 +99,16 @@ a tab. It connects out to your domain, so Railway needs no extra setup.
 The agent gets only the tabs you share and acts as you inside them. The
 extension blocks the browser-wide cookie jar, other tabs and local files. You
 can take a tab back at any time. Firefox and Safari cannot be linked.
+
+## Let someone else sign in
+
+If a colleague has to sign in or clear a 2FA prompt, share one browser with them
+instead of your dashboard password. **Share with a person…** on the browser's
+page makes a link that opens only that browser. It works once and expires within
+24 hours, and you can revoke it at any time. The guest can watch the page and, if
+you allow it, take control from the agent. Everything they do goes in the audit
+log under their name. A guest can use every login saved in that browser, so
+share one that holds only what they need.
 
 ## Reach localhost on your own machine
 

@@ -1,6 +1,13 @@
 import { getDb, nowIso } from "./db.js";
 import { log } from "./log.js";
 
+/**
+ * Who did something, for the log. Wider than a Principal on purpose: a guest acts and is
+ * recorded, but is never a Principal, because every Principal check on /api/v1 was written
+ * for exactly two kinds.
+ */
+export type AuditActor = { type: string; id: string; detail?: Record<string, unknown> };
+
 export function audit(input: {
   actorType: string;
   actorId: string;

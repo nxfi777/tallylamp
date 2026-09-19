@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Shared browser</title>
+    <link rel="icon" href="/guest/assets/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/guest/assets/guest.css" />
+    <script type="module" src="/guest/assets/guest.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <div class="who">
+        <img class="mark" src="/guest/assets/icon.svg" alt="" width="22" height="22" />
+        <div class="names">
+          <h1 id="name">Shared browser</h1>
+          <p id="state" class="state" role="status" aria-live="polite">Opening…</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="take" class="primary" type="button" hidden>Take control</button>
+        <button id="give" class="primary" type="button" hidden>Give control back</button>
+        <button id="leave" class="quiet" type="button" hidden>Leave</button>
+      </div>
+    </header>
+
+    <nav id="tools" class="tools" aria-label="Browser controls" hidden>
+      <button id="back" type="button" aria-label="Back" title="Back">&#8592;</button>
+      <button id="fwd" type="button" aria-label="Forward" title="Forward">&#8594;</button>
+      <button id="reload" type="button" aria-label="Reload" title="Reload">&#8635;</button>
+      <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Type an address and press Enter" aria-label="Address" hidden />
+      <button id="newtab" type="button" aria-label="New tab" title="New tab" hidden>+</button>
+    </nav>
+    <div id="tabs" class="tabs" role="tablist" aria-label="Tabs" hidden></div>
+
+    <section id="welcome" class="welcome" hidden>
+      <h2>A browser has been shared with you</h2>
+      <p>This link works once. Open it in the browser you want to use, and it stays open there until it expires.</p>
+      <button id="open" class="primary" type="button">Open the shared browser</button>
+    </section>
+
+    <main class="stagewrap">
+      <canvas id="stage" class="stage" tabindex="0" aria-label="The shared browser. Click it, then type."></canvas>
+      <div id="overlay" class="overlay"><p id="overlay-text">Connecting…</p></div>
+    </main>
+
+    <p id="notice" class="notice" role="alert" hidden></p>
+    <footer class="foot" id="foot"></footer>
+  </body>
+</html>
