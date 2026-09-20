@@ -101,6 +101,14 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
     await titled("clicks:2");
     send({ type: "paste", text: "Native UI" });
     await titled("typed:Native UI");
+    // A Shift whose release never arrives: the OS took the chord, or focus left without a blur.
+    // The display kept it down and every later letter came out uppercase. The next press says
+    // Shift is not held, and that has to be enough to let it go. Paste cannot prove this, since
+    // `type --clearmodifiers` hides a stuck modifier; only a real key event shows it.
+    send({ type: "key", event: "rawKeyDown", key: "Shift", code: "ShiftLeft", modifiers: 8 });
+    send({ type: "key", event: "keyDown", key: "d", code: "KeyD", modifiers: 0 });
+    send({ type: "key", event: "keyUp", key: "d", code: "KeyD", modifiers: 0 });
+    await titled("typed:Native UId");
     assert.deepEqual(errors, []);
     ws.close(1000);
     await until(() => ctx.browsers.viewerCount(id) === 0, "the viewer to detach");
@@ -110,7 +118,7 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
     const native = await agentDesktop(ctx.browsers, owner, id, {}, true);
     assert.ok(native.image && native.image.length > 100);
     await agentDesktop(ctx.browsers, owner, id, { action: "type", text: "-agent" }, false);
-    await titled("typed:Native UI-agent");
+    await titled("typed:Native UId-agent");
     // Same trap on the agent path: a second click where the pointer already rests timed out.
     await agentDesktop(ctx.browsers, owner, id, { action: "click", x: 640, y: 450 }, false);
     await agentDesktop(ctx.browsers, owner, id, { action: "click", x: 640, y: 450 }, false);

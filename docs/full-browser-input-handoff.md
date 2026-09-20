@@ -66,6 +66,39 @@ runs the native test" and "covers keys and paste only" gaps below are closed.
 Still unverified: nobody has clicked through the dashboard's Full browser view since the fix. Shell access for hand tests: `railway ssh --project … --service … -- sh -c
 'export DISPLAY=:<n>; …'`, display number from `ls /tmp/.X11-unix`.
 
+## Stuck uppercase (2026-09-20, second bug)
+
+Reported right after the click fix: letters came out uppercase in Full browser with Shift not
+held. By the time anyone looked the display was clean (`mask 0`, no keys down), because the
+pointer leaving the stage releases everything held. Three ways to get there were reproduced on
+a scratch Xvfb in the production container, reading the server's state with QueryPointer and
+QueryKeymap:
+
+| Sequence, one xdotool process each | Display afterwards |
+| --- | --- |
+| `keydown Shift_L`, and the release never arrives | Shift down (keycode 50) |
+| `keydown U0040` then `keyup U0032`: "@" released as "2" | Shift down. xdotool pressed it for "@", and only a shifted release lets it go |
+| `keydown Caps_Lock`, `keyup Caps_Lock`: what macOS sends for Caps Lock on, then off | Lock on, for good |
+
+A release goes missing when the OS takes the chord, or when the stage loses focus without a
+blur. A release comes back under another name when the modifier that made the character is let
+go first: Option on a Mac, AltGr elsewhere. Shift let go first is harmless, since its own keyup
+releases `Shift_L`.
+
+The fixes, in `src/desktop-viewer.ts`:
+
+- Every key press and mouse press carries the modifiers really held. The argv now starts with a
+  `keyup` for each one that is not. It only ever releases. Verified: `keyup ... Shift_L keydown
+  U0064` on a display with Shift stuck leaves only `d` down.
+- Held keys are tracked by physical key (`code`), and a release sends the keysym the press
+  sent.
+- Caps Lock is never forwarded. The operator's `key` already has it applied, and X reads
+  Shift+Lock as lowercase, so a remote Lock inverted every letter on every platform.
+
+Do not test a scratch display with xdotool as its only client. Xvfb resets when its last client
+disconnects, which wipes the key state and makes every one of these look fine.
+
+
 ---
 
 Written for an engineer or model picking this up cold. Everything

@@ -32,8 +32,26 @@ const KEYS: Record<string, string> = {
   Enter: "Return", Tab: "Tab", Backspace: "BackSpace", Delete: "Delete", Escape: "Escape",
   ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down",
   Home: "Home", End: "End", PageUp: "Prior", PageDown: "Next", Insert: "Insert",
-  Shift: "Shift_L", Control: "Control_L", Alt: "Alt_L", Meta: "Super_L", CapsLock: "Caps_Lock",
+  Shift: "Shift_L", Control: "Control_L", Alt: "Alt_L", Meta: "Super_L",
 };
+// Never forward Caps Lock. The operator's `key` already has its effect applied ("D", not "d"),
+// and xdotool adds Shift for an uppercase keysym, so a remote Lock on top inverts every letter:
+// X reads Shift+Lock as lowercase. macOS makes it worse by sending only a keydown when Caps Lock
+// turns on and only a keyup when it turns off, which leaves the remote Lock on for good.
+const IGNORED_KEYS = new Set(["CapsLock"]);
+const MODIFIERS: Array<[bit: number, key: string, keysym: string]> = [[1, "Alt", "Alt_L"], [2, "Control", "Control_L"], [4, "Meta", "Super_L"], [8, "Shift", "Shift_L"]];
+/**
+ * Modifiers the remote display must not be holding, going by the operator's own event. A keyup
+ * that never arrives -- the OS took the chord, the page lost focus without a blur, xdotool
+ * pressed Shift for "@" and the release came back as "2" -- left Shift down on the display and
+ * every later letter uppercase until the pointer left the stage. Each press says which
+ * modifiers are really down, so let go of the rest first. Release only: never press from this.
+ */
+export function staleModifiers(msg: Message): string[] {
+  if (typeof msg.modifiers !== "number") return [];
+  const held = msg.modifiers;
+  return MODIFIERS.filter(([bit, key]) => !(held & bit) && msg.key !== key).map(([, , keysym]) => keysym);
+}
 export function desktopKey(key: unknown): string | null {
   if (typeof key !== "string") return null;
   if (Object.hasOwn(KEYS, key)) return KEYS[key];
@@ -60,7 +78,8 @@ export function desktopInput(msg: Message, size: { width: number; height: number
     if (msg.event === "mouseMoved") return pos;
     const button = msg.button === "left" ? "1" : msg.button === "middle" ? "2" : msg.button === "right" ? "3" : null;
     if (!button || !["mousePressed", "mouseReleased"].includes(String(msg.event))) return null;
-    return [...pos, msg.event === "mousePressed" ? "mousedown" : "mouseup", button];
+    if (msg.event === "mouseReleased") return [...pos, "mouseup", button];
+    return [...staleModifiers(msg).flatMap(k => ["keyup", k]), ...pos, "mousedown", button];
   }
   if (msg.type === "scroll") {
     const pos = point();
@@ -74,7 +93,8 @@ export function desktopInput(msg: Message, size: { width: number; height: number
   }
   if (msg.type === "key") {
     const key = desktopKey(msg.key);
-    return key && ["keyDown", "rawKeyDown", "keyUp"].includes(String(msg.event)) ? [msg.event === "keyUp" ? "keyup" : "keydown", key] : null;
+    if (!key || !["keyDown", "rawKeyDown", "keyUp"].includes(String(msg.event))) return null;
+    return msg.event === "keyUp" ? ["keyup", key] : [...staleModifiers(msg).flatMap(k => ["keyup", k]), "keydown", key];
   }
   if (msg.type === "paste" && typeof msg.text === "string" && msg.text.length <= 2048) {
     const text = msg.text.replace(/\r/g, "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
@@ -103,7 +123,11 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   let closed = false;
   let input: ChildProcess | null = null;
   let queue: Message[] = [];
-  const keys = new Set<string>();
+  // Physical key -> the keysym its press sent. The release names the key as it reads *then*:
+  // Shift let go first turns "R" into "r", Option let go first turns "@" into "2". Releasing
+  // that keysym instead leaves the pressed one down, and with it the Shift xdotool added.
+  const keys = new Map<string, string>();
+  const physical = (msg: Message) => typeof msg.code === "string" && msg.code ? msg.code : desktopKey(msg.key)!;
   const buttons = new Set<string>();
   // Once per socket per distinct reason. A refusal refuses every event of that kind, and a
   // notice per keystroke would bury the stage in the same sentence.
@@ -123,7 +147,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   /** Let go of whatever is physically held down. Nothing queued is touched. */
   const releaseHeldNow = () => {
     releaseWhenIdle = false;
-    const args = [...[...keys].flatMap(k => ["keyup", k]), ...[...buttons].flatMap(b => ["mouseup", b])];
+    const args = [...[...new Set(keys.values())].flatMap(k => ["keyup", k]), ...[...buttons].flatMap(b => ["mouseup", b])];
     keys.clear(); buttons.clear();
     if (args.length) {
       const child = spawnProcess("xdotool", args, { env, stdio: "ignore" });
@@ -157,11 +181,14 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     if (closed || input || !queue.length) return;
     if (!validLease()) { releaseInputs(); return; }
     const msg = queue.shift()!;
-    const args = desktopInput(msg, size);
+    let args = desktopInput(msg, size);
     if (!args) { pump(); return; }
     if (msg.type === "key") {
-      const key = desktopKey(msg.key)!;
-      if (msg.event !== "keyUp") keys.add(key);
+      if (msg.event !== "keyUp") keys.set(physical(msg), desktopKey(msg.key)!);
+      else if (keys.has(physical(msg))) args = ["keyup", keys.get(physical(msg))!];
+    }
+    if (msg.event !== "keyUp" && msg.event !== "mouseReleased") {
+      for (const keysym of staleModifiers(msg)) for (const [k, v] of keys) if (v === keysym) keys.delete(k);
     }
     if (msg.type === "mouse") {
       const button = ({ left: "1", middle: "2", right: "3" } as Record<string, string>)[String(msg.button)];
@@ -188,7 +215,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
           ? `Desktop input stopped responding on the host: xdotool was killed (${signal}). Nothing you click or type is reaching Chrome.`
           : `Desktop input failed on the host: xdotool exited ${code}. Nothing you click or type is reaching Chrome.` });
       }
-      if (msg.type === "key" && msg.event === "keyUp") keys.delete(desktopKey(msg.key)!);
+      if (msg.type === "key" && msg.event === "keyUp") keys.delete(physical(msg));
       if (msg.type === "mouse" && msg.event === "mouseReleased") buttons.delete(({ left: "1", middle: "2", right: "3" } as Record<string, string>)[String(msg.button)]);
       if (msg.type === "extensions" && validLease()) queue.unshift({ type: "key", event: "keyDown", key: "Enter" }, { type: "key", event: "keyUp", key: "Enter" });
       pump();
@@ -279,6 +306,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     }
     if (msg.type === "releaseInputs") { releaseHeld(); return; }
     if (msg.type === "fitBrowser") { fitWindow(); return; }
+    if (msg.type === "key" && IGNORED_KEYS.has(String(msg.key))) return;
     if (!desktopInput(msg, size)) {
       // The last silent drop. A pointer mapped outside the display and a key with no keysym
       // both land here, and both looked exactly like a view that had stopped responding.

@@ -22,6 +22,16 @@ describe("desktop input and framing", () => {
     assert.equal(desktopKey("é"), "U00e9");
     assert.equal(desktopKey("Enter"), "Return");
     assert.deepEqual(desktopInput({ type: "key", event: "rawKeyDown", key: "Tab" }, size), ["keydown", "Tab"]);
+    // Each press carries the modifiers really held. Whatever else the display still has down is
+    // stale, and one stale Shift turned every later letter uppercase.
+    assert.deepEqual(desktopInput({ type: "key", event: "keyDown", key: "d", modifiers: 0 }, size),
+      ["keyup", "Alt_L", "keyup", "Control_L", "keyup", "Super_L", "keyup", "Shift_L", "keydown", "U0064"]);
+    assert.deepEqual(desktopInput({ type: "key", event: "keyDown", key: "D", modifiers: 8 }, size).slice(-4), ["keyup", "Super_L", "keydown", "U0044"]);
+    assert.deepEqual(desktopInput({ type: "key", event: "rawKeyDown", key: "Shift", modifiers: 8 }, size).slice(-2), ["keydown", "Shift_L"]);
+    assert.deepEqual(desktopInput({ type: "key", event: "keyUp", key: "d", modifiers: 0 }, size), ["keyup", "U0064"]);
+    assert.deepEqual(desktopInput({ type: "mouse", event: "mousePressed", button: "left", x: 1, y: 1, modifiers: 8 }, size),
+      ["keyup", "Alt_L", "keyup", "Control_L", "keyup", "Super_L", "mousemove", "1", "1", "mousedown", "1"]);
+    assert.equal(desktopKey("CapsLock"), null, "the operator's key already has Caps Lock applied");
     assert.equal(desktopInput({ type: "mouse", event: "mouseMoved", x: -1, y: 0 }, size), null);
     assert.equal(desktopInput({ type: "mouse", event: "mouseMoved", x: Infinity, y: 0 }, size), null);
     assert.equal(desktopInput({ type: "mouse", event: "exec", x: 1, y: 2 }, size), null);
@@ -83,6 +93,50 @@ describe("extensions and full-browser authorization", () => {
     const code = await new Promise<number>((resolve, reject) => { ws.on("close", resolve); ws.on("error", reject); });
     assert.equal(code, 1008);
     assert.equal(ctx.browsers.viewerCount(id), 0);
+  });
+  it("releases what a press pressed, however the release is spelled, and never forwards Caps Lock", () => {
+    const rt = ctx.browsers.runtime(id)!;
+    const original = { xvfb: rt.xvfb, display: rt.display };
+    rt.xvfb = {} as ChromeRuntime["xvfb"]; rt.display = ":99";
+    process.env.TALLYLAMP_FAKE_CHROME = "0";
+    const children: EventEmitter[] = [];
+    const calls: string[][] = [];
+    const notices: string[] = [];
+    const fakeSpawn = ((cmd: string, args: string[]) => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), kill() { return true; } });
+      if (cmd === "xdotool") { calls.push(args); queueMicrotask(() => child.emit("close", 0)); }
+      children.push(child); return child;
+    }) as unknown as typeof spawn;
+    const ws = Object.assign(new EventEmitter(), { readyState: 1, bufferedAmount: 0, send(raw: string) { const m = JSON.parse(raw); if (m.type === "notice") notices.push(m.message); }, ping() {}, close(code: number) { this.emit("close", code); }, terminate() { this.emit("close", 1006); } });
+    const send = (msg: object) => ws.emit("message", JSON.stringify(msg));
+    try {
+      const lease = ctx.browsers.acquireControl(id, "human", "admin", { force: true });
+      runDesktopViewer(ws as unknown as WebSocket, ctx.browsers, id, "control", fakeSpawn);
+      send({ type: "heartbeat", leaseToken: lease.leaseToken });
+      send({ type: "key", event: "rawKeyDown", key: "CapsLock", code: "CapsLock", modifiers: 0 });
+      assert.deepEqual(calls, []);
+      assert.deepEqual(notices, [], "Caps Lock is ignored, not reported as a dropped key");
+      // Option+2 types "@" on some layouts. Option comes up first, so the release reads "2".
+      send({ type: "key", event: "keyDown", key: "@", code: "Digit2", modifiers: 1 });
+      return new Promise<void>(resolve => setImmediate(() => {
+        send({ type: "key", event: "keyUp", key: "2", code: "Digit2", modifiers: 0 });
+        setImmediate(() => {
+          try {
+            assert.deepEqual(calls.at(-2)!.slice(-2), ["keydown", "U0040"]);
+            assert.deepEqual(calls.at(-1), ["keyup", "U0040"], "xdotool pressed Shift for @; releasing 2 would leave it down");
+          } finally {
+            ws.close(1000); Object.assign(rt, original); process.env.TALLYLAMP_FAKE_CHROME = "1";
+            for (const child of children) child.emit("close", 0);
+            ctx.browsers.releaseControl(id);
+          }
+          resolve();
+        });
+      }));
+    } catch (err) {
+      ws.close(1000); Object.assign(rt, original); process.env.TALLYLAMP_FAKE_CHROME = "1";
+      ctx.browsers.releaseControl(id);
+      throw err;
+    }
   });
   it("keeps watch read-only, binds input to a lease, revokes queued work, and cleans up children", () => {
     const rt = ctx.browsers.runtime(id)!;
