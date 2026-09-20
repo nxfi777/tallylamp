@@ -95,6 +95,13 @@ function askFor(title, fields, submitLabel, submit) {
       });
       for (const f of fields) {
         const id = `field-${f.name}`;
+        if (f.kind === "project" && knownProjects(f.value).length) {
+          const picker = projectPicker(f, id);
+          inputs.set(f.name, picker.field);
+          form.append(h("label", { for: id }, f.label), picker.select, picker.text);
+          if (f.hint) form.append(h("div", { class: "sub field-hint" }, f.hint));
+          continue;
+        }
         const input = f.options ? h("select", { id, name: f.name, required: !!f.required },
           ...f.options.map(option => h("option", { value: option.value, selected: option.value === (f.value || "") }, option.label))) : h("input", {
           id, name: f.name, type: f.type || "text", value: f.value || "",
@@ -115,6 +122,36 @@ function askFor(title, fields, submitLabel, submit) {
     const first = box.querySelector("input, select");
     if (first) first.focus();
   });
+}
+
+/** Every project already in use, on a browser or a saved profile, plus the one being edited. */
+function knownProjects(current) {
+  const names = new Map();
+  for (const name of [...state.browsers.map(b => b.metadata?.project), ...state.seeds.map(s => s.metadata?.project), current]) {
+    const clean = typeof name === "string" ? name.trim() : "";
+    if (clean && !names.has(clean.toLowerCase())) names.set(clean.toLowerCase(), clean);
+  }
+  return [...names.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+/**
+ * Pick a project that exists, or name a new one.
+ *
+ * A free-text box is how "Kraken", "kraken" and "Kraken trading" became three projects for one
+ * account: nothing on the form showed what was already there. With no projects yet there is
+ * nothing to pick from, so askFor falls back to the plain box for the first one.
+ */
+function projectPicker(f, id) {
+  // Project names are trimmed, so a value with a leading space can never be one.
+  const NEW = " new";
+  const text = h("input", { class: "project-new", type: "text", hidden: true, placeholder: "New project name",
+    "aria-label": "New project name", maxlength: "120", autocomplete: "off" });
+  const select = h("select", { id, name: f.name,
+    onChange: () => { text.hidden = select.value !== NEW; if (!text.hidden) text.focus(); } },
+    h("option", { value: "", selected: !f.value }, f.emptyLabel || "No project"),
+    ...knownProjects(f.value).map(name => h("option", { value: name, selected: name === f.value }, name)),
+    h("option", { value: NEW }, "New project…"));
+  return { select, text, field: { dataset: {}, get value() { return select.value === NEW ? text.value : select.value; } } };
 }
 
 /**
@@ -1012,50 +1049,100 @@ function linkedAccessSection(b) {
   return host;
 }
 
-function lendingSection(b) {
+/** One setting: its name and what it is set to on the left, its single control on the right. */
+function settingRow(name, status, control, nested) {
+  return h("div", { class: nested ? "setting nested" : "setting" },
+    h("div", { class: "setting-text" }, h("div", { class: "setting-name" }, name), h("div", { class: "sub" }, status)),
+    control);
+}
+
+/** A real switch: the thumb's position carries the state, so it never rests on colour alone. */
+function switchButton(label, on, { disabled, title, onToggle }) {
+  const el = h("button", { class: "switch", type: "button", role: "switch", "aria-label": label,
+    "aria-checked": String(Boolean(on)), disabled: Boolean(disabled), title: title || false,
+    onClick: () => onToggle(!on, el) });
+  return el;
+}
+
+/**
+ * Proxy, extensions, agent control and lending, as four rows.
+ *
+ * Each was its own heading with a status sentence, a bordered button and a paragraph or two of
+ * caveats under it: nine buttons of equal weight down the column, and more explanation than
+ * interface. The warnings that matter are asked at the moment of the decision, in the confirm
+ * each risky switch already raises, so they do not also need to sit on the page for ever. The
+ * agent row stays directly under Extensions because the server tells agents to send people
+ * to "Extensions, Allow agent control".
+ */
+function settingsSection(b) {
+  const id = b.id;
+  const locked = !["stopped", "crashed"].includes(b.status) || b.savingProfile;
+  const full = Boolean(state.status?.fullBrowser);
+  const why = b.savingProfile ? "Wait for the profile save to finish." : locked ? "Stop the browser to change this." : false;
   const loans = b.lentTo || [];
-  const toggleId = `lendable-${b.id}`;
-  return h("div", { class: "lending" },
-    loans.length
-      ? h("ul", { class: "loans" },
+  return [
+    locked ? h("p", { class: "sub settings-note" }, b.savingProfile
+      ? "A profile save is running. Proxy and extensions unlock when it finishes."
+      : "Proxy and extensions change only while the browser is stopped.") : null,
+    h("div", { class: "settings" },
+      settingRow("Proxy",
+        b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? ", authenticated" : ""}` : "Direct, no upstream proxy",
+        h("button", { class: "btn", "aria-label": "Configure proxy", disabled: locked, title: why, onClick: () => editProxy(b) }, "Configure")),
+      settingRow("Extensions",
+        b.extensionsEnabled ? "On. Take control and open Full browser to install or manage them. A persistent profile keeps them."
+          : full ? "Off" : "Off. This host cannot run Full browser, which extensions need.",
+        switchButton("Extensions", b.extensionsEnabled, { disabled: (!full && !b.extensionsEnabled) || locked, title: why,
+          onToggle: (enabled) => act(async () => {
+            if (enabled && !confirm("Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust.\n\nEnable extension support?")) return;
+            await api(`/api/v1/browsers/${id}/extensions`, { method: "PUT", body: { enabled } });
+            flash(enabled ? "Extension support enabled. Start the browser, take control and open Full browser." : "Extensions disabled on the next start. Their saved data has not been deleted.");
+            await refresh(); void render();
+          }) })),
+      b.owner.type === "agent" ? settingRow("Allow agent control",
+        b.agentDesktopEnabled ? "On. The owning agent can see and use Chrome's own UI, extension popups included. Taking control blocks it."
+          : "Off. Turn it on to let the owning agent use extension popups and Chrome's own UI.",
+        switchButton("Allow agent control", b.agentDesktopEnabled, { disabled: !full && !b.agentDesktopEnabled,
+          onToggle: (enabled) => act(async () => {
+            if (enabled && !confirm("This lets the owning agent see and control all of Chrome's native UI, including settings and host-file dialogs. It is broader than access to extension popups. Only allow an agent you trust with that access.\n\nAllow agent control?")) return;
+            await api(`/api/v1/browsers/${id}/agent-desktop`, { method: "PUT", body: { enabled } });
+            flash(enabled ? "Agent native control allowed. Human takeover still blocks its input." : "Agent native control blocked.", true);
+            if (viewer) { viewer.cancel(true); viewer = null; }
+            await refresh(); void render();
+          }) }), true) : null,
+      settingRow("Lend when idle",
+        b.lendable ? "On. A waiting agent can borrow it after a couple of idle minutes, logins included." : "Off. It is lent only when you say so.",
+        switchButton("Lend when idle", b.lendable, {
+          onToggle: (on, el) => act(async () => {
+            el.setAttribute("aria-checked", String(on)); // answer the click now; the server follows
+            try {
+              await api(`/api/v1/browsers/${id}/lendable`, { method: "POST", body: { lendable: on } });
+              flash(on ? `${b.name} can now be lent out when idle.` : `${b.name} will only be lent if you say so.`);
+              await refresh(); void render();
+            } catch (err) {
+              el.setAttribute("aria-checked", String(!on)); // put the switch back; the server did not move
+              throw err;
+            }
+          }) })),
+      loans.length ? h("div", { class: "setting-extra lending" },
+        h("div", { class: "sub" }, "Lent to"),
+        h("ul", { class: "loans" },
           ...loans.map((g) =>
             h("li", {},
               h("span", { class: "mono" }, g.granteeId),
               h("button", {
                 class: "btn tiny danger",
                 onClick: () => act(async () => {
-                  await api(`/api/v1/browsers/${b.id}/grants/${g.granteeId}`, { method: "DELETE" });
+                  await api(`/api/v1/browsers/${id}/grants/${g.granteeId}`, { method: "DELETE" });
                   flash(`Took ${b.name} back from ${g.granteeId}.`);
                   await refresh();
                   void render();
                 }),
-              }, "Revoke"),
-            ),
-          ),
-        )
-      : h("div", { class: "sub" }, "Not lent to anyone."),
-    h("div", { class: "row lend-toggle" },
-      h("input", {
-        type: "checkbox",
-        id: toggleId,
-        checked: b.lendable ? "checked" : false,
-        onChange: (e) =>
-          act(async () => {
-            const on = e.target.checked;
-            try {
-              await api(`/api/v1/browsers/${b.id}/lendable`, { method: "POST", body: { lendable: on } });
-              flash(on ? `${b.name} can now be lent out when idle.` : `${b.name} will only be lent if you say so.`);
-            } catch (err) {
-              e.target.checked = !on; // put the switch back; the server did not move
-              throw err;
-            }
-          }),
-      }),
-      h("label", { for: toggleId }, "Lend automatically when idle"),
+              }, "Revoke"))))) : null,
+      h("details", { class: "setting-more" },
+        h("summary", {}, "How lending works"),
+        h("p", {}, "Off by default. With it on, a waiting agent gets this browser once it has sat idle for a couple of minutes, without asking you. That is what lets a browser be recovered when its owning agent crashes. The borrower gets the live logins in this profile, so leave it off for anything you would not hand over.")),
     ),
-    h("div", { class: "sub" },
-      "Off by default. On, a waiting agent gets this browser after it has been idle for a couple of minutes, without asking you \u2014 which is what lets it be recovered if the owning agent crashes. The borrower gets the live logins in this profile, so leave it off for anything you would not hand over."),
-  );
+  ];
 }
 
 function siteAccessSection(b) {
@@ -1086,9 +1173,11 @@ function siteAccessSection(b) {
       : h("div", { class: "sub" },
           "No sign-ins recorded yet. Your browser may still contain logins. If detection misses a site, record it below."),
     h("button", { class: "btn site-add", onClick: () => addSite(b) }, "Record signed-in site"),
-    h("p", { class: "sub" }, "Recording a site adds an inventory note for agents. It does not sign you in or save a copy of your logins."),
-    h("div", { class: "sub" },
-      "Detection uses visible sign-out or supported account controls, not cookies or tokens. It can miss sites; you can correct the list. Sessions may expire."),
+    // Read once, then in the way on every visit after: same disclosure as the settings above.
+    h("details", { class: "setting-more plain" },
+      h("summary", {}, "How sign-in records work"),
+      h("p", {}, "Recording a site adds an inventory note for agents. It does not sign you in or save a copy of your logins."),
+      h("p", {}, "Detection uses visible sign-out or supported account controls, not cookies or tokens. It can miss sites; you can correct the list. Sessions may expire.")),
   );
 }
 
@@ -1262,7 +1351,10 @@ async function browserView(id, seq) {
   // Guarded, not a `human ? null :` argument to append below. `stage.append` is the DOM
   // method, not h(): h() skips null and false children, append stringifies anything that is
   // not a Node, so that branch printed the literal word "null" into the corner of the stage.
-  if (!human) stage.append(h("div", { class: "watchmark" }, h("span", {}, "Watching · read only")));
+  if (!human) {
+    stage.classList.add("watching");
+    stage.append(h("div", { class: "watchmark" }, h("span", {}, "Watching · read only")));
+  }
   stage.append(
     // Bottom, not top. Now that the frame fills the stage at 1:1 this bar sits on live page
     // pixels, and page content is top-aligned far more often than it is bottom-aligned.
@@ -1344,7 +1436,7 @@ async function browserView(id, seq) {
     surface === "desktop"
       ? h("div", { class: "sub desktop-hint" }, human
           ? "Chrome's own address bar and tabs are in the view below — this view has none of its own. Click where you want to type, and keep the pointer there."
-          : "Watching only, so Chrome has not been fitted to the display — the black is the rest of it. Take control and this view fills with Chrome, address bar and tabs included.")
+          : "Watching only. Chrome's own address bar and tabs are in the picture, and nothing you click or type reaches them until you take control.")
       : null,
     stage,
   );
@@ -1368,10 +1460,13 @@ async function browserView(id, seq) {
         human
           ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
           : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
-        h("button", { class: "btn", disabled: b.status === "running", onClick: () => call(`/api/v1/browsers/${id}/start`) }, "Start"),
-        h("button", { class: "btn primary", onClick: () => saveProfileTemplate(b) }, "Save profile"),
+        // One of Start and Stop, never both with one greyed out, and only the takeover button
+        // filled: Save profile used to be filled white beside it and the two fought for the eye.
+        ["stopped", "crashed"].includes(b.status)
+          ? h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/start`) }, "Start")
+          : h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, "Stop browser"),
+        h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
         b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
-        h("button", { class: "btn", disabled: b.status === "stopped", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, "Stop browser"),
         h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/restart`) }, "Restart"),
         h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name, b.kind === "linked") }, "Delete"),
       ),
@@ -1417,8 +1512,10 @@ async function browserView(id, seq) {
           h("dt", {}, "Browser data"), h("dd", {}, linked ? "on its owner's computer" : b.persistent ? "kept when stopped" : "temporary · may be deleted when idle"),
           linked ? null : [h("dt", {}, "Save target"), h("dd", {}, b.savedProfileId ? (state.seeds.find(s => s.id === b.savedProfileId)?.name || b.savedProfileId) : "New saved profile")],
           h("dt", {}, "Project"), h("dd", {}, md.project || "—"),
-          h("dt", {}, "Purpose"), h("dd", {}, md.purpose || "—"),
-          h("dt", {}, "Task"), h("dd", {}, md.task || "—"),
+          h("dt", {}, "What it’s for"), h("dd", {}, md.purpose || "—"),
+          // Reported by the agent for the session it is in, so there is no row to fill in
+          // by hand and nothing to show until an agent says something.
+          md.task ? [h("dt", {}, "Agent’s task"), h("dd", {}, md.task)] : null,
           h("dt", {}, "Reported source"), h("dd", {}, md.source || "—"),
           h("dt", {}, "Reported client"), h("dd", {}, b.reportedClient ? `${b.reportedClient.name} ${b.reportedClient.version || ""}` : "—"),
           h("dt", {}, "Chrome"), h("dd", { class: "mono" }, b.chromeVersion || "—"),
@@ -1429,37 +1526,8 @@ async function browserView(id, seq) {
         ),
         h("button", { class: "btn", onClick: () => editBrowser(b) }, "Edit browser details"),
         linked ? [h("h2", {}, "Who can use it"), linkedAccessSection(b)] : [
-        h("p", { class: "sub" }, "Save profile copies this browser’s logins and storage into a reusable snapshot for other browsers. Persistent browsers keep their own data automatically."),
-        h("h2", {}, "Proxy"),
-        h("p", { class: "sub" }, b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? " · authenticated" : ""}` : "Direct · no upstream proxy"),
-        h("button", { class: "btn", disabled: !["stopped", "crashed"].includes(b.status) || b.savingProfile, onClick: () => editProxy(b) }, "Configure proxy"),
-        h("p", { class: "sub" }, ["stopped", "crashed"].includes(b.status) ? "Settings apply on the next start. Tunnels keep their own route." : "Stop the browser before changing its proxy."),
-        h("h2", {}, "Extensions"),
-        h("p", { class: "sub" }, b.extensionsEnabled ? "Enabled for this profile. To install or manage extensions, take control and open Full browser. Persistent profiles keep extensions and their settings." : ["stopped", "crashed"].includes(b.status) ? "Off for this profile." : "Off for this profile. Stop the browser before enabling extensions."),
-        h("button", { class: "btn", disabled: (!state.status?.fullBrowser && !b.extensionsEnabled) || !["stopped", "crashed"].includes(b.status) || b.savingProfile,
-          onClick: () => act(async () => {
-            const enabled = !b.extensionsEnabled;
-            if (enabled && !confirm("Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust.\n\nEnable extension support?")) return;
-            await api(`/api/v1/browsers/${id}/extensions`, { method: "PUT", body: { enabled } });
-            flash(enabled ? "Extension support enabled. Start the browser, take control and open Full browser." : "Extensions disabled on the next start. Their saved data has not been deleted.");
-            await refresh(); void render();
-          }) }, b.extensionsEnabled ? "Disable extensions" : "Enable extensions"),
-        !state.status?.fullBrowser ? h("p", { class: "sub" }, "Unavailable on this host. Full browser needs a real browser with its own Xvfb display.") : null,
-        b.owner.type === "agent" ? h("div", {},
-          h("p", { class: "sub" }, b.agentDesktopEnabled
-            ? "The owning agent can see and use Chrome's native UI, including extension popups. Taking control blocks these tools."
-            : "Agent access is off. Allow it to let the owning agent use extension popups and Chrome's native UI."),
-          h("button", { class: "btn", role: "switch", "aria-label": "Allow agent control", "aria-checked": String(Boolean(b.agentDesktopEnabled)),
-            disabled: !state.status?.fullBrowser && !b.agentDesktopEnabled,
-            onClick: () => act(async () => {
-              const enabled = !b.agentDesktopEnabled;
-              if (enabled && !confirm("This lets the owning agent see and control all of Chrome's native UI, including settings and host-file dialogs. It is broader than access to extension popups. Only allow an agent you trust with that access.\n\nAllow agent control?")) return;
-              await api(`/api/v1/browsers/${id}/agent-desktop`, { method: "PUT", body: { enabled } });
-              flash(enabled ? "Agent native control allowed. Human takeover still blocks its input." : "Agent native control blocked.", true);
-              if (viewer) { viewer.cancel(true); viewer = null; }
-              await refresh(); void render();
-            }) }, `Allow agent control: ${b.agentDesktopEnabled ? "On" : "Off"}`),
-        ) : h("p", { class: "sub" }, "Native agent control is available for agent-owned browsers only."),
+        h("h2", {}, "Settings"),
+        ...settingsSection(b),
         ],
         h("h2", {}, "Signed-in sites"),
         sitesPanel,
@@ -1468,8 +1536,6 @@ async function browserView(id, seq) {
         linked ? null : [
           h("h2", {}, "Guest links"),
           guestSection(b, guests),
-          h("h2", {}, "Lending"),
-          lendingSection(b),
           h("h2", {}, "Loopback tunnels"),
           tunnelSection(data.tunnels),
         ],
@@ -2294,7 +2360,7 @@ async function createBrowser(seedId = "") {
     { name: "name", label: "Name", placeholder: "Leave blank and one will be generated", hint: "How it appears in the fleet." },
     { name: "seedId", label: "Use saved profile", value: seedId, options: [{ value: "", label: "Start fresh" }, ...state.seeds.map(s => ({ value: s.id, label: s.name }))],
       hint: "Copies every saved login and its metadata into an independent browser. Sites may ask you to sign in again." },
-    { name: "project", label: "Project", placeholder: "Use saved profile's project, if any", hint: "Leave blank to keep the saved metadata." },
+    { name: "project", label: "Project", kind: "project", emptyLabel: "Same as the saved profile, if any", placeholder: "Use saved profile's project, if any", hint: "Leave it and the saved profile's project is kept." },
     { name: "purpose", label: "What is it for?", placeholder: "Use saved profile's purpose, if any", maxLength: 200 },
     ...proxyFields(),
   ], "Create browser", async (values) => {
@@ -2353,9 +2419,8 @@ async function editBrowser(b) {
   const md = b.metadata || {};
   const answers = await askFor("Edit browser details", [
     { name: "name", label: "Browser name", value: b.name, hint: "Changes this browser’s name and metadata, not a saved profile. The browser ID stays the same." },
-    { name: "project", label: "Project", value: md.project || "", placeholder: "Optional" },
+    { name: "project", label: "Project", kind: "project", value: md.project || "", placeholder: "Optional" },
     { name: "purpose", label: "What is it for?", value: md.purpose || "", placeholder: "Optional", maxLength: 200 },
-    { name: "task", label: "Task", value: md.task || "", placeholder: "Optional", maxLength: 200 },
   ], "Save changes");
   if (!answers) return;
   await act(async () => {
@@ -2364,8 +2429,6 @@ async function editBrowser(b) {
     else delete metadata.project;
     if (answers.purpose) metadata.purpose = answers.purpose;
     else delete metadata.purpose;
-    if (answers.task) metadata.task = answers.task;
-    else delete metadata.task;
     await api(`/api/v1/browsers/${b.id}`, {
       method: "PATCH",
       body: { name: answers.name, metadata },
@@ -2442,15 +2505,17 @@ async function saveProfileTemplate(b, saved = null, asNew = false) {
       options: [{ value: "", label: "Choose a browser" }, ...state.browsers.map(browser => ({ value: browser.id, label: browser.name }))] }] : []),
     { name: "name", label: "Saved profile name", value: saved?.name || (asNew ? `${b?.name || "Profile"} copy`.slice(0, 80) : b?.name) || "", required: true, maxLength: 80,
       hint: saved ? "Updates the linked saved profile. Existing browsers stay unchanged. Every login in this browser is copied." : asNew ? "Creates a separate saved profile and makes it this browser's save target. The original stays unchanged." : "Copies every login into a reusable profile. Other browsers can use it immediately." },
-    { name: "project", label: "Project", value: md.project || "" },
-    { name: "purpose", label: "What is it for?", value: md.purpose || "", maxLength: 200 },
-    { name: "task", label: "Task", value: md.task || "", maxLength: 200,
+    { name: "project", label: "Project", kind: "project", value: md.project || "" },
+    { name: "purpose", label: "What is it for?", value: md.purpose || "", maxLength: 200,
       hint: "If the source is running, saving briefly pauses Chrome, then resumes it. Unsaved page edits may be lost." },
   ], saved ? "Update saved profile" : asNew ? "Save as new profile" : "Save profile", async (values) => {
     const metadata = { ...md };
-    for (const key of ["project", "purpose", "task"]) {
+    for (const key of ["project", "purpose"]) {
       if (values[key]) metadata[key] = values[key]; else delete metadata[key];
     }
+    // A task is what an agent was doing in one session. A saved profile outlives the session
+    // and is reused for others, so a task copied into it is stale from the first reuse.
+    delete metadata.task;
     result = await api(saved ? `/api/v1/seeds/${saved.id}` : "/api/v1/seeds", {
       method: saved ? "PUT" : "POST", body: { browserId: b?.id || values.browserId, name: values.name, metadata },
     });

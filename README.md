@@ -176,7 +176,7 @@ that browser, so share one that holds only what they need. See
 ### Per-browser proxies
 
 Set a proxy in **New browser**, or stop an existing browser and choose
-**Configure proxy**. Start it again to use the new route. The same settings
+**Configure** beside **Proxy**. Start it again to use the new route. The same settings
 work through `tallylamp_create_browser`, `tallylamp_update_browser`, and the
 browser create/update API:
 
@@ -214,7 +214,7 @@ administrators and extensions you trust.
 
 To install an extension:
 
-1. Stop the browser. Choose **Enable extensions**.
+1. Stop the browser. Turn on the **Extensions** switch.
 2. Start it, take control, and open **Full browser**. Chrome is fitted to the
    display for you; **Refit Chrome window** puts it back if a dialog moves it.
 3. Open the Chrome Web Store in Chrome's address bar and install it there.
@@ -224,7 +224,7 @@ To install an extension:
 
 Persistent browsers keep installed extensions and their settings. **Disable
 extensions** skips loading them on the next start; it does not uninstall them.
-A copied profile still needs **Enable extensions** on the new browser. There is
+A copied profile still needs the **Extensions** switch turned on for the new browser. There is
 no upload API.
 
 Agents cannot turn extension support on. To let the owning agent use popups,

@@ -75,7 +75,7 @@ you have control.
 ## Chrome extensions
 
 Tab view is the page. Full browser is Chrome's toolbar and dialogs. Stop the
-browser, choose Enable extensions, take control, then switch to Full browser
+browser, turn on the Extensions switch, take control, then switch to Full browser
 to install from the Chrome Web Store.
 
 Chrome's own UI can open files on the host and change browser settings. An
@@ -123,7 +123,7 @@ has the command to run on your machine.
 ## Use a proxy for one browser
 
 Enter the proxy server and optional username/password in **New browser**.
-For an existing browser, stop it, choose **Configure proxy**, save, and start
+For an existing browser, stop it, choose **Configure** beside **Proxy**, save, and start
 it again. The API and MCP tools accept the same per-browser settings.
 No shared proxy variable or credential is needed in Railway.
 

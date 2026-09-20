@@ -7,7 +7,7 @@ are not supported.
 ## Dashboard
 
 Enter the proxy server and optional credentials when creating a browser.
-For an existing browser, stop it, then choose **Configure proxy** in its sidebar.
+For an existing browser, stop it, then choose **Configure** beside **Proxy** in its Settings.
 Save the settings and start the browser again. Clear all three fields to return
 to direct access.
 

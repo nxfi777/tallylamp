@@ -596,6 +596,66 @@ input::placeholder { color: var(--muted); }
   background: var(--chip); color: var(--chip-text); border-color: var(--chip-muted);
 }
 .btn.tiny { min-height: 0; padding: 0.15rem 0.5rem; font-size: 0.75rem; border-radius: 5px; }
+
+/* Watch mode, said by the picture itself. The banner and the two pills all say "read only" in
+   words, and words are what nobody reads while looking at a browser: the report was clicking
+   into a watched view and wondering why nothing happened. An edge of light in the same green
+   as the watch banner is visible from anywhere on the stage, including a 1400px desktop stage
+   whose bottom bar is under the fold. It breathes once on arrival and then holds still. */
+.stage.watching::after {
+  /* Brighter than --ok, which is tuned as a fill under white text and goes muddy as light. */
+  --watch-edge: #3fbf7f;
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 2px var(--watch-edge),
+    inset 0 0 28px color-mix(in srgb, var(--watch-edge) 55%, transparent),
+    inset 0 0 90px color-mix(in srgb, var(--watch-edge) 30%, transparent);
+  animation: watch-arrive 1.6s ease-out 1;
+}
+@keyframes watch-arrive {
+  0% {
+    box-shadow: inset 0 0 0 2px var(--watch-edge),
+      inset 0 0 60px color-mix(in srgb, var(--watch-edge) 85%, transparent),
+      inset 0 0 160px color-mix(in srgb, var(--watch-edge) 55%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) { .stage.watching::after { animation: none; } }
+
+/* Settings as rows: what it is and what it is set to on the left, the one control on the
+   right. Each used to be a heading, a sentence, a bordered button and a paragraph or two of
+   caveats, so the column was half prose and every button weighed the same. */
+.settings { border: 1px solid var(--line); border-radius: var(--radius); margin-top: 0.5rem; }
+.settings-note { margin: 0.4rem 0 0; }
+.setting { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.7rem; }
+.setting + .setting, .setting + .setting-more, .setting-more + .setting, .setting-extra + .setting { border-top: 1px solid var(--line); }
+.setting.nested { padding-left: 1.5rem; }
+.setting-text { flex: 1; min-width: 0; }
+.setting-name { font-size: 0.875rem; font-weight: 500; }
+.setting-text .sub { margin-top: 0.1rem; font-size: 0.8125rem; overflow-wrap: anywhere; }
+.setting .btn { flex: none; min-height: 0; padding: 0.3rem 0.7rem; font-size: 0.8125rem; }
+.setting-extra { padding: 0 0.7rem 0.6rem; }
+.setting-more { padding: 0.5rem 0.7rem; font-size: 0.8125rem; color: var(--muted); }
+.setting-more.plain { padding: 0.3rem 0 0; }
+.setting-more summary { cursor: pointer; }
+.setting-more p { margin: 0.4rem 0 0; max-width: 60ch; }
+.switch {
+  position: relative; flex: none; width: 40px; height: 24px; padding: 0;
+  border-radius: 999px; border: 1px solid var(--line-strong); background: transparent;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--muted); transition: transform 0.15s, background 0.15s;
+}
+/* On is the text colour, not a green: the palette is monochrome plus one amber, and green on
+   this page already means "the agent's turn". */
+.switch[aria-checked="true"] { background: var(--text); border-color: var(--text); }
+.switch[aria-checked="true"]::after { transform: translateX(16px); background: var(--bg); }
+.switch:disabled { opacity: 0.45; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
+/* The project picker grows a text field when "New project" is chosen. */
+.project-new { margin-top: 0.4rem; }
 .side { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem; }
 .side h2 { font-size: 1rem; margin: 1.1rem 0 0; }
 .kv { display: grid; grid-template-columns: 110px 1fr; gap: 0.35rem 0.6rem; font-size: 0.85rem; }
@@ -656,13 +716,6 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
   display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
   padding: 0.25rem 0; border-bottom: 1px solid var(--line);
 }
-.lend-toggle { margin-top: 0.6rem; gap: 0.45rem; }
-/* The label is part of the target, not a caption beside it: a 13px checkbox on its own is
-   the smallest thing on the page to hit. */
-.lend-toggle label { font-size: 0.85rem; cursor: pointer; }
-/* The default control paints itself the OS accent -- a bright system blue in a palette that
-   is otherwise monochrome plus one amber. accent-color puts it back in the system. */
-.lend-toggle input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--text); }
 .site-list { list-style: none; margin: 0.4rem 0 0.7rem; padding: 0; }
 .site-list li {
   display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
@@ -675,7 +728,9 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
 .site-actions { flex: none; }
 .site-add { margin: 0.45rem 0; }
 @media (pointer: coarse) {
-  .lend-toggle input { width: 22px; height: 22px; }
+  .switch { width: 48px; height: 28px; }
+  .switch::after { width: 20px; height: 20px; }
+  .switch[aria-checked="true"]::after { transform: translateX(20px); }
 }
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }

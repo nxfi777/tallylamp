@@ -65,7 +65,7 @@ Chrome's own UI can open files on the host and change browser settings. An
 installed extension can read signed-in pages and change proxy settings. The
 egress proxy does not contain a privileged extension.
 
-Stop the browser, choose **Enable extensions**, start it, take control, and
+Stop the browser, turn on the **Extensions** switch, start it, take control, and
 open **Full browser**. Chrome is fitted to the display when the view opens;
 **Refit Chrome window** puts it back if a dialog moves it. Install from the
 Chrome Web Store in Chrome's address bar. **Manage extensions** opens
@@ -79,11 +79,11 @@ Chrome's own toolbar and tabs are drawn in the viewer.
 
 Persistent browsers keep installed extensions and their settings. Disable
 extensions to skip loading them on the next start; that does not uninstall them.
-A copied profile still needs Enable extensions on the new browser.
+A copied profile still needs the Extensions switch turned on for the new browser.
 
 Set `TALLYLAMP_EXTENSIONS_DEFAULT=1` to start every new browser with extension
 support on, copies included. Existing browsers keep their saved choice, and
-Disable extensions still wins. It installs nothing.
+turning the Extensions switch off still wins. It installs nothing.
 
 **Allow agent control** is a second permission, for the owning agent only.
 Borrowed browsers do not get it. Copies do not inherit it. New agent-owned
