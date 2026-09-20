@@ -15,13 +15,16 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
   const previous = { ...process.env };
   let ws: WebSocket | undefined;
   const headers = { Cookie: ctx.cookie, "Content-Type": "application/json" };
-  const until = async (check: () => Promise<boolean> | boolean) => {
+  const errors: string[] = [];
+  // A bare "timed out" cost a production redeploy per guess. Say what was awaited and what the
+  // display had instead.
+  const until = async (check: () => Promise<boolean> | boolean, what = "a condition", seen: () => Promise<unknown> | unknown = () => undefined) => {
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
       if (await check()) return;
       await new Promise(r => setTimeout(r, 100));
     }
-    throw new Error("native desktop smoke test timed out");
+    throw new Error(`native desktop smoke test timed out waiting for ${what}; saw ${JSON.stringify(await seen())}; notices ${JSON.stringify(errors)}`);
   };
   try {
     Object.assign(process.env, { TALLYLAMP_FAKE_CHROME: "0", TALLYLAMP_XVFB: "1",
@@ -36,7 +39,6 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
     ws = new WebSocket(`${ctx.url.replace("http", "ws")}/api/v1/browsers/${id}/view?surface=desktop&ticket=${(ticket.body as { ticket: string }).ticket}`);
     let frames = 0;
     let dimensions: unknown;
-    const errors: string[] = [];
     ws.on("message", (raw, binary) => {
       if (binary) {
         const frame = Buffer.from(raw as Buffer);
@@ -50,7 +52,7 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
     await new Promise<void>((resolve, reject) => { ws!.once("open", resolve); ws!.once("error", reject); });
     const send = (msg: object) => ws!.send(JSON.stringify(msg));
     send({ type: "heartbeat", leaseToken: lease.leaseToken });
-    await until(() => frames > 0 || errors.length > 0);
+    await until(() => frames > 0 || errors.length > 0, "a first frame");
     assert.deepEqual(errors, []);
     assert.deepEqual(dimensions, { width: 1280, height: 800 });
     assert.ok(frames > 0, "ffmpeg must produce actual JPEG frames");
@@ -72,42 +74,47 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
         // mistakes it for fullscreen: asked for 1280x800 it settles at 1279x799. Measured on
         // production, 2560x1600 -> 2559x1599. Launched at 1000x700, so this still proves the fit.
         return bounds.width >= 1279 && bounds.height >= 799;
-      });
+      }, "the fitted window");
     } finally { await cdp.close(); }
     const key = (key: string, event: string) => send({ type: "key", key, event });
     key("Control", "rawKeyDown"); key("l", "rawKeyDown"); key("l", "keyUp"); key("Control", "keyUp");
+    const titled = (title: string) => until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === title),
+      `a page titled "${title}"`, async () => (await listPages(rt.cdpUrl)).map(p => p.title));
     // The input fills the viewport so a click anywhere on the page lands on it and keeps focus.
-    // Two quick clicks on one spot are a double-click, which selects a word; collapse it so the
-    // agent's later typing appends instead of replacing.
-    const html = '<title>desktop-smoke</title><input autofocus style="position:fixed;inset:0;width:100%;height:100%" oninput="document.title=\'typed:\'+this.value" onclick="document.title=\'clicks:\'+(this.dataset.n=(+this.dataset.n||0)+1);this.setSelectionRange(this.value.length,this.value.length)">';
+    // The title is set by a script after the input, so "loaded" means the input exists: waiting
+    // on a parsed <title> and then typing raced autofocus and lost the first characters. Two
+    // quick clicks on one spot are a double-click, which selects a word; collapse it so later
+    // typing appends instead of replacing.
+    const html = '<input autofocus style="position:fixed;inset:0;width:100%;height:100%" oninput="document.title=\'typed:\'+this.value" onclick="document.title=\'clicks:\'+(this.dataset.n=(+this.dataset.n||0)+1);this.setSelectionRange(this.value.length,this.value.length)"><script>document.title="desktop-smoke"</script>';
     send({ type: "paste", text: `data:text/html,${encodeURIComponent(html)}` });
     key("Enter", "rawKeyDown"); key("Enter", "keyUp");
-    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "desktop-smoke"));
-    send({ type: "paste", text: "Native UI" });
-    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "typed:Native UI"));
+    await titled("desktop-smoke");
     // The operator's shape, not the agent's: motion parks the pointer on the target, then the
     // press and the release arrive at those same coordinates as separate xdotool processes.
     // `mousemove --sync` hung for 15s whenever the pointer was already there, so hover worked
     // and no click ever landed. The second click repeats it with the pointer provably at rest.
+    // Clicking first also focuses the input, so the typing below does not lean on autofocus.
     const mouse = (event: string) => send({ type: "mouse", event, x: 640, y: 450, button: "left" });
     mouse("mouseMoved"); mouse("mousePressed"); mouse("mouseReleased");
-    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "clicks:1"));
+    await titled("clicks:1");
     mouse("mousePressed"); mouse("mouseReleased");
-    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "clicks:2"));
+    await titled("clicks:2");
+    send({ type: "paste", text: "Native UI" });
+    await titled("typed:Native UI");
     assert.deepEqual(errors, []);
     ws.close(1000);
-    await until(() => ctx.browsers.viewerCount(id) === 0);
+    await until(() => ctx.browsers.viewerCount(id) === 0, "the viewer to detach");
     assert.equal(ctx.browsers.controlState(id).controllerType, "none");
     assert.equal((await json(`${ctx.url}/api/v1/browsers/${id}/agent-desktop`, { method: "PUT", headers, body: JSON.stringify({ enabled: true }) })).status, 200);
     const owner = getAgent(ctx.browsers.row(id).owner_id)!;
     const native = await agentDesktop(ctx.browsers, owner, id, {}, true);
     assert.ok(native.image && native.image.length > 100);
     await agentDesktop(ctx.browsers, owner, id, { action: "type", text: "-agent" }, false);
-    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "typed:Native UI-agent"));
+    await titled("typed:Native UI-agent");
     // Same trap on the agent path: a second click where the pointer already rests timed out.
     await agentDesktop(ctx.browsers, owner, id, { action: "click", x: 640, y: 450 }, false);
     await agentDesktop(ctx.browsers, owner, id, { action: "click", x: 640, y: 450 }, false);
-    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "clicks:4"));
+    await titled("clicks:4");
   } finally {
     ws?.terminate();
     await ctx.close();
