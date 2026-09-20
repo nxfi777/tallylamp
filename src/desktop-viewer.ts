@@ -98,9 +98,16 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   let queue: Message[] = [];
   const keys = new Set<string>();
   const buttons = new Set<string>();
-  // Once per socket. A failing xdotool fails on every event, and a notice per keystroke would
-  // bury the stage in the same sentence.
+  // Once per socket per distinct reason. A refusal refuses every event of that kind, and a
+  // notice per keystroke would bury the stage in the same sentence.
   let inputFailureReported = false;
+  const reported = new Set<string>();
+  const reportOnce = (message: string) => {
+    if (reported.has(message) || reported.size > 8) return;
+    reported.add(message);
+    send({ type: "notice", message });
+  };
+  const isInput = (type: unknown) => type === "mouse" || type === "key" || type === "scroll" || type === "paste";
   const validLease = () => {
     const state = browsers.controlState(id);
     return mode === "control" && !!boundLease && state.controllerType === "human" && state.leaseToken === boundLease;
@@ -238,11 +245,21 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
       catch { send({ type: "error", message: "lease expired" }); }
       return;
     }
-    if (!validLease()) return;
+    if (!validLease()) {
+      // Refusing input without a bound lease is right; doing it silently is not. Everything is
+      // refused until the heartbeat binds, and after a takeover elsewhere it goes back to
+      // being refused, and in both cases every click and keystroke simply vanished.
+      if (isInput(msg.type)) reportOnce("Input is being ignored: this view does not hold the control lease. Take control again, or reload the page.");
+      return;
+    }
     if (msg.type === "releaseInputs") { releaseInputs(); return; }
     if (msg.type === "fitBrowser") { fitWindow(); return; }
     if (!desktopInput(msg, size)) {
+      // The last silent drop. A pointer mapped outside the display and a key with no keysym
+      // both land here, and both looked exactly like a view that had stopped responding.
       if (msg.type === "paste") send({ type: "notice", message: "Full-browser paste accepts up to 2,048 characters." });
+      else if (msg.type === "mouse" || msg.type === "scroll") reportOnce(`Pointer input is being dropped: it maps to ${Math.round(Number(msg.x))},${Math.round(Number(msg.y))}, outside this ${size.width}x${size.height} display.`);
+      else if (msg.type === "key") reportOnce(`That key has no keysym for the remote display, so it was dropped.`);
       return;
     }
     browsers.touch(id);
