@@ -27,7 +27,7 @@ describe("desktop input and framing", () => {
     assert.equal(desktopInput({ type: "mouse", event: "exec", x: 1, y: 2 }, size), null);
     assert.deepEqual(desktopInput({ type: "paste", text: "--window 1; $(bad)" }, size), ["type", "--clearmodifiers", "--delay", "0", "--", "--window 1; $(bad)"]);
     assert.equal(desktopInput({ type: "paste", text: "a".repeat(2049) }, size), null);
-    assert.deepEqual(desktopInput({ type: "scroll", x: 1, y: 1, deltaY: 1e9 }, size), ["mousemove", "--sync", "1", "1", "click", "--repeat", "5", "--delay", "0", "5"]);
+    assert.deepEqual(desktopInput({ type: "scroll", x: 1, y: 1, deltaY: 1e9 }, size), ["mousemove", "1", "1", "click", "--repeat", "5", "--delay", "0", "5"]);
   });
 });
 

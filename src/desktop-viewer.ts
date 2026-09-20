@@ -44,9 +44,16 @@ export function desktopKey(key: unknown): string | null {
 
 /** Pure validation: no shell strings or client-controlled xdotool commands. */
 export function desktopInput(msg: Message, size: { width: number; height: number }): string[] | null {
+  // Never `mousemove --sync`. The man page says it does not wait when no movement is needed;
+  // xdotool 3.20160805 (bookworm) only has that early return on the --step path. Otherwise it
+  // polls until the pointer LEAVES where it started: 500 tries x 30ms = 15s when the pointer is
+  // already at X,Y. It always is for a click, because the operator's last motion event put it
+  // there, so `mousemove --sync X Y mousedown 1` hung until the watchdog SIGKILLed it and the
+  // press never ran. Hover worked, clicks did not. Ordering does not need it: the warp and the
+  // button event share one X connection, and XCloseDisplay syncs before the process exits.
   const point = () => typeof msg.x === "number" && Number.isFinite(msg.x) && typeof msg.y === "number" && Number.isFinite(msg.y)
     && msg.x >= 0 && msg.y >= 0 && msg.x < size.width && msg.y < size.height
-    ? ["mousemove", "--sync", String(Math.min(size.width - 1, Math.round(msg.x))), String(Math.min(size.height - 1, Math.round(msg.y)))] : null;
+    ? ["mousemove", String(Math.min(size.width - 1, Math.round(msg.x))), String(Math.min(size.height - 1, Math.round(msg.y)))] : null;
   if (msg.type === "mouse") {
     const pos = point();
     if (!pos) return null;
@@ -129,12 +136,11 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
    * The pointer leaving the stage, or focus moving off it, means "let go of anything you are
    * holding" -- not "throw away what I just did".
    *
-   * This used to wipe the queue and SIGKILL the running xdotool. Every motion event spawns a
-   * `mousemove --sync`, which polls the pointer at 30ms granularity, so the queue is always
-   * running behind the operator. A click is a press and a release sitting in that queue, and
-   * moving the pointer off the canvas right after clicking -- which is what you do -- killed
-   * both before they ran. Motion still worked, because it streams continuously and each event
-   * is complete on its own. The click did not. Drain first, then let go.
+   * This used to wipe the queue and SIGKILL the running xdotool. Every motion event spawns an
+   * xdotool process, one at a time, so the queue can run behind the operator. A click is a
+   * press and a release sitting in that queue, and moving the pointer off the canvas right
+   * after clicking -- which is what you do -- killed both before they ran. Drain first, then
+   * let go. (This was real but not why clicks failed; see the --sync note in desktopInput.)
    */
   const releaseHeld = () => {
     if (queue.length || input) { releaseWhenIdle = true; return; }

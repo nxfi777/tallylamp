@@ -1,6 +1,60 @@
 # Full browser input: investigation handoff
 
-**Status: unresolved.** Written for an engineer or model picking this up cold. Everything
+**Status: root cause found and the fix verified by hand in the production container; not yet
+deployed or exercised through the dashboard.** See the next section. Everything below it is
+the investigation as it stood before, kept as the record.
+
+## Root cause (2026-09-20)
+
+**`xdotool mousemove --sync X Y` hangs for 15 seconds when the pointer is already at X,Y.**
+
+The man page says `--sync` does not wait when no movement is needed. In xdotool 3.20160805.1
+(bookworm, and the version in the image) that early return exists only on the `--step` path
+(`cmd_mousemove.c:201`). The default path calls `xdo_wait_for_mouse_move_from(mx, my)`
+unconditionally, which polls until the pointer *leaves* its starting position: `MAX_TRIES`
+500 x 30ms = 15s (`xdo.c:1741`).
+
+The operator's pointer is always already there when a click arrives, because the preceding
+`mouseMoved` put it there. So `mousemove --sync X Y mousedown 1` sat in the wait, the 2s
+watchdog SIGKILLed it, and `mousedown` never ran. Same for `mouseup`, and for every scroll tick
+after the first. This explains every observation:
+
+- (4) hover works, clicks do not: motion goes to a *new* position, so `--sync` returns.
+- (5) motion "stopped" after `86d24ef`: before it, `mouseleave` SIGKILLed the hung process and
+  unjammed the queue by accident. After it, each click blocks the queue for 2s + 2s.
+- The agent path "worked" because the proven click moved to a fresh coordinate. A second agent
+  click on the same spot times out at 3s; it had simply never been tried.
+
+Evidence, all against the live deployment, display `:1399`, using the test page under "How to
+reproduce and test":
+
+| Step | Result |
+| --- | --- |
+| MCP `move` to (611,433) | returns at once |
+| MCP `move` to (611,433) again | `native operation timed out` |
+| MCP `click` at (611,433), pointer at rest there | timed out, `clicks: 0` |
+| MCP `click` at (612,433) | `clicks: 1` |
+| in-container `timeout 4 xdotool mousemove --sync 612 433`, at rest | exit 124 after 4002ms |
+| in-container `xdotool mousemove 612 433 mousedown 1`, then a second process `… mouseup 1` | 2ms each, `clicks: 2` |
+| separate processes: `keydown Shift_L`, `keydown U0061`, `keyup U0061`, `keyup Shift_L`, `keydown U00e9`, `keyup U00e9` | input gained `Aé` |
+
+The last two rows close open questions 1 and 2 below: press/release and keydown/keyup split
+across processes both work, held modifiers carry across, and non-ASCII keysyms survive.
+
+**The fix** drops `--sync` from `point()` in `desktopInput()`, which both the viewer and the
+agent path build on. Ordering never needed it: the warp and the button event share one X
+connection, and `XCloseDisplay` syncs before xdotool exits. `tests/desktop-linux.test.ts` now
+clicks twice at rest through the viewer and twice through the agent, and
+`.github/workflows/test.yml` has a `desktop` job that runs it (runner xdotool is the same
+3.20160805.1, so it fails without the fix).
+
+Still unverified: the CI job has never run, and nobody has clicked through the dashboard
+since the fix. Shell access for hand tests: `railway ssh --project … --service … -- sh -c
+'export DISPLAY=:<n>; …'`, display number from `ls /tmp/.X11-unix`.
+
+---
+
+Written for an engineer or model picking this up cold. Everything
 below is either evidence with a citation, or is labelled as untested. Three theories have
 already been disproved by experiment; do not re-run them.
 

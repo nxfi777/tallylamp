@@ -73,12 +73,24 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
     } finally { await cdp.close(); }
     const key = (key: string, event: string) => send({ type: "key", key, event });
     key("Control", "rawKeyDown"); key("l", "rawKeyDown"); key("l", "keyUp"); key("Control", "keyUp");
-    const html = '<title>desktop-smoke</title><input autofocus oninput="document.title=\'typed:\'+this.value">';
+    // The input fills the viewport so a click anywhere on the page lands on it and keeps focus.
+    // Two quick clicks on one spot are a double-click, which selects a word; collapse it so the
+    // agent's later typing appends instead of replacing.
+    const html = '<title>desktop-smoke</title><input autofocus style="position:fixed;inset:0;width:100%;height:100%" oninput="document.title=\'typed:\'+this.value" onclick="document.title=\'clicks:\'+(this.dataset.n=(+this.dataset.n||0)+1);this.setSelectionRange(this.value.length,this.value.length)">';
     send({ type: "paste", text: `data:text/html,${encodeURIComponent(html)}` });
     key("Enter", "rawKeyDown"); key("Enter", "keyUp");
     await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "desktop-smoke"));
     send({ type: "paste", text: "Native UI" });
     await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "typed:Native UI"));
+    // The operator's shape, not the agent's: motion parks the pointer on the target, then the
+    // press and the release arrive at those same coordinates as separate xdotool processes.
+    // `mousemove --sync` hung for 15s whenever the pointer was already there, so hover worked
+    // and no click ever landed. The second click repeats it with the pointer provably at rest.
+    const mouse = (event: string) => send({ type: "mouse", event, x: 640, y: 450, button: "left" });
+    mouse("mouseMoved"); mouse("mousePressed"); mouse("mouseReleased");
+    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "clicks:1"));
+    mouse("mousePressed"); mouse("mouseReleased");
+    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "clicks:2"));
     assert.deepEqual(errors, []);
     ws.close(1000);
     await until(() => ctx.browsers.viewerCount(id) === 0);
@@ -89,6 +101,10 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
     assert.ok(native.image && native.image.length > 100);
     await agentDesktop(ctx.browsers, owner, id, { action: "type", text: "-agent" }, false);
     await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "typed:Native UI-agent"));
+    // Same trap on the agent path: a second click where the pointer already rests timed out.
+    await agentDesktop(ctx.browsers, owner, id, { action: "click", x: 640, y: 450 }, false);
+    await agentDesktop(ctx.browsers, owner, id, { action: "click", x: 640, y: 450 }, false);
+    await until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === "clicks:4"));
   } finally {
     ws?.terminate();
     await ctx.close();

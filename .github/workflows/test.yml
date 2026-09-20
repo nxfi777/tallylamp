@@ -32,3 +32,19 @@ jobs:
         env:
           TALLYLAMP_CHROME_BIN: /usr/bin/chromium
           TALLYLAMP_XVFB: "1"
+
+  # The only test that drives real xdotool against a real display. It was opt-in and nothing
+  # opted in, so Full browser input shipped broken and six fixes went out unverified.
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb chromium ffmpeg xdotool
+      - run: npm ci
+      - run: npm run test:desktop
+        env:
+          TALLYLAMP_CHROME_BIN: /usr/bin/chromium
+          TALLYLAMP_TEST_DESKTOP: "1"
