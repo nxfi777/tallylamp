@@ -39,6 +39,17 @@ display, ffmpeg, and xdotool, all of which the published image carries.
 large Chrome's toolbar and tabs are drawn in the viewer. Lower it, for example
 to `1920,1200`, if Full browser is still smaller than you want.
 
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35478636367)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.7.1` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:c16e2c3e6daaf37cd004b4cfb3e3c1bfcc5b021ec4618042e6b82c52571d5538
+```
+
 Existing deployments do not upgrade automatically. See the
 [release and upgrade notes](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md#releasing-and-upgrading)
 for upgrade steps.

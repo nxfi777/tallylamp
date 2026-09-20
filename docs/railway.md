@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.7.0` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.7.1` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -141,30 +141,33 @@ Then publish and add its real deploy URL to the README and website.
 
 ## Releasing and upgrading
 
-The current release is [0.7.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.7.0)
+The current release is [0.7.1](https://github.com/nxfi777/tallylamp/releases/tag/v0.7.1)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:61818262dab57c3f880a029d5bbc85b42c47d7a21741d34ea34bdb05ca99ef25
+ghcr.io/nxfi777/tallylamp@sha256:c16e2c3e6daaf37cd004b4cfb3e3c1bfcc5b021ec4618042e6b82c52571d5538
 ```
 
-The [0.7.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35453298714)
+The [0.7.1 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35478636367)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, and the zip's manifest version were verified afterward. The image's
-source revision is `316cd9f970c2e8d7571a8d48c52b79d17d334bd5`.
+source revision is `3801eb9e5079f35625b774e3b5c8a39d82cb75d2`.
 
-The Railway template pins the `0.7.0` digest for new installations. Its published
-configuration and listing copy were read back after the update. Existing
-deployments keep their selected image. Railway redeploy persistence and unique
-passwords across two template installations were checked for `0.1.1`, not repeated
-for `0.7.0`. These checks do not certify every external MCP client, proxy provider,
-or Chrome extension.
+The Railway template pins the `0.7.1` digest for new installations. Its published
+configuration was read back after the update; the listing copy changed only where
+it names the release. Existing deployments keep their selected image. Railway
+redeploy persistence and unique passwords across two template installations were
+checked for `0.1.1`, not repeated for `0.7.1`. Full browser's automatic window fit
+was not re-run on a Railway deployment for this release. These checks do not
+certify every external MCP client, proxy provider, or Chrome extension.
 
-Version 0.7.0 adds the `browser_guests` and `guest_sessions` tables for guest
-links and scrubs raw session tokens from `viewer_tickets`; older images ignore the
-new tables, and guest links stop working if you roll back. Version 0.6.1 adds the
+Version 0.7.1 changes no database tables and adds no settings, so an older image
+reads the same volume. Version 0.7.0 adds the `browser_guests` and
+`guest_sessions` tables for guest links and scrubs raw session tokens from
+`viewer_tickets`; older images ignore the new tables, and guest links stop
+working if you roll back. Version 0.6.1 adds the
 `linked_access` table and moves 0.6.0 linked browsers to
 the administrator, keeping their agent on the list. Version 0.6.0 added the
 `browser_links` and `link_pairings` tables and a `browsers.kind` column; existing
@@ -180,8 +183,9 @@ routing before rolling back. See the [0.5.0 proxy release notes](release-0.5.0.m
 [0.5.1 dashboard release notes](release-0.5.1.md),
 [0.5.2 extension release notes](release-0.5.2.md),
 [0.6.0 linked-browser release notes](release-0.6.0.md),
-[0.6.1 linked-browser access notes](release-0.6.1.md), and
-[0.7.0 guest-link release notes](release-0.7.0.md).
+[0.6.1 linked-browser access notes](release-0.6.1.md),
+[0.7.0 guest-link release notes](release-0.7.0.md), and
+[0.7.1 Full browser notes](release-0.7.1.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing
