@@ -570,6 +570,19 @@ input::placeholder { color: var(--muted); }
 /* Top, not bottom. The desktop stage is up to 1400px tall so that Chrome's own toolbar is
    legible, which puts the stage's bottom edge below the fold on an ordinary laptop -- and a
    message about input not working is worth nothing where it cannot be read. */
+/* Top right, clear of the centred toast. Read-only is a state you need to see while looking
+   at the picture, not a word at the far end of a 1400px stage. */
+.stage .watchmark {
+  position: absolute; top: 0; right: 0; z-index: 2;
+  padding: 0.5rem 0.6rem;
+  pointer-events: none;
+}
+.stage .watchmark span {
+  background: var(--chip); color: var(--chip-text);
+  padding: 0.25rem 0.65rem; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
 .stage-status.toast {
   inset: 0.6rem 0 auto 0;
   pointer-events: none;

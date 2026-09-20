@@ -210,10 +210,12 @@ Full-browser control is privileged access. Chrome's native address bar can open
 local files and browser settings; it does not use the tab viewer's URL filter.
 Use it only where dashboard administrators are trusted with those capabilities.
 Paste types up to 2,048 characters into the focused native window. It does not read
-the remote clipboard back. Opening Full browser with control fits the main window
-to the display, and **Refit Chrome window** does it again on demand; switching back
-to a control tab viewer lets that viewer size the content again. A watch-only
-viewer never resizes the window.
+the remote clipboard back. Opening Full browser fits the main window to the
+display, and **Refit Chrome window** does it again on demand; switching back to a
+control tab viewer lets that viewer size the content again. A watch-only viewer
+fits the window too: it changes no page content and reads nothing back, but it
+does resize the window the agent is working in, which is the one thing a watcher
+does here that the browser can observe.
 
 Extensions are off by default and require a separate administrator choice for each
 stopped browser. Installed extensions and their data remain in the saved Chrome

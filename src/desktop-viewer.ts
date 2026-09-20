@@ -112,10 +112,10 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     const state = browsers.controlState(id);
     return mode === "control" && !!boundLease && state.controllerType === "human" && state.leaseToken === boundLease;
   };
-  const releaseInputs = () => {
-    queue = [];
-    input?.kill("SIGKILL");
-    input = null;
+  let releaseWhenIdle = false;
+  /** Let go of whatever is physically held down. Nothing queued is touched. */
+  const releaseHeldNow = () => {
+    releaseWhenIdle = false;
     const args = [...[...keys].flatMap(k => ["keyup", k]), ...[...buttons].flatMap(b => ["mouseup", b])];
     keys.clear(); buttons.clear();
     if (args.length) {
@@ -124,6 +124,28 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
       const timeout = setTimeout(() => child.kill("SIGKILL"), 1000);
       timeout.unref(); child.on("close", () => clearTimeout(timeout));
     }
+  };
+  /**
+   * The pointer leaving the stage, or focus moving off it, means "let go of anything you are
+   * holding" -- not "throw away what I just did".
+   *
+   * This used to wipe the queue and SIGKILL the running xdotool. Every motion event spawns a
+   * `mousemove --sync`, which polls the pointer at 30ms granularity, so the queue is always
+   * running behind the operator. A click is a press and a release sitting in that queue, and
+   * moving the pointer off the canvas right after clicking -- which is what you do -- killed
+   * both before they ran. Motion still worked, because it streams continuously and each event
+   * is complete on its own. The click did not. Drain first, then let go.
+   */
+  const releaseHeld = () => {
+    if (queue.length || input) { releaseWhenIdle = true; return; }
+    releaseHeldNow();
+  };
+  /** Lease lost, or the socket is going away: drop everything, including work not yet run. */
+  const releaseInputs = () => {
+    queue = [];
+    input?.kill("SIGKILL");
+    input = null;
+    releaseHeldNow();
   };
   const pump = () => {
     if (closed || input || !queue.length) return;
@@ -164,6 +186,8 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
       if (msg.type === "mouse" && msg.event === "mouseReleased") buttons.delete(({ left: "1", middle: "2", right: "3" } as Record<string, string>)[String(msg.button)]);
       if (msg.type === "extensions" && validLease()) queue.unshift({ type: "key", event: "keyDown", key: "Enter" }, { type: "key", event: "keyUp", key: "Enter" });
       pump();
+      // A deferred "let go" waits for the queue it must not discard.
+      if (releaseWhenIdle && !input && !queue.length) releaseHeldNow();
     });
   };
   const capture = spawnProcess("ffmpeg", ["-nostdin", "-loglevel", "error", "-threads", "1", "-filter_threads", "1",
@@ -197,16 +221,14 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   ws.on("error", () => {});
   ws.on("pong", () => { pong = true; });
   let fitting = false;
-  let fitted = false;
   /**
-   * Fill the display with the Chrome window.
+   * Fill the display with the Chrome window, whenever this view opens.
    *
-   * Cosmetic in the Tab view, load-bearing here. Nothing runs a window manager on these
-   * displays, so X leaves the input focus on PointerRoot and a keystroke reaches whatever
-   * window the pointer happens to be over. A 1280x800 Chrome on a 2560x1600 desktop leaves
-   * three quarters of the view as bare root window, where every key the operator types goes
-   * nowhere and nothing says so. Fitted, the window is the display and there is nowhere else
-   * for a key to land.
+   * Every viewer, watching or controlling. A read-only viewer resizing a live browser is a
+   * real side effect -- it changes the window the agent is working in -- and the owner's call
+   * is that Full browser should show Chrome rather than Chrome adrift on a desktop four times
+   * its size. Watching an unfitted window is not a useful read-only guarantee; it just looks
+   * broken, which is how it was reported twice.
    */
   const fitWindow = () => {
     if (fitting) return;
@@ -220,14 +242,15 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
         const page = targetInfos.find(t => t.type === "page");
         if (!page) return;
         const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId: page.targetId }) as { windowId: number };
-        if (closed || !validLease()) return;
+        if (closed) return;
         await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
-        if (closed || !validLease()) return;
+        if (closed) return;
         await cdp.send("Browser.setWindowBounds", { windowId, bounds: { left: 0, top: 0, width: size.width, height: size.height } });
       } catch { send({ type: "notice", message: "Could not fit the Chrome window." }); }
       finally { await cdp?.close(); fitting = false; }
     })();
   };
+  fitWindow();
   ws.on("message", raw => {
     if (closed) return;
     let msg: Message;
@@ -237,10 +260,6 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     if (msg.type === "heartbeat" && typeof msg.leaseToken === "string") {
       try {
         browsers.heartbeatControl(id, msg.leaseToken, "admin"); boundLease = msg.leaseToken; browsers.touch(id);
-        // The first heartbeat is the earliest moment validLease() can be true, and the fit
-        // rechecks it between CDP calls. Once per socket, so a reconnect re-fits and a
-        // dialog that moved the window does not leave the operator typing into the void.
-        if (!fitted) { fitted = true; fitWindow(); }
       }
       catch { send({ type: "error", message: "lease expired" }); }
       return;
@@ -252,7 +271,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
       if (isInput(msg.type)) reportOnce("Input is being ignored: this view does not hold the control lease. Take control again, or reload the page.");
       return;
     }
-    if (msg.type === "releaseInputs") { releaseInputs(); return; }
+    if (msg.type === "releaseInputs") { releaseHeld(); return; }
     if (msg.type === "fitBrowser") { fitWindow(); return; }
     if (!desktopInput(msg, size)) {
       // The last silent drop. A pointer mapped outside the display and a key with no keysym

@@ -1256,6 +1256,10 @@ async function browserView(id, seq) {
   });
   const status = h("div", { class: "stage-status", role: "status" }, "Connecting to the live browser…");
   stage.append(
+    // Read-only has to be obvious where the pointer is, not only on a label at the bottom of a
+    // stage tall enough to put it below the fold. It never takes pointer events, so the bar's
+    // Take control button underneath it stays reachable.
+    human ? null : h("div", { class: "watchmark" }, h("span", {}, "Watching · read only")),
     // Bottom, not top. Now that the frame fills the stage at 1:1 this bar sits on live page
     // pixels, and page content is top-aligned far more often than it is bottom-aligned.
     h("div", { class: "bar" },
