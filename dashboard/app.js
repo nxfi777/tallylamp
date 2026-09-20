@@ -1255,11 +1255,15 @@ async function browserView(id, seq) {
     role: human ? "application" : "img",
   });
   const status = h("div", { class: "stage-status", role: "status" }, "Connecting to the live browser…");
+  // Read-only has to be obvious where the pointer is, not only on a label at the bottom of a
+  // stage tall enough to put it below the fold. It never takes pointer events, so the bar's
+  // Take control button underneath it stays reachable.
+  //
+  // Guarded, not a `human ? null :` argument to append below. `stage.append` is the DOM
+  // method, not h(): h() skips null and false children, append stringifies anything that is
+  // not a Node, so that branch printed the literal word "null" into the corner of the stage.
+  if (!human) stage.append(h("div", { class: "watchmark" }, h("span", {}, "Watching · read only")));
   stage.append(
-    // Read-only has to be obvious where the pointer is, not only on a label at the bottom of a
-    // stage tall enough to put it below the fold. It never takes pointer events, so the bar's
-    // Take control button underneath it stays reachable.
-    human ? null : h("div", { class: "watchmark" }, h("span", {}, "Watching · read only")),
     // Bottom, not top. Now that the frame fills the stage at 1:1 this bar sits on live page
     // pixels, and page content is top-aligned far more often than it is bottom-aligned.
     h("div", { class: "bar" },
