@@ -267,8 +267,9 @@ lease bug).
 ## Coordinate mapping, for reference
 
 The server sends `hello` with `content = rt.screen` (2560×1600). ffmpeg scales frames to
-`min(1600, iw)` wide, so the canvas backing store is 1600×1000 while input coordinates are in
-2560×1600 screen space. `framePoint()` in `app.js` reverses `object-fit: contain` using the
+`streamWidth()`: the display's width, or the viewer's stage width when that is smaller (it was
+a flat 1600 until 2026-09-20, which is what blurred the text). The canvas backing store
+therefore varies while input coordinates are always in 2560×1600 screen space. `framePoint()` in `app.js` reverses `object-fit: contain` using the
 canvas backing-store size, then scales to `frameSize`. `desktopInput()` rejects anything
 outside `rt.screen`. A mismatch here would look exactly like "clicks land in the wrong place"
 rather than "clicks do nothing", so it is lower on the list — but it has not been measured.

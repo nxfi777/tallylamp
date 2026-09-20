@@ -1870,7 +1870,12 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     }
     if (stopped) return;
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(`${proto}://${location.host}/api/v1/browsers/${id}/view?ticket=${encodeURIComponent(ticket)}&surface=${ui?.surface === "desktop" ? "desktop" : "tab"}`);
+    // The desktop is streamed no wider than this stage can show, in device pixels: a retina
+    // stage gets the display's full width and sharp text, a small one does not pay for pixels
+    // it would throw away. Read once per connection; reconnecting picks up a resized stage.
+    const stagePx = ui?.stage ? Math.ceil(ui.stage.getBoundingClientRect().width * (window.devicePixelRatio || 1)) : 0;
+    const surfaceQuery = ui?.surface === "desktop" ? `desktop${stagePx ? `&width=${stagePx}` : ""}` : "tab";
+    ws = new WebSocket(`${proto}://${location.host}/api/v1/browsers/${id}/view?ticket=${encodeURIComponent(ticket)}&surface=${surfaceQuery}`);
 
     ws.binaryType = "arraybuffer";
     ws.addEventListener("message", (ev) => {

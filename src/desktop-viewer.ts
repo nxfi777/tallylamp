@@ -104,8 +104,33 @@ export function desktopInput(msg: Message, size: { width: number; height: number
   return null;
 }
 
+/**
+ * How wide to send the desktop.
+ *
+ * It used to be a flat 1600. The display is 2560 across, so every frame was shrunk to 62% and
+ * then blown back up by the operator's screen, and two resamples at a non-integer ratio is what
+ * made the text soft: measured on one page, native width at the same JPEG quality is
+ * indistinguishable from the source, while 1600 and 1920 both blur 12px type. So the display's
+ * own width is the default, and the only reason to go under it is a stage that cannot show
+ * more. The viewer says how many device pixels its stage has; below 1280 nothing is legible
+ * whatever the stage, so that is the floor.
+ */
+export function streamWidth(displayWidth: number, stageWidth?: number): number {
+  if (typeof stageWidth !== "number" || !Number.isFinite(stageWidth) || stageWidth <= 0) return displayWidth;
+  const wanted = Math.min(displayWidth, Math.max(1280, Math.ceil(stageWidth)));
+  return wanted - (wanted % 2);
+}
+
+/**
+ * A frame goes out only while less than this is still queued on the socket. Native-width frames
+ * run to 400 KB, and the shared 2 MB high-water mark would let five of them pile up: most of a
+ * second of lag on a good link, several on a poor one, in a view someone is steering by. Holding
+ * it to about one frame means a slow link gets fewer frames, each one current and sharp.
+ */
+const DESKTOP_SEND_GATE_BYTES = 512 * 1024;
+
 /** Separate from CDP: the native toolbar, popups and side panels are all X11 surfaces. */
-export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: string, mode: "watch" | "control", spawnProcess: typeof spawn = spawn) {
+export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: string, mode: "watch" | "control", spawnProcess: typeof spawn = spawn, stageWidth?: number) {
   const send = (data: object) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data)); };
   const reject = (message: string) => { send({ type: "error", message }); ws.close(1008, "desktop unavailable"); };
   const rt = browsers.runtime(id);
@@ -225,7 +250,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   };
   const capture = spawnProcess("ffmpeg", ["-nostdin", "-loglevel", "error", "-threads", "1", "-filter_threads", "1",
     "-f", "x11grab", "-draw_mouse", "0", "-framerate", "6", "-video_size", `${size.width}x${size.height}`,
-    "-i", `${rt.display}.0`, "-vf", "scale=w='min(1600,iw)':h=-2", "-c:v", "mjpeg", "-threads", "1",
+    "-i", `${rt.display}.0`, "-vf", `scale=w=${streamWidth(size.width, stageWidth)}:h=-2`, "-c:v", "mjpeg", "-threads", "1",
     "-q:v", "6", "-f", "image2pipe", "pipe:1"], { env, stdio: ["ignore", "pipe", "ignore"] });
   let pong = true;
   const ping = setInterval(() => { if (!pong) ws.terminate(); else { pong = false; ws.ping(); } }, config.viewerPingMs);
@@ -330,7 +355,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     try {
       for (const frame of frames.push(chunk)) {
         clearTimeout(firstFrame);
-        if (closed || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > config.viewerHighWaterBytes) continue;
+        if (closed || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > DESKTOP_SEND_GATE_BYTES) continue;
         if (last?.equals(frame)) continue;
         last = Buffer.from(frame);
         ws.send(frame, { binary: true });

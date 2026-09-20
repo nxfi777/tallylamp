@@ -96,7 +96,8 @@ Coordinates are screen pixels. Human control stops these tools. If
 `agentDesktopEnabled` is false, the agent is told to ask you to turn the toggle
 on and wait. It cannot grant itself access.
 
-Full-browser view is 6 fps, 1600px wide, and one viewer per browser. Watch stays
+Full-browser view is 6 fps and one viewer per browser. It streams the display at its
+own width, or at the width of your stage if that is smaller, down to 1280px. Watch stays
 read-only. Paste is 2,048 characters. Taking control or turning the permission
 off interrupts in-flight native work.
 

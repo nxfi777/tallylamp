@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { spawn } from "node:child_process";
 import { WebSocket } from "ws";
-import { desktopInput, desktopKey, JpegFrames, runDesktopViewer } from "../src/desktop-viewer.js";
+import { desktopInput, desktopKey, JpegFrames, runDesktopViewer, streamWidth } from "../src/desktop-viewer.js";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
 import type { ChromeRuntime } from "../src/chrome.js";
 
@@ -15,6 +15,15 @@ describe("desktop input and framing", () => {
     assert.deepEqual(p.push(Buffer.from([217, 255, 216, 2, 255, 217])), [Buffer.from([255, 216, 1, 255, 217]), Buffer.from([255, 216, 2, 255, 217])]);
     assert.throws(() => p.push(Buffer.alloc(4 * 1024 * 1024 + 1)), /limit/);
     assert.throws(() => new JpegFrames().push(Buffer.from([1, 255, 217])), /invalid/);
+  });
+  it("streams the display's own width unless the stage cannot show it", () => {
+    // 1600 was the old flat cap, and shrinking 2560 to it is what blurred the text.
+    assert.equal(streamWidth(2560), 2560);
+    assert.equal(streamWidth(2560, 2880), 2560, "a retina stage never asks for more than exists");
+    assert.equal(streamWidth(2560, 1801), 1800, "ffmpeg's mjpeg needs an even width");
+    assert.equal(streamWidth(2560, 640), 1280, "nothing is legible under the floor");
+    assert.equal(streamWidth(1024, 640), 1024, "and the floor never upscales a small display");
+    for (const junk of [0, -5, NaN, Infinity]) assert.equal(streamWidth(2560, junk), 2560);
   });
   it("bounds coordinates, keys, paste and wheel repeats; never accepts command strings", () => {
     const size = { width: 1280, height: 800 };

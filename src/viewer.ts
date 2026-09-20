@@ -146,7 +146,7 @@ export function attachViewerUpgrade(server: import("node:http").Server, browsers
       }
       wss.handleUpgrade(req, socket, head, (ws) => {
         netSocket.setTimeout(0);
-        if (surface === "desktop") runDesktopViewer(ws, browsers, browserId, ticket.mode);
+        if (surface === "desktop") runDesktopViewer(ws, browsers, browserId, ticket.mode, undefined, Number(url.searchParams.get("width")) || undefined);
         else void runViewer(ws, req, browsers, browserId, ticket.mode, ticket.principal);
       });
     } catch (e) {
