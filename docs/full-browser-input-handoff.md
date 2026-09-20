@@ -56,7 +56,12 @@ The first CI run of the `desktop` job failed, on a test bug rather than on input
 assertion from `65c1de3` demanded exactly 1280x800, and Chromium always keeps an X11 window one
 pixel short of the display so no window manager mistakes it for fullscreen. Measured over CDP
 in the production container: asked for 2560x1600, `Browser.getWindowBounds` reports 2559x1599.
-The assertion now accepts that.
+The assertion now accepts that. The second run failed on another latent test bug: it typed
+as soon as a parsed `<title>` appeared, before autofocus had run, and lost the first
+characters. The test now clicks the input through the viewer first, then types. **The
+`desktop` job is green as of `c5cc3a6`**, covering the viewer's split press/release with the
+pointer at rest, held-modifier keys, paste, and two agent clicks on one spot. The "CI never
+runs the native test" and "covers keys and paste only" gaps below are closed.
 
 Still unverified: nobody has clicked through the dashboard's Full browser view since the fix. Shell access for hand tests: `railway ssh --project … --service … -- sh -c
 'export DISPLAY=:<n>; …'`, display number from `ls /tmp/.X11-unix`.
