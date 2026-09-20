@@ -66,9 +66,16 @@ installed extension can read signed-in pages and change proxy settings. The
 egress proxy does not contain a privileged extension.
 
 Stop the browser, choose **Enable extensions**, start it, take control, and
-open **Full browser**. Fit the Chrome window if the toolbar is clipped. Install
-from the Chrome Web Store in Chrome's address bar. **Manage extensions** opens
+open **Full browser**. Chrome is fitted to the display when the view opens;
+**Refit Chrome window** puts it back if a dialog moves it. Install from the
+Chrome Web Store in Chrome's address bar. **Manage extensions** opens
 `chrome://extensions/`. Switch back to Tab for ordinary work.
+
+Nothing runs a window manager on these displays, so X keeps the keyboard on
+whatever window the pointer is over. That is why the fit matters: an unfitted
+Chrome leaves most of the view as bare desktop, where keystrokes go nowhere.
+`TALLYLAMP_XVFB_SCREEN` sets how much desktop there is to fill, and so how large
+Chrome's own toolbar and tabs are drawn in the viewer.
 
 Persistent browsers keep installed extensions and their settings. Disable
 extensions to skip loading them on the next start; that does not uninstall them.

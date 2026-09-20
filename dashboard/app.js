@@ -1317,10 +1317,20 @@ async function browserView(id, seq) {
         title: state.status?.fullBrowser ? "Show Chrome’s toolbar, popups and dialogs" : "Full browser needs a dedicated Xvfb display on the host",
         onClick: () => switchSurface("desktop") }, "Full browser"),
       surface === "desktop" && human ? h("button", { class: "btn tiny", onClick: () => viewer?.openExtensions() }, "Manage extensions") : null,
-      surface === "desktop" && human ? h("button", { class: "btn tiny", onClick: () => viewer?.fitBrowser() }, "Fit Chrome window") : null,
+      surface === "desktop" && human ? h("button", { class: "btn tiny",
+        title: "Chrome is fitted to the display when this view opens. Use this if a dialog or an extension has moved it since.",
+        onClick: () => viewer?.fitBrowser() }, "Refit Chrome window") : null,
     ),
     tabstrip,
     h("div", { class: "urlrow" }, backBtn, fwdBtn, reloadBtn, urlInput, fsBtn),
+    // This view hides the dashboard's own address bar and tab strip because Chrome's are in
+    // the picture. Without a line saying so, an operator looks for a field to type in, finds
+    // none, and concludes the view is read-only.
+    surface === "desktop"
+      ? h("div", { class: "sub desktop-hint" }, human
+          ? "Chrome's own address bar and tabs are in the view below — this view has none of its own. Click where you want to type, and keep the pointer there."
+          : "Chrome's own address bar and tabs are in the view below. Take control to use them.")
+      : null,
     stage,
   );
   if (surface === "desktop") {
@@ -1376,7 +1386,10 @@ async function browserView(id, seq) {
           ]
       ).map((line) => h("p", {}, line)),
     ) : null,
-    h("div", { class: "detail" },
+    // Full browser streams a whole 2560-wide desktop into this box and letterboxes it to fit,
+    // so Chrome's own toolbar and tab strip are drawn at whatever fraction of their real size
+    // the stage leaves them. Give that view the sidebar's 320px and let the facts sit below it.
+    h("div", { class: surface === "desktop" ? "detail desktop" : "detail" },
       stagewrap,
       h("aside", { class: "side" },
         h("div", { class: "sub" }, "Tallylamp records who created this browser. The rows marked “Reported” come from the client and are not verified."),
@@ -1731,7 +1744,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
   const notify = (text) => {
     if (terminal) return;
     noticeText = text;
-    setStatus(text, "err");
+    setStatus(text, "toast");
     clearTimeout(noticeTimer);
     noticeTimer = setTimeout(() => {
       if (!terminal && live && noticeText === text) setStatus("");
@@ -1740,7 +1753,10 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
   const setStatus = (text, kind) => {
     status.hidden = !text;
     status.className = "stage-status" + (kind ? " " + kind : "");
-    status.replaceChildren(...(text ? [text] : []));
+    // A toast is a chip near the bottom, not a full-stage wall: `.stage-status` covers the
+    // whole frame, so a notice used to black out the browser and swallow every click in it
+    // for four seconds -- which is worse than the thing it was reporting.
+    status.replaceChildren(...(text ? [kind === "toast" ? h("span", { class: "toast-chip" }, text) : text] : []));
   };
 
   const fail = (text, retryable) => {
@@ -2043,8 +2059,12 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     e.preventDefault();
     e.stopPropagation();
     if (!ws || ws.readyState !== 1) return;
-    // Matches the server's cap. Truncating silently would be worse than saying so.
-    const capped = text.length > 16384 ? text.slice(0, 16384) : text;
+    // Matches the server's cap, which differs by surface: the desktop types the text through
+    // xdotool and stops at 2,048, the tab injects it and stops at 16,384. Send more and the
+    // server rejects the whole paste, so nothing arrives at all. Truncating silently would be
+    // worse than saying so.
+    const limit = ui?.surface === "desktop" ? 2048 : 16384;
+    const capped = text.length > limit ? text.slice(0, limit) : text;
     ws.send(JSON.stringify({ type: "paste", text: capped }));
     if (capped.length < text.length) notify(`Pasted the first ${capped.length} characters.`);
   };

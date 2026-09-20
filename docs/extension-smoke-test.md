@@ -23,7 +23,9 @@ other platforms and without the opt-in flag; a skip is not a successful native t
 On a test deployment with a dedicated Xvfb display for each browser:
 
 - Create a persistent test browser. Stop it, enable extensions, then start it.
-- Take control and open **Full browser**. Use **Fit Chrome window** to fill the display.
+- Take control and open **Full browser**. Chrome must fill the display without
+  being asked, and typing must reach it before anything is clicked. **Refit
+  Chrome window** must do the same again on demand.
 - Install a trusted test extension from the Chrome Web Store. Check that its
   permission dialog is visible and accepts a click. Do not use a profile with real logins.
 - Open its toolbar popup. Click and type into the popup; verify a visible change.

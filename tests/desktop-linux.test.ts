@@ -2,7 +2,7 @@ import { it } from "node:test";
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
 import { startTestServer, json } from "./helpers.js";
-import { listPages } from "../src/cdp.js";
+import { CdpClient, browserWsUrl, listPages } from "../src/cdp.js";
 import { getAgent } from "../src/auth.js";
 import { agentDesktop } from "../src/agent-desktop.js";
 
@@ -54,6 +54,23 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
     assert.deepEqual(errors, []);
     assert.deepEqual(dimensions, { width: 1280, height: 800 });
     assert.ok(frames > 0, "ffmpeg must produce actual JPEG frames");
+    // Binding the lease is what fits the window, and the fit is not cosmetic. Nothing runs a
+    // window manager on these displays, so X leaves the input focus on PointerRoot and keys
+    // reach whatever window the pointer is over. Chrome launched at 1000x700 on a 1280x800
+    // desktop leaves bare root window around it, and every keystroke that lands there is
+    // swallowed without a word. Fitted, there is nowhere else for one to go.
+    const cdp = new CdpClient(await browserWsUrl(rt.cdpUrl));
+    await cdp.connect();
+    try {
+      await until(async () => {
+        const { targetInfos } = await cdp.send("Target.getTargets") as { targetInfos: Array<{ type: string; targetId: string }> };
+        const page = targetInfos.find(t => t.type === "page");
+        if (!page) return false;
+        const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId: page.targetId }) as { windowId: number };
+        const { bounds } = await cdp.send("Browser.getWindowBounds", { windowId }) as { bounds: { width: number; height: number } };
+        return bounds.width === 1280 && bounds.height === 800;
+      });
+    } finally { await cdp.close(); }
     const key = (key: string, event: string) => send({ type: "key", key, event });
     key("Control", "rawKeyDown"); key("l", "rawKeyDown"); key("l", "keyUp"); key("Control", "keyUp");
     const html = '<title>desktop-smoke</title><input autofocus oninput="document.title=\'typed:\'+this.value">';

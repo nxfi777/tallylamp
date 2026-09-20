@@ -413,6 +413,13 @@ input::placeholder { color: var(--muted); }
 .table th, .table td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); }
 .table th { color: var(--muted); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.02em; }
 .detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; }
+/* Full browser hides the tab strip and address row -- Chrome brings its own -- and streams a
+   2560-wide desktop letterboxed into the stage. The stage is therefore the only thing deciding
+   how big Chrome's own toolbar and tabs land, so this view takes the sidebar's 320px and the
+   window's remaining height, and the facts sit below the browser instead of beside it. */
+.detail.desktop { grid-template-columns: minmax(0, 1fr); }
+.desktop-hint { padding: 0 0 0.5rem; }
+.detail.desktop .stage { height: clamp(320px, calc(100vh - 210px), 1400px); }
 /* Tab strip, address row, then the frame — the order of a browser window, because that is
    what the operator is looking at. Chrome's own strip is browser UI and Page.startScreencast
    only captures page content, so it can never appear in the stream; this is the dashboard's. */
@@ -550,6 +557,20 @@ input::placeholder { color: var(--muted); }
 .stage img.stale, .stage canvas.stale { opacity: 0.35; filter: grayscale(0.6); }
 .stage-status-inner { display: grid; gap: 0.6rem; justify-items: center; max-width: 34ch; }
 .stage-status.err { color: var(--chip-text); background: rgba(5, 7, 10, 0.86); }
+/* A transient notice is a note, not a wall. The terminal overlay covers the whole stage
+   because it carries the Reconnect button and there would be nothing left to press; a
+   four-second message has nothing to press, so covering the browser and eating every click in
+   it was pure cost -- and in Full browser, where notices are the ordinary way input reports
+   itself, it read as "I cannot click or type". */
+.stage-status.toast {
+  inset: auto 0 2.6rem 0;
+  pointer-events: none;
+  padding: 0 1rem;
+}
+.toast-chip {
+  background: var(--chip); color: var(--chip-text);
+  padding: 0.3rem 0.6rem; border-radius: 6px; max-width: 40ch;
+}
 .stage .bar .btn.tiny {
   background: var(--chip); color: var(--chip-text); border-color: var(--chip-muted);
 }

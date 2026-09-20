@@ -175,6 +175,37 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   ws.on("error", () => {});
   ws.on("pong", () => { pong = true; });
   let fitting = false;
+  let fitted = false;
+  /**
+   * Fill the display with the Chrome window.
+   *
+   * Cosmetic in the Tab view, load-bearing here. Nothing runs a window manager on these
+   * displays, so X leaves the input focus on PointerRoot and a keystroke reaches whatever
+   * window the pointer happens to be over. A 1280x800 Chrome on a 2560x1600 desktop leaves
+   * three quarters of the view as bare root window, where every key the operator types goes
+   * nowhere and nothing says so. Fitted, the window is the display and there is nowhere else
+   * for a key to land.
+   */
+  const fitWindow = () => {
+    if (fitting) return;
+    fitting = true;
+    void (async () => {
+      let cdp: CdpClient | undefined;
+      try {
+        cdp = new CdpClient(await browserWsUrl(rt.cdpUrl));
+        await cdp.connect();
+        const { targetInfos } = await cdp.send("Target.getTargets") as { targetInfos: Array<{ type: string; targetId: string }> };
+        const page = targetInfos.find(t => t.type === "page");
+        if (!page) return;
+        const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId: page.targetId }) as { windowId: number };
+        if (closed || !validLease()) return;
+        await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
+        if (closed || !validLease()) return;
+        await cdp.send("Browser.setWindowBounds", { windowId, bounds: { left: 0, top: 0, width: size.width, height: size.height } });
+      } catch { send({ type: "notice", message: "Could not fit the Chrome window." }); }
+      finally { await cdp?.close(); fitting = false; }
+    })();
+  };
   ws.on("message", raw => {
     if (closed) return;
     let msg: Message;
@@ -182,32 +213,19 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     if (!msg || typeof msg !== "object") return;
     if (mode !== "control") return;
     if (msg.type === "heartbeat" && typeof msg.leaseToken === "string") {
-      try { browsers.heartbeatControl(id, msg.leaseToken, "admin"); boundLease = msg.leaseToken; browsers.touch(id); }
+      try {
+        browsers.heartbeatControl(id, msg.leaseToken, "admin"); boundLease = msg.leaseToken; browsers.touch(id);
+        // The first heartbeat is the earliest moment validLease() can be true, and the fit
+        // rechecks it between CDP calls. Once per socket, so a reconnect re-fits and a
+        // dialog that moved the window does not leave the operator typing into the void.
+        if (!fitted) { fitted = true; fitWindow(); }
+      }
       catch { send({ type: "error", message: "lease expired" }); }
       return;
     }
     if (!validLease()) return;
     if (msg.type === "releaseInputs") { releaseInputs(); return; }
-    if (msg.type === "fitBrowser" && !fitting) {
-      fitting = true;
-      void (async () => {
-        let cdp: CdpClient | undefined;
-        try {
-          cdp = new CdpClient(await browserWsUrl(rt.cdpUrl));
-          await cdp.connect();
-          const { targetInfos } = await cdp.send("Target.getTargets") as { targetInfos: Array<{ type: string; targetId: string }> };
-          const page = targetInfos.find(t => t.type === "page");
-          if (!page) return;
-          const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId: page.targetId }) as { windowId: number };
-          if (closed || !validLease()) return;
-          await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
-          if (closed || !validLease()) return;
-          await cdp.send("Browser.setWindowBounds", { windowId, bounds: { left: 0, top: 0, width: size.width, height: size.height } });
-        } catch { send({ type: "notice", message: "Could not fit the Chrome window." }); }
-        finally { await cdp?.close(); fitting = false; }
-      })();
-      return;
-    }
+    if (msg.type === "fitBrowser") { fitWindow(); return; }
     if (!desktopInput(msg, size)) {
       if (msg.type === "paste") send({ type: "notice", message: "Full-browser paste accepts up to 2,048 characters." });
       return;
