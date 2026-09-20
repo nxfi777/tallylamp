@@ -48,8 +48,17 @@ clicks twice at rest through the viewer and twice through the agent, and
 `.github/workflows/test.yml` has a `desktop` job that runs it (runner xdotool is the same
 3.20160805.1, so it fails without the fix).
 
-Still unverified: the CI job has never run, and nobody has clicked through the dashboard
-since the fix. Shell access for hand tests: `railway ssh --project … --service … -- sh -c
+**Deployed and verified on the agent path** (`14b9edd`, live 2026-09-20): two MCP `click`s at
+the same (640,480) both returned at once and the page showed `clicks: 2`. Before the fix the
+second timed out.
+
+The first CI run of the `desktop` job failed, on a test bug rather than on input: the fit
+assertion from `65c1de3` demanded exactly 1280x800, and Chromium always keeps an X11 window one
+pixel short of the display so no window manager mistakes it for fullscreen. Measured over CDP
+in the production container: asked for 2560x1600, `Browser.getWindowBounds` reports 2559x1599.
+The assertion now accepts that.
+
+Still unverified: nobody has clicked through the dashboard's Full browser view since the fix. Shell access for hand tests: `railway ssh --project … --service … -- sh -c
 'export DISPLAY=:<n>; …'`, display number from `ls /tmp/.X11-unix`.
 
 ---

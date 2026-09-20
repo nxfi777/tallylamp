@@ -68,7 +68,10 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
         if (!page) return false;
         const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId: page.targetId }) as { windowId: number };
         const { bounds } = await cdp.send("Browser.getWindowBounds", { windowId }) as { bounds: { width: number; height: number } };
-        return bounds.width === 1280 && bounds.height === 800;
+        // Chromium keeps an X11 window one pixel short of the display so that no window manager
+        // mistakes it for fullscreen: asked for 1280x800 it settles at 1279x799. Measured on
+        // production, 2560x1600 -> 2559x1599. Launched at 1000x700, so this still proves the fit.
+        return bounds.width >= 1279 && bounds.height >= 799;
       });
     } finally { await cdp.close(); }
     const key = (key: string, event: string) => send({ type: "key", key, event });
