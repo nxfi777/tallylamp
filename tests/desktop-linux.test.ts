@@ -76,8 +76,10 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
         return bounds.width >= 1279 && bounds.height >= 799;
       }, "the fitted window");
     } finally { await cdp.close(); }
-    const key = (key: string, event: string) => send({ type: "key", key, event });
-    key("Control", "rawKeyDown"); key("l", "rawKeyDown"); key("l", "keyUp"); key("Control", "keyUp");
+    // Shaped like the dashboard's messages: every one carries the modifiers held at that moment,
+    // and a press releases the rest before it acts.
+    const key = (key: string, event: string, modifiers = 0) => send({ type: "key", key, event, modifiers });
+    key("Control", "rawKeyDown", 2); key("l", "rawKeyDown", 2); key("l", "keyUp", 2); key("Control", "keyUp");
     const titled = (title: string) => until(async () => (await listPages(rt.cdpUrl)).some(p => p.title === title),
       `a page titled "${title}"`, async () => (await listPages(rt.cdpUrl)).map(p => p.title));
     // The input fills the viewport so a click anywhere on the page lands on it and keeps focus.
@@ -85,16 +87,24 @@ it("captures real Xvfb frames and types through Chrome's native address bar", {
     // on a parsed <title> and then typing raced autofocus and lost the first characters. Two
     // quick clicks on one spot are a double-click, which selects a word; collapse it so later
     // typing appends instead of replacing.
-    const html = '<input autofocus style="position:fixed;inset:0;width:100%;height:100%" oninput="document.title=\'typed:\'+this.value" onclick="document.title=\'clicks:\'+(this.dataset.n=(+this.dataset.n||0)+1);this.setSelectionRange(this.value.length,this.value.length)"><script>document.title="desktop-smoke"</script>';
+    const html = '<input autofocus style="position:fixed;inset:0;width:100%;height:100%" oninput="document.title=\'typed:\'+this.value" onmousemove="if(!this.dataset.h){this.dataset.h=1;document.title=\'hover\'}" onclick="document.title=\'clicks:\'+(this.dataset.n=(+this.dataset.n||0)+1);this.setSelectionRange(this.value.length,this.value.length)"><script>document.title="desktop-smoke"</script>';
     send({ type: "paste", text: `data:text/html,${encodeURIComponent(html)}` });
     key("Enter", "rawKeyDown"); key("Enter", "keyUp");
     await titled("desktop-smoke");
+    // Chrome drops input that arrives before a new document's first paint, and the title above
+    // is set while parsing. On a slow runner the click below went out in that window and was
+    // never seen. Nudge the pointer until the page says it felt it; then input is flowing.
+    let nudge = 0;
+    await until(async () => {
+      send({ type: "mouse", event: "mouseMoved", x: 600 + (nudge++ % 2), y: 450 });
+      return (await listPages(rt.cdpUrl)).some(p => p.title === "hover");
+    }, "the page to feel the pointer", async () => (await listPages(rt.cdpUrl)).map(p => p.title));
     // The operator's shape, not the agent's: motion parks the pointer on the target, then the
     // press and the release arrive at those same coordinates as separate xdotool processes.
     // `mousemove --sync` hung for 15s whenever the pointer was already there, so hover worked
     // and no click ever landed. The second click repeats it with the pointer provably at rest.
     // Clicking first also focuses the input, so the typing below does not lean on autofocus.
-    const mouse = (event: string) => send({ type: "mouse", event, x: 640, y: 450, button: "left" });
+    const mouse = (event: string) => send({ type: "mouse", event, x: 640, y: 450, button: "left", modifiers: 0 });
     mouse("mouseMoved"); mouse("mousePressed"); mouse("mouseReleased");
     await titled("clicks:1");
     mouse("mousePressed"); mouse("mouseReleased");
