@@ -279,15 +279,20 @@ input::placeholder { color: var(--muted); }
 @media (pointer: coarse) {
   .btn, .nav a, .nav button.link { min-height: 44px; display: inline-flex; align-items: center; }
 }
-.btn:hover { background: var(--hover); }
+.btn:hover:not(:disabled) { background: var(--hover); }
+/* `.tab-new` and `.navbtn` had this and `.btn` did not, so every disabled button in the
+   sidebar -- Enable extensions while the browser runs, Configure proxy, Start on a running
+   browser -- looked exactly like a live one and did nothing when pressed. The explanation was
+   in the line above it, which nobody reads when the control itself says it is ready. */
+.btn:disabled { opacity: 0.45; cursor: default; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); font-weight: 500; }
 /* One white button per page. A grid of cards each shouting a primary action is three shouts and
    no hierarchy, so the card's main action is the quieter filled variant. */
 .btn.secondary { background: var(--surface-2); border-color: var(--line); color: var(--text); }
-.btn.secondary:hover { background: var(--line); }
-.btn.primary:hover { opacity: 0.9; border-color: var(--primary); }
+.btn.secondary:hover:not(:disabled) { background: var(--line); }
+.btn.primary:hover:not(:disabled) { opacity: 0.9; border-color: var(--primary); }
 .btn.danger { background: transparent; border-color: var(--tally-text); color: var(--tally-text); }
-.btn.danger:hover { background: var(--tally); color: #fff; border-color: var(--tally); }
+.btn.danger:hover:not(:disabled) { background: var(--tally); color: #fff; border-color: var(--tally); }
 /* `margin-left: auto` was doing nothing: .row is sized to its content, so there is no free
    space for it to absorb, and Delete sat the same 8px from Restart as every routine button.
    Separate it with real distance and a rule you can see. */
