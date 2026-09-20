@@ -230,15 +230,22 @@ The egress proxy is not a sandbox for a privileged extension.
 ### Agent native UI permission
 
 The administrator can grant **Allow agent control** for an agent-owned browser. It is
-stored separately from extension enablement and defaults to off. Only the owning agent
+stored separately from extension enablement. Only the owning agent
 with both ordinary read and control scopes may use the desktop tools; lending does not
 grant this permission. Copied profiles do not inherit the source's permission.
 
-The optional `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` policy preauthorizes newly created
-agent-owned browsers, including profile copies. Otherwise they start with access off.
+By default, newly created agent-owned browsers are preauthorized, including profile
+copies. Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=0` to start them with access off, which is
+the right choice on a host where an agent must not reach host-file dialogs unasked.
 The default is written into the browser record at creation; runtime checks always use
 that saved value. Changing the default does not change existing browsers, and a saved
 revocation is never overridden by it. It does not enable or install extensions.
+
+`TALLYLAMP_EXTENSIONS_DEFAULT=1` is the same kind of creation-time policy for extension
+support, and applies to every new managed browser rather than only agent-owned ones. It
+removes the per-browser confirmation that extensions can read signed-in pages, so set it
+only on a host where the administrator installs every extension themselves. It installs
+nothing, and does nothing on a host without Full browser.
 
 This permits full native UI access, including host-file dialogs and Chrome settings.
 It is not a sandbox limited to extension popups. Treat this as granting the agent the

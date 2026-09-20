@@ -128,7 +128,7 @@ describe("agent native access", () => {
     assert.match(String(denied.body), /Allow agent control/);
   });
   it("applies the env default only at creation and keeps saved choices and revocations", () => {
-    const policy = createAgent({ name: "Default policy", maxBrowsers: 4 });
+    const policy = createAgent({ name: "Default policy", maxBrowsers: 5 });
     const existing = ctx.browsers.create({ principal: policy.agent, via: "mcp" });
     assert.equal(existing.agent_desktop_enabled, 0);
     process.env.TALLYLAMP_AGENT_DESKTOP_DEFAULT = "1";
@@ -144,6 +144,9 @@ describe("agent native access", () => {
       process.env.TALLYLAMP_AGENT_DESKTOP_DEFAULT = "0";
       assert.equal(ctx.browsers.row(kept.id).agent_desktop_enabled, 1, "saved grants survive a default change");
       assert.equal(ctx.browsers.create({ principal: policy.agent, via: "mcp" }).agent_desktop_enabled, 0);
+      delete process.env.TALLYLAMP_AGENT_DESKTOP_DEFAULT;
+      assert.equal(ctx.browsers.create({ principal: policy.agent, via: "mcp" }).agent_desktop_enabled, 1, "unset means on");
+      assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).agent_desktop_enabled, 0, "never for a browser no agent owns");
     } finally { process.env.TALLYLAMP_AGENT_DESKTOP_DEFAULT = "0"; }
   });
   it("tells agents where to request permission and to wait instead of bypassing it", () => {

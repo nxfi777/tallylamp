@@ -1432,11 +1432,11 @@ async function browserView(id, seq) {
         h("p", { class: "sub" }, "Save profile copies this browser’s logins and storage into a reusable snapshot for other browsers. Persistent browsers keep their own data automatically."),
         h("h2", {}, "Proxy"),
         h("p", { class: "sub" }, b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? " · authenticated" : ""}` : "Direct · no upstream proxy"),
-        h("button", { class: "btn", disabled: !["stopped", "crashed"].includes(b.status) || b.savingProfile || human, onClick: () => editProxy(b) }, "Configure proxy"),
+        h("button", { class: "btn", disabled: !["stopped", "crashed"].includes(b.status) || b.savingProfile, onClick: () => editProxy(b) }, "Configure proxy"),
         h("p", { class: "sub" }, ["stopped", "crashed"].includes(b.status) ? "Settings apply on the next start. Tunnels keep their own route." : "Stop the browser before changing its proxy."),
         h("h2", {}, "Extensions"),
-        h("p", { class: "sub" }, b.extensionsEnabled ? "Enabled for this profile. To install or manage extensions, take control and open Full browser. Persistent profiles keep extensions and their settings." : "Off for this profile. Stop the browser before enabling extensions."),
-        h("button", { class: "btn", disabled: (!state.status?.fullBrowser && !b.extensionsEnabled) || !["stopped", "crashed"].includes(b.status) || b.savingProfile || human,
+        h("p", { class: "sub" }, b.extensionsEnabled ? "Enabled for this profile. To install or manage extensions, take control and open Full browser. Persistent profiles keep extensions and their settings." : ["stopped", "crashed"].includes(b.status) ? "Off for this profile." : "Off for this profile. Stop the browser before enabling extensions."),
+        h("button", { class: "btn", disabled: (!state.status?.fullBrowser && !b.extensionsEnabled) || !["stopped", "crashed"].includes(b.status) || b.savingProfile,
           onClick: () => act(async () => {
             const enabled = !b.extensionsEnabled;
             if (enabled && !confirm("Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust.\n\nEnable extension support?")) return;

@@ -82,10 +82,10 @@ Chrome's own UI can open files on the host and change browser settings. An
 installed extension can read signed-in pages. Use this only with administrators
 and extensions you trust.
 
-Allow agent control is a separate toggle, off by default. It lets the owning
-agent see and use that native UI, including settings and host-file dialogs.
-Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` only if you trust every new agent-owned
-browser with that access.
+Allow agent control is a separate toggle. It lets the owning agent see and use
+that native UI, including settings and host-file dialogs. New agent-owned
+browsers start with it on. Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=0` if you do not
+trust every new agent-owned browser with that access.
 
 ## Use your own browser
 

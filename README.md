@@ -232,9 +232,10 @@ turn on **Allow agent control**. That is a second permission. It gives the
 agent the same native UI, including settings and host-file dialogs. Borrowed
 browsers do not get it. Copies do not inherit it.
 
-Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` if you want that permission on for new
-agent-owned browsers. Existing browsers keep whatever you already chose.
-Turning the toggle off still wins. This does not enable extensions.
+New agent-owned browsers start with that permission on. Set
+`TALLYLAMP_AGENT_DESKTOP_DEFAULT=0` to start them with it off. Existing browsers
+keep whatever you already chose. Turning the toggle off still wins. This does
+not enable extensions.
 
 The agent uses `tallylamp_desktop_screenshot`, then `tallylamp_desktop_action`.
 Coordinates are screen pixels, not the downscaled image. Human control stops

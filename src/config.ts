@@ -143,7 +143,9 @@ export const config = {
   /** Host capability only. Administrators opt in through the dashboard, not an environment flag. */
   get fullBrowser() { return this.xvfb && !this.fakeChrome; },
   /** Creation-time policy only; saved per-browser revocations always win. */
-  get agentDesktopDefault() { return bool("TALLYLAMP_AGENT_DESKTOP_DEFAULT", false); },
+  get agentDesktopDefault() { return bool("TALLYLAMP_AGENT_DESKTOP_DEFAULT", true); },
+  /** Creation-time policy only, like agentDesktopDefault. Needs fullBrowser to mean anything. */
+  get extensionsDefault() { return bool("TALLYLAMP_EXTENSIONS_DEFAULT", false) && this.fullBrowser; },
   get fakeChrome() { return bool("TALLYLAMP_FAKE_CHROME", false); },
   get sessionTtlMs() { return int("TALLYLAMP_SESSION_TTL_SEC", 86400) * 1000; },
   get viewerTicketTtlMs() { return int("TALLYLAMP_VIEWER_TICKET_TTL_SEC", 60) * 1000; },

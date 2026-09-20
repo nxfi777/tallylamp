@@ -89,7 +89,8 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 | `TALLYLAMP_OAUTH_MAX_BROWSERS` | no | Default 2. Browser cap for a new connector agent. |
 | `TALLYLAMP_OAUTH_CLIENT_HOSTS` | no | empty = accept any https client-metadata URL. Comma-separated hostnames to restrict it. |
 | `TALLYLAMP_ADMIN_BEARER` | no | default **off**. Turning it on lets `ADMIN_SECRET` be used as a bearer token, which is a brute-forceable master key. |
-| `TALLYLAMP_AGENT_DESKTOP_DEFAULT` | no | default **off**. When on, new agent-owned browsers start with **Allow agent control**. Existing browsers keep their saved choice. This does not enable or install extensions. Native UI includes host-file dialogs. |
+| `TALLYLAMP_EXTENSIONS_DEFAULT` | no | default **off**. When on, every new managed browser starts with extension support enabled, whoever created it. Existing browsers keep their saved choice, and Disable extensions still wins. It installs nothing. Extensions can read signed-in pages and keep running after control returns to an agent. Ignored on a host without Full browser. |
+| `TALLYLAMP_AGENT_DESKTOP_DEFAULT` | no | default **on**. New agent-owned browsers start with **Allow agent control**. Set `0` to start them with it off. Existing browsers keep their saved choice. This does not enable or install extensions. Native UI includes host-file dialogs. |
 
 ## Deployment limits
 

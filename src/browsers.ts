@@ -388,8 +388,8 @@ export class BrowserManager {
       .prepare(
         `INSERT INTO browsers(
           id, name, slug, owner_type, owner_id, created_by_type, created_by_principal_id, created_via,
-          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json, agent_desktop_enabled
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json, agent_desktop_enabled, extensions_enabled
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -410,6 +410,7 @@ export class BrowserManager {
         JSON.stringify(metadata.labels ?? {}),
         proxy ? JSON.stringify(proxy) : null,
         input.principal.type === "agent" && config.agentDesktopDefault ? 1 : 0,
+        config.extensionsDefault ? 1 : 0,
       );
     if (input.seedId) restoreSiteAccess(input.seedId, id);
     audit({
@@ -418,7 +419,8 @@ export class BrowserManager {
       action: "browser.created",
       targetType: "browser",
       targetId: id,
-      detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault },
+      detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault,
+        extensionsEnabled: config.extensionsDefault },
     });
     hub.emitEvent("browser.created", { name, slug, owner: input.principal.id }, id);
     return this.row(id);
@@ -705,7 +707,9 @@ export class BrowserManager {
     if (principal.type !== "admin" && (row.owner_type !== "agent" || row.owner_id !== principal.id)) {
       throw Err.unauthorized("only the owner can change a browser proxy");
     }
-    if (this.isHumanControlled(id)) throw Err.humanControlling();
+    // Stops the owning agent rerouting a browser under the operator. The operator is the admin,
+    // so holding control must not lock them out of their own setting.
+    if (principal.type !== "admin" && this.isHumanControlled(id)) throw Err.humanControlling();
     if (this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) ||
         !["stopped", "crashed"].includes(row.status)) {
       throw Err.browserUnavailable("stop the browser before changing its proxy");
@@ -723,7 +727,10 @@ export class BrowserManager {
     const row = this.row(id);
     if (enabled) this.assertManaged(id, "installing extensions");
     if (enabled && !config.fullBrowser) throw Err.invalid("extension support requires a real browser on a dedicated Xvfb display");
-    if (this.isHumanControlled(id) || this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) ||
+    // No human-control check: only the admin gets this far, the admin is who holds that lease,
+    // and the flag is read on the next start. A lease outlives a stop, so checking it locked the
+    // operator out of a stopped browser until they pressed Return to agent.
+    if (this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) ||
         !["stopped", "crashed"].includes(row.status)) {
       throw Err.browserUnavailable("stop the browser before changing extension support");
     }

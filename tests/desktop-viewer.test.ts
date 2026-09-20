@@ -55,9 +55,23 @@ describe("extensions and full-browser authorization", () => {
     try {
       const status = await json(`${ctx.url}/api/v1/status`, { headers: { Cookie: ctx.cookie } });
       assert.equal((status.body as { fullBrowser: boolean }).fullBrowser, true);
+      // A control lease outlives a stop. The operator holding one is the only principal who can
+      // flip this, so it must not lock them out of their own stopped browser.
+      ctx.browsers.acquireControl(id, "human", "admin", { force: true });
       assert.equal((await setting(true)).status, 200);
+      ctx.browsers.releaseControl(id);
+      const admin = { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] } as const;
+      assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).extensions_enabled, 0);
+      process.env.TALLYLAMP_EXTENSIONS_DEFAULT = "1";
+      const defaulted = ctx.browsers.create({ principal: admin, via: "dashboard" });
+      assert.equal(defaulted.extensions_enabled, 1);
+      process.env.TALLYLAMP_FAKE_CHROME = "1";
+      assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).extensions_enabled, 0, "no default on a host that cannot show Full browser");
+      process.env.TALLYLAMP_FAKE_CHROME = "0";
+      assert.equal((await json(`${ctx.url}/api/v1/browsers/${defaulted.id}/extensions`, { method: "PUT", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: false }) })).status, 200);
+      assert.equal(ctx.browsers.row(defaulted.id).extensions_enabled, 0, "a saved choice wins while the default is on");
     }
-    finally { process.env.TALLYLAMP_FAKE_CHROME = "1"; }
+    finally { process.env.TALLYLAMP_FAKE_CHROME = "1"; delete process.env.TALLYLAMP_EXTENSIONS_DEFAULT; }
     assert.equal(ctx.browsers.row(id).extensions_enabled, 1);
     assert.equal(ctx.browsers.publicView(ctx.browsers.row(id)).extensionsEnabled, true);
     await ctx.browsers.ensureRunning(id);

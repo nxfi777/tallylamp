@@ -81,11 +81,15 @@ Persistent browsers keep installed extensions and their settings. Disable
 extensions to skip loading them on the next start; that does not uninstall them.
 A copied profile still needs Enable extensions on the new browser.
 
-**Allow agent control** is a second permission, off by default, for the owning
-agent only. Borrowed browsers do not get it. Copies do not inherit it. Set
-`TALLYLAMP_AGENT_DESKTOP_DEFAULT=1` if you want it on for new agent-owned
-browsers. Existing browsers keep their saved choice. Turning the toggle off
-still wins. This does not enable extensions.
+Set `TALLYLAMP_EXTENSIONS_DEFAULT=1` to start every new browser with extension
+support on, copies included. Existing browsers keep their saved choice, and
+Disable extensions still wins. It installs nothing.
+
+**Allow agent control** is a second permission, for the owning agent only.
+Borrowed browsers do not get it. Copies do not inherit it. New agent-owned
+browsers start with it on. Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=0` to start
+them with it off. Existing browsers keep their saved choice. Turning the toggle
+off still wins. This does not enable extensions.
 
 The agent uses `tallylamp_desktop_screenshot`, then `tallylamp_desktop_action`.
 Coordinates are screen pixels. Human control stops these tools. If

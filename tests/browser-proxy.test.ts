@@ -124,6 +124,8 @@ describe("per-browser proxy lifecycle", () => {
     assert.throws(() => ctx.browsers.updateProxy(row.id, null, { ...owner.agent, scopes: ["browser:read:own"] }));
     ctx.browsers.acquireControl(row.id, "human", "admin", { force: true });
     assert.throws(() => ctx.browsers.updateProxy(row.id, null, owner.agent), /human/i);
+    // The guard is against the agent, not the operator who holds the lease.
+    assert.deepEqual(JSON.parse(ctx.browsers.updateProxy(row.id, proxy, admin).proxy_json!), proxy);
     ctx.browsers.releaseControl(row.id, admin);
     const starting = ctx.browsers.ensureRunning(row.id);
     assert.throws(() => ctx.browsers.updateProxy(row.id, null, owner.agent), /stop the browser/);
