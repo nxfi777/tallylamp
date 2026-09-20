@@ -1269,7 +1269,14 @@ async function browserView(id, seq) {
               title: "Send an Escape keypress to the remote page",
               onClick: () => viewer && viewer.sendKey("Escape", "Escape"),
             }, "Send Esc")
-          : null,
+          // The way out of read-only, next to the label that says you are in it. The page's
+          // own Take control button is at the top, which a tall stage puts off screen, so a
+          // watcher could read "nothing you type reaches this browser" with no remedy in view.
+          : h("button", {
+              class: "btn tiny",
+              title: "Take the keyboard. In Full browser this also fits Chrome to the display.",
+              onClick: () => takeControl(id),
+            }, "Take control"),
       ),
     ),
     status,
@@ -1329,7 +1336,7 @@ async function browserView(id, seq) {
     surface === "desktop"
       ? h("div", { class: "sub desktop-hint" }, human
           ? "Chrome's own address bar and tabs are in the view below — this view has none of its own. Click where you want to type, and keep the pointer there."
-          : "Chrome's own address bar and tabs are in the view below. Take control to use them.")
+          : "Watching only, so Chrome has not been fitted to the display — the black is the rest of it. Take control and this view fills with Chrome, address bar and tabs included.")
       : null,
     stage,
   );
