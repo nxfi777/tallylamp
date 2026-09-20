@@ -562,8 +562,11 @@ input::placeholder { color: var(--muted); }
    four-second message has nothing to press, so covering the browser and eating every click in
    it was pure cost -- and in Full browser, where notices are the ordinary way input reports
    itself, it read as "I cannot click or type". */
+/* Top, not bottom. The desktop stage is up to 1400px tall so that Chrome's own toolbar is
+   legible, which puts the stage's bottom edge below the fold on an ordinary laptop -- and a
+   message about input not working is worth nothing where it cannot be read. */
 .stage-status.toast {
-  inset: auto 0 2.6rem 0;
+  inset: 0.6rem 0 auto 0;
   pointer-events: none;
   padding: 0 1rem;
 }

@@ -98,6 +98,9 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   let queue: Message[] = [];
   const keys = new Set<string>();
   const buttons = new Set<string>();
+  // Once per socket. A failing xdotool fails on every event, and a notice per keystroke would
+  // bury the stage in the same sentence.
+  let inputFailureReported = false;
   const validLease = () => {
     const state = browsers.controlState(id);
     return mode === "control" && !!boundLease && state.controllerType === "human" && state.leaseToken === boundLease;
@@ -134,10 +137,22 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     const timeout = setTimeout(() => child.kill("SIGKILL"), 2000);
     timeout.unref();
     child.on("error", () => send({ type: "notice", message: "Desktop input failed. Check that xdotool is installed." }));
-    child.on("close", () => {
+    child.on("close", (code, signal) => {
       clearTimeout(timeout);
       if (input !== child) return;
       input = null;
+      // `error` only fires when the process cannot be spawned at all. An xdotool that starts
+      // and then fails -- a display it cannot open, no XTEST on the server, a keysym it
+      // cannot map -- exits non-zero, and this dropped that on the floor. The agent path has
+      // always checked the code; the viewer did not, so every click and keystroke vanished in
+      // silence and looked exactly like a dead stream. releaseInputs() clears `input` before
+      // it kills, so a deliberate cancellation returns above and is never reported here.
+      if ((code !== 0 || signal) && !inputFailureReported) {
+        inputFailureReported = true;
+        send({ type: "notice", message: signal
+          ? `Desktop input stopped responding on the host: xdotool was killed (${signal}). Nothing you click or type is reaching Chrome.`
+          : `Desktop input failed on the host: xdotool exited ${code}. Nothing you click or type is reaching Chrome.` });
+      }
       if (msg.type === "key" && msg.event === "keyUp") keys.delete(desktopKey(msg.key)!);
       if (msg.type === "mouse" && msg.event === "mouseReleased") buttons.delete(({ left: "1", middle: "2", right: "3" } as Record<string, string>)[String(msg.button)]);
       if (msg.type === "extensions" && validLease()) queue.unshift({ type: "key", event: "keyDown", key: "Enter" }, { type: "key", event: "keyUp", key: "Enter" });
