@@ -401,7 +401,10 @@ browsers in every form: asking, the idle rule, and answering a request.
 
 The limits that do hold are enforced in the extension, because the server is the
 party being limited. The extension only attaches to tabs a person shared, only to
-ordinary `http` and `https` pages, and never to its own pages. It refuses CDP
+ordinary `http` and `https` pages, and never to its own pages or to the dashboard
+of the server it is linked to, where an agent signed in as the person could
+approve its own requests. A shared tab that reaches the dashboard some other way
+is handed back as the page commits. It refuses CDP
 methods that reach past a shared tab: the browser-wide cookie jar, other tabs,
 other origins' storage, files on disk and download paths. The list is in
 `extension/guard.js`. It never re-attaches after Cancel on Chrome's debugging bar,

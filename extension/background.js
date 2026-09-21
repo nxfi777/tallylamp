@@ -10,7 +10,7 @@
 // the person pressed Cancel on Chrome's debugging bar, or keep tabs attached while the server
 // is unreachable for more than a minute.
 
-import { guard, siteOf, withinSite } from "./guard.js";
+import { guard, onServer, siteOf, withinSite } from "./guard.js";
 import { normalizeServer } from "./address.js";
 
 const PROTOCOL = "1.3";
@@ -27,6 +27,7 @@ let ws = null;
 let attempts = 0;
 let error = null; // Something the person has to act on.
 let notice = null; // Something that happened that they should know about.
+let fixIn = null; // { id } when the fix is in another extension's settings. `id` if Chrome gave it away.
 let releaseAt = null; // When shared tabs are handed back if the server stays unreachable.
 let pingTimer, retryTimer, graceTimer, pollTimer;
 /** tabId -> { tabId, info: {targetId,url,title}, sites: string[] | null, byAgent: boolean } */
@@ -39,6 +40,8 @@ const hostOf = (server) => {
     return server;
   }
 };
+/** The linked server's host, which no shared tab may be on. */
+const serverHost = () => (conn ? hostOf(conn.server) : null);
 
 // ---------------------------------------------------------------- state out to the panel
 
@@ -51,6 +54,7 @@ function snapshot() {
     shared: [...shared.values()].map((t) => ({ tabId: t.tabId, url: t.info.url, title: t.info.title, sites: t.sites, byAgent: t.byAgent })),
     error,
     notice,
+    extensions: fixIn,
     releaseAt,
   };
 }
@@ -176,6 +180,7 @@ async function unpair(message = null) {
   link = "unpaired";
   error = null;
   notice = message;
+  fixIn = null;
   await chrome.storage.local.remove("conn");
   changed();
 }
@@ -254,7 +259,7 @@ async function handle(method, params) {
   if (method === "cdp") {
     const tab = shared.get(params.tabId);
     if (!tab) throw new Error("that tab is not shared");
-    const verdict = guard({ url: tab.info.url, sites: tab.sites }, String(params.method), params.params ?? {});
+    const verdict = guard({ url: tab.info.url, sites: tab.sites, server: serverHost() }, String(params.method), params.params ?? {});
     if (!verdict.ok) throw new Error(verdict.reason);
     const target = params.sessionId ? { tabId: tab.tabId, sessionId: String(params.sessionId) } : { tabId: tab.tabId };
     return chrome.debugger.sendCommand(target, String(params.method), verdict.params);
@@ -266,7 +271,7 @@ async function handle(method, params) {
     const all = [...shared.values()];
     const sites = all.some((t) => !t.sites) ? null : [...new Set(all.flatMap((t) => t.sites))];
     const url = String(params.url ?? "about:blank");
-    const verdict = guard({ url: "about:blank", sites }, "Page.navigate", { url });
+    const verdict = guard({ url: "about:blank", sites, server: serverHost() }, "Page.navigate", { url });
     if (!verdict.ok) throw new Error(verdict.reason);
     // about:blank commits at once, and the debugger can only attach to a committed page.
     const created = await chrome.tabs.create({ url: "about:blank", active: false });
@@ -304,11 +309,44 @@ async function handle(method, params) {
 
 // ---------------------------------------------------------------- sharing
 
+const CHROME_PAGE = "Chrome doesn't let extensions control this page. Open a normal website to share it.";
+const DASHBOARD = "This is your Tallylamp dashboard, where you approve what agents ask for. An agent here could approve its own requests, so it can't be shared.";
+const OTHER_EXTENSION = (site) =>
+  `Another extension has put a frame inside ${site}, and Chrome won't let an extension control a page with a different extension's frame in it. Stop that extension running on ${site}, reload the page, then share again.`;
+
 const ATTACH_ERRORS = [
-  [/chrome:\/\/|chrome-extension:\/\/|Cannot access|cannot be debugged|webstore/i, "Chrome doesn't let extensions control this page. Open a normal website to share it."],
+  [/chrome:\/\/|chrome-extension:\/\/|Cannot access|cannot be debugged|webstore/i, CHROME_PAGE],
   [/Another debugger/i, "Another tool is already debugging this tab. Close it there, then share again."],
   [/No tab with/i, "That tab was closed."],
 ];
+
+/**
+ * Chrome refuses a tab that holds another extension's frame, and detaches from a shared one the
+ * moment such a frame turns up. Its words for that, "Cannot access a chrome-extension:// URL of
+ * different extension", read like a browser page. Password managers and other extensions do it
+ * to ordinary sites.
+ */
+const byOtherExtension = (message) => /different extension/i.test(message);
+
+/**
+ * The extensions with a frame open anywhere in this browser. Chrome hides other extensions'
+ * frames from webNavigation and doesn't say which tab a frame is in, but a refused tab holds at
+ * least one of them, so when there is exactly one, that is the extension in the way.
+ */
+async function otherExtensionFrames() {
+  const targets = await chrome.debugger.getTargets().catch(() => []);
+  const ids = targets
+    .filter((t) => t.type === "other")
+    .map((t) => /^chrome-extension:\/\/([a-p]{32})\//.exec(t.url)?.[1])
+    .filter((id) => id && id !== chrome.runtime.id);
+  return [...new Set(ids)];
+}
+
+async function blockedByExtension(site) {
+  const ids = await otherExtensionFrames();
+  fixIn = { id: ids.length === 1 ? ids[0] : null };
+  return OTHER_EXTENSION(site ?? "this site");
+}
 
 /**
  * Only ordinary web pages. Chrome refuses chrome:// and the Web Store by itself, but it lets an
@@ -322,11 +360,19 @@ async function share(tabId, { sites = null, byAgent = false } = {}) {
   if (shared.has(tabId)) return shared.get(tabId);
   const current = await chrome.tabs.get(tabId).catch(() => null);
   if (!current) throw new Error("That tab was closed.");
-  if (!shareable(current.url || current.pendingUrl || "", byAgent)) throw new Error(ATTACH_ERRORS[0][1]);
+  const url = current.url || current.pendingUrl || "";
+  if (!shareable(url, byAgent)) throw new Error(CHROME_PAGE);
+  if (onServer(url, serverHost())) throw new Error(DASHBOARD);
   try {
     await chrome.debugger.attach({ tabId }, PROTOCOL);
   } catch (e) {
     const message = String(e?.message ?? e);
+    if (byOtherExtension(message)) {
+      // Kept as the panel's error, not just returned, because it points at a fix elsewhere.
+      error = await blockedByExtension(siteOf(url));
+      changed();
+      throw new Error(error);
+    }
     throw new Error(ATTACH_ERRORS.find(([re]) => re.test(message))?.[1] ?? `Chrome wouldn't share this tab: ${message}`);
   }
   let info;
@@ -341,6 +387,8 @@ async function share(tabId, { sites = null, byAgent = false } = {}) {
   const tab = { tabId, info: { targetId: info.targetId, url: info.url, title: info.title, browserContextId: info.browserContextId }, sites, byAgent };
   shared.set(tabId, tab);
   notice = null;
+  error = null;
+  fixIn = null;
   group(tabId);
   send({ event: "tab.shared", tab: wire(tab) });
   changed();
@@ -388,8 +436,31 @@ chrome.debugger.onDetach.addListener((source, reason) => {
   // Cancel on Chrome's debugging bar is the one stop control this extension cannot remove or
   // intercept, so it is treated as exactly what it looks like. Nothing is re-attached.
   if (reason === "canceled_by_user") notice = "You pressed Cancel on Chrome's debugging bar, so sharing stopped.";
+  else explainDetach(source.tabId);
   unshare(source.tabId, reason, { detach: false });
 });
+
+/**
+ * Anything else Chrome calls "target_closed". A closed tab never gets here: onRemoved arrives
+ * first and has already handed it back. So the tab is still open, and it either started loading
+ * a page Chrome keeps extensions off or another extension's frame turned up in it. Chrome
+ * detaches before the tab's address changes, so it is read a moment later.
+ */
+async function explainDetach(tabId) {
+  await new Promise((r) => setTimeout(r, 500));
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || shared.has(tabId)) return;
+  const url = tab.pendingUrl || tab.url || "";
+  const site = siteOf(url);
+  if (!site || site === "chromewebstore.google.com" || url.startsWith("https://chrome.google.com/webstore")) {
+    notice = "A shared tab opened a page that can't be shared, so it was handed back.";
+  } else if ((await otherExtensionFrames()).length) {
+    notice = `Sharing stopped. ${await blockedByExtension(site)}`;
+  } else {
+    notice = `Chrome stopped this extension controlling the tab on ${site}, so it was handed back.`;
+  }
+  changed();
+}
 
 chrome.tabs.onRemoved.addListener((tabId) => unshare(tabId, "tab closed", { detach: false }));
 
@@ -401,6 +472,12 @@ chrome.tabs.onUpdated.addListener((tabId, change, tabNow) => {
     // debugger must not stay attached to.
     notice = "A shared tab opened a page that can't be shared, so it was handed back.";
     return void unshare(tabId, "left the web");
+  }
+  if (change.url && onServer(change.url, serverHost())) {
+    // The guard refuses Page.navigate to it, but a link, a redirect or a script still gets
+    // there. This fires as the page commits, before the dashboard has rendered anything to press.
+    notice = "A shared tab opened your Tallylamp dashboard, so it was handed back. Agents can't use the page where their requests are approved.";
+    return void unshare(tabId, "opened the Tallylamp dashboard");
   }
   if (change.url && tab.sites && change.url !== "about:blank" && !tab.sites.some((s) => withinSite(change.url, s))) {
     // The guard stops the agent navigating away. A link, a redirect or the person themselves
@@ -434,8 +511,11 @@ const actions = {
   dismiss: async () => {
     notice = null;
     error = null;
+    fixIn = null;
     changed();
   },
+  // Another extension's details page, where its site access is changed. The list when unknown.
+  openExtensions: async ({ id }) => chrome.tabs.create({ url: /^[a-p]{32}$/.test(id ?? "") ? `chrome://extensions/?id=${id}` : "chrome://extensions/" }),
   unpair: () => unpair(),
 };
 
@@ -460,6 +540,11 @@ async function boot() {
   for (const entry of was) {
     try {
       const { targetInfo: info } = await chrome.debugger.sendCommand({ tabId: entry.tabId }, "Target.getTargetInfo");
+      // Shared by a version that let the dashboard be shared.
+      if (onServer(info.url, serverHost())) {
+        await chrome.debugger.detach({ tabId: entry.tabId }).catch(() => {});
+        continue;
+      }
       shared.set(entry.tabId, { tabId: entry.tabId, info: { targetId: info.targetId, url: info.url, title: info.title, browserContextId: info.browserContextId }, sites: entry.sites ?? null, byAgent: Boolean(entry.byAgent) });
     } catch {
       /* no longer attached: not shared, whatever the note said */

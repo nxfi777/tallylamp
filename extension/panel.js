@@ -6,9 +6,10 @@
 //
 // panel.html?demo=<state> renders a fixture with no extension APIs at all, so every state can
 // be looked at in an ordinary browser tab. States: unpaired, unpaired-error, pairing,
-// connecting, ready, unshareable, shared-here, shared-elsewhere, offline, notice.
+// connecting, ready, unshareable, dashboard, other-extension, shared-here, shared-elsewhere,
+// offline, notice.
 
-import { siteOf } from "./guard.js";
+import { onServer, siteOf } from "./guard.js";
 
 const app = document.getElementById("app");
 const query = new URLSearchParams(location.search);
@@ -101,8 +102,14 @@ function banners() {
       h("button", { class: "link", onclick: () => ask("retry") }, "Try now"),
     ));
   }
-  if (state.error && state.link !== "unpaired") out.push(h("div", { class: "banner err", role: "alert" }, h("div", { class: "grow" }, state.error), h("button", { class: "link", onclick: () => ask("dismiss") }, "OK")));
-  if (state.notice) out.push(h("div", { class: "banner warn", role: "status" }, h("div", { class: "grow" }, state.notice), h("button", { class: "link", onclick: () => ask("dismiss") }, "OK")));
+  // The fix for another extension's frame is in that extension's settings, so the way there
+  // goes under whichever message explains it. Its own line: two links beside the text crowd it.
+  const fix = state.extensions
+    ? h("div", { style: "margin-top:6px" }, h("button", { class: "link", onclick: () => ask("openExtensions", { id: state.extensions.id }) }, state.extensions.id ? "Show that extension" : "Open your extensions"))
+    : null;
+  const error = state.error && state.link !== "unpaired";
+  if (error) out.push(h("div", { class: "banner err", role: "alert" }, h("div", { class: "grow" }, state.error, fix), h("button", { class: "link", onclick: () => ask("dismiss") }, "OK")));
+  if (state.notice) out.push(h("div", { class: "banner warn", role: "status" }, h("div", { class: "grow" }, state.notice, error ? null : fix), h("button", { class: "link", onclick: () => ask("dismiss") }, "OK")));
   return out;
 }
 
@@ -166,11 +173,14 @@ function shareCard() {
     );
   }
 
-  if (!tab || !site) {
+  const dashboard = Boolean(tab) && onServer(tab.url, state.host);
+  if (!tab || !site || dashboard) {
     return h("div", { class: "card" },
       tab ? tabLine(tab) : null,
       h("button", { class: "primary", disabled: true, "aria-describedby": "why-not" }, "Can't share this page"),
-      h("p", { class: "small muted", id: "why-not" }, "Chrome doesn't let extensions control its own pages, the Web Store or local files. Open an ordinary website and share that."),
+      h("p", { class: "small muted", id: "why-not" }, dashboard
+        ? "This is your Tallylamp dashboard, where you approve what agents ask for. An agent here could approve its own requests, so it can't be shared."
+        : "Chrome doesn't let extensions control its own pages, the Web Store or local files. Open an ordinary website and share that."),
     );
   }
 
@@ -231,7 +241,7 @@ function render() {
 // ---------------------------------------------------------------- start
 
 const DEMO_TAB = { id: 1, title: "Inbox (3) · Example Mail", url: "https://mail.example.com/inbox" };
-const base = { link: "online", host: "tallylamp.example.com", browserName: "Chrome on macOS", pairing: null, shared: [], error: null, notice: null, releaseAt: null };
+const base = { link: "online", host: "tallylamp.example.com", browserName: "Chrome on macOS", pairing: null, shared: [], error: null, notice: null, extensions: null, releaseAt: null };
 const also = [
   { tabId: 2, title: "Q3 forecast · Sheets", url: "https://sheets.example.com/d/1", sites: ["sheets.example.com"], byAgent: false },
   { tabId: 3, title: "Pricing · Linear", url: "https://linear.app/pricing", sites: null, byAgent: true },
@@ -243,6 +253,12 @@ const DEMOS = {
   connecting: { ...base, link: "connecting" },
   ready: base,
   unshareable: base,
+  dashboard: base,
+  "other-extension": {
+    ...base,
+    error: "Another extension has put a frame inside mail.example.com, and Chrome won't let an extension control a page with a different extension's frame in it. Stop that extension running on mail.example.com, reload the page, then share again.",
+    extensions: { id: "abcdefghijklmnopabcdefghijklmnop" },
+  },
   "shared-here": { ...base, shared: [{ tabId: 1, title: DEMO_TAB.title, url: DEMO_TAB.url, sites: ["mail.example.com"], byAgent: false }] },
   "shared-elsewhere": { ...base, shared: also },
   offline: { ...base, link: "offline", shared: also, releaseAt: Date.now() + 42_000 },
@@ -251,7 +267,9 @@ const DEMOS = {
 
 if (demo) {
   state = DEMOS[demo] ?? DEMOS.ready;
-  activeTab = demo === "unshareable" ? { id: 9, title: "Extensions", url: "chrome://extensions" } : DEMO_TAB;
+  activeTab = demo === "unshareable"
+    ? { id: 9, title: "Extensions", url: "chrome://extensions" }
+    : demo === "dashboard" ? { id: 8, title: "Browsers · Tallylamp", url: "https://tallylamp.example.com/browsers" } : DEMO_TAB;
   justShared = demo === "shared-here";
   if (demo === "unpaired-error") typed = "tallylamp.example.com";
   render();

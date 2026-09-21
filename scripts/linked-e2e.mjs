@@ -11,7 +11,7 @@
 // which is why it is not part of `npm test`.
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 const OUT = process.argv[2] ?? path.join(os.tmpdir(), "tallylamp-linked-e2e"); mkdirSync(OUT, { recursive: true }); const EXT = path.resolve("extension");
@@ -57,6 +57,9 @@ try {
   const tabId = await inExt(`const t=(await chrome.tabs.query({})).find(t=>t.url.startsWith("http://127.0.0.1:${PP}")); return t?.id`);
   const denied = await inExt(`const t=(await chrome.tabs.query({})).find(t=>t.url.startsWith("chrome-extension://")); return (await chrome.runtime.sendMessage({type:"shareTab", tabId:t.id, site:null}))`);
   check("sharing an extension page is refused with a human sentence", denied.ok === false, denied.error);
+  await send("Target.createTarget", { url: `${base}/` }); await sleep(800);
+  const dash = await inExt(`const t=(await chrome.tabs.query({})).find(t=>t.url.startsWith("${base}")); return (await chrome.runtime.sendMessage({type:"shareTab", tabId:t.id, site:null}))`);
+  check("sharing the Tallylamp dashboard itself is refused", dash.ok === false && /Tallylamp dashboard/.test(dash.error), dash.error);
   const sharedRes = await inExt(`return await chrome.runtime.sendMessage({type:"shareTab", tabId:${tabId}, site:"127.0.0.1"})`);
   check("chrome.debugger attaches and the tab is shared", sharedRes.ok && sharedRes.state.shared.length === 1, sharedRes.error ?? JSON.stringify(sharedRes.state.shared));
 
@@ -77,11 +80,30 @@ try {
   const away = await call("navigate_page", { pageId: 1, url: "https://example.com/" }); check("navigating off the shared site is refused by the extension", /shared for 127\.0\.0\.1 only/.test(away.text), away.text);
   const np = await call("new_page", { url: `http://127.0.0.1:${PP}/two` }); check("new_page opens an agent tab in the person's browser", !np.err, np.text);
   st = await state(); check("the agent's tab is tracked as opened by agent", st.shared.some((t) => t.byAgent), JSON.stringify(st.shared.map((t) => [t.url, t.byAgent])));
+  // Same hostname as the shared site, so only the server rule stands between the agent and it.
+  const toDash = await call("navigate_page", { pageId: 1, url: `${base}/` }); check("navigate_page to the linked server's dashboard is refused", /Tallylamp dashboard/.test(toDash.text), toDash.text);
+  await call("evaluate_script", { pageId: 1, function: `() => { location.href = ${JSON.stringify(base + "/")}; }` }); await sleep(1500);
+  st = await state(); check("a script that walks a shared tab onto the dashboard gets it handed back", !st.shared.some((t) => t.tabId === tabId) && /dashboard/.test(st.notice ?? ""), `${st.notice} ${JSON.stringify(st.shared.map((t) => t.url))}`);
 
   await inExt(`await chrome.runtime.sendMessage({type:"stopAll"}); return 1`); await sleep(500);
   const after = await call("list_pages"); check("after Stop, the agent has no pages left", after.err || !after.text.includes(`127.0.0.1:${PP}`), after.text);
   const detached = await inExt(`return (await chrome.debugger.getTargets()).filter(t=>t.attached && t.tabId && !t.url.startsWith("chrome-extension://")).length`);
   check("after Stop, the debugger is detached from every tab", detached === 0, detached);
+
+  // Another extension that frames every page, the way password managers do. Chrome refuses such
+  // a tab with "Cannot access a chrome-extension:// URL of different extension".
+  const framer = path.join(OUT, "framer"); mkdirSync(framer, { recursive: true });
+  writeFileSync(path.join(framer, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "E2E framer", version: "1", content_scripts: [{ matches: ["<all_urls>"], js: ["cs.js"] }], web_accessible_resources: [{ resources: ["f.html"], matches: ["<all_urls>"] }] }));
+  writeFileSync(path.join(framer, "cs.js"), `const add = () => { const f = document.createElement("iframe"); f.src = chrome.runtime.getURL("f.html"); document.body.append(f); }; location.search.includes("late") ? setTimeout(add, 3000) : add();`);
+  writeFileSync(path.join(framer, "f.html"), "<p>framed</p>");
+  const { id: framerId } = await send("Extensions.loadUnpacked", { path: framer });
+  const openTab = async (q) => { await send("Target.createTarget", { url: `http://127.0.0.1:${PP}/?${q}` }); await sleep(1000); return inExt(`return (await chrome.tabs.query({})).find(t=>t.url.endsWith("?${q}")).id`); };
+  const framed = await inExt(`return await chrome.runtime.sendMessage({type:"shareTab", tabId:${await openTab("framed")}, site:null})`);
+  check("a tab holding another extension's frame is refused, naming that extension", framed.ok === false && /Another extension/.test(framed.error) && framed.state.extensions?.id === framerId, `${framed.error} ${JSON.stringify(framed.state.extensions)}`);
+  const late = await inExt(`return await chrome.runtime.sendMessage({type:"shareTab", tabId:${await openTab("late")}, site:null})`);
+  check("a tab whose frame arrives later still shares at first", late.ok === true, late.error);
+  await sleep(4500); st = await state();
+  check("when the frame arrives, sharing stops with a notice that says why", !st.shared.length && /Another extension/.test(st.notice ?? "") && st.extensions?.id === framerId, `${st.notice} ${JSON.stringify(st.extensions)}`);
 } catch (e) { check("script ran to completion", false, e.stack ?? e); }
 finally { chrome?.kill("SIGKILL"); svc.kill("SIGTERM"); pages.close(); }
 log(failed ? `\n${failed} FAILED` : "\nALL PASSED"); await sleep(300); process.exit(failed ? 1 : 0);

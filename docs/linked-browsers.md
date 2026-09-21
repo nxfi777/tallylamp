@@ -32,6 +32,8 @@ Shared tabs are collected into a tab group called Tallylamp where the browser ha
 
 To take a tab back, press **Stop sharing this tab**, close the tab, or press Cancel on Chrome's bar. If your server is unreachable for a full minute, every shared tab is handed back without you doing anything.
 
+Some ordinary sites still refuse to share because of another extension. Password managers and similar extensions put their own frame inside pages with forms, and Chrome will not let one extension debug a page that holds another extension's frame. It refuses the tab, or stops sharing it the moment such a frame appears. The panel says so. When only one extension has a frame open, **Show that extension** opens its settings. Set its site access to "On click", or turn it off for that site, then reload the page and share again.
+
 ## What the agent can do, and what it cannot
 
 Inside a shared tab the agent is you. It can click, type, read the page, run JavaScript, take screenshots, watch network traffic and record a performance trace. If that tab is signed in to your email, the agent can read your email. With the site limit off it can also take the tab to any other site you are signed in to. Share tabs the way you would hand somebody your unlocked laptop with one window open.
@@ -43,6 +45,7 @@ What it cannot do is reach past the tab. The Chrome DevTools Protocol was writte
 - uploading files from your disk (`DOM.setFileInputFiles`), choosing where downloads are written, or opening `file://`, `chrome://` and `javascript:` addresses
 - reading another site's localStorage, IndexedDB or cache by naming its origin
 - closing a tab it did not open, and closing or resizing your window. `resize_page` has no effect here. Use `emulate` to change the viewport
+- your Tallylamp dashboard. It is where you approve what agents ask for, and an agent in it would be signed in as you, one click from approving itself. The panel will not share it, the agent cannot navigate there, and a shared tab that ends up there anyway (a link, a redirect, a script) is handed back as the page loads
 
 These rules live in [`extension/guard.js`](../extension/guard.js) and are tested in `tests/linked-guard.test.ts`. They run in the extension on purpose. The server is the party being limited, so a server that did its own checking would be marking its own homework.
 

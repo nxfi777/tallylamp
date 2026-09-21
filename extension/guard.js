@@ -9,7 +9,9 @@
 //
 // It does not try to stop the agent using the shared tab itself. An agent can still navigate
 // that tab and act with whatever this profile is signed in to. That is what sharing a tab
-// means, the panel says so, and "this site only" is the control for it.
+// means, the panel says so, and "this site only" is the control for it. The one exception is
+// the Tallylamp server this browser is linked to. Its dashboard is where a person approves
+// what agents ask for, and an agent driving it as that person would be approving itself.
 //
 // Pure functions, no chrome.* calls, so the rules can be tested under plain Node.
 
@@ -50,6 +52,15 @@ export function withinSite(url, site) {
   return Boolean(host && site && (host === site || host.endsWith(`.${site}`)));
 }
 
+/** A page of the linked Tallylamp server. `server` is its host, port included. */
+export function onServer(url, server) {
+  try {
+    return Boolean(server) && new URL(url).host === server;
+  } catch {
+    return false;
+  }
+}
+
 function namedOrigins(params) {
   const found = [];
   for (const key of ["origin", "securityOrigin", "storageKey"]) if (typeof params?.[key] === "string") found.push(params[key]);
@@ -60,7 +71,8 @@ function namedOrigins(params) {
 /**
  * Decide one CDP call against one shared tab.
  *
- * @param {{url: string, sites: string[] | null}} tab  `sites` is set when the share is limited to those sites.
+ * @param {{url: string, sites: string[] | null, server?: string | null}} tab  `sites` is set when the
+ *   share is limited to those sites. `server` is the linked Tallylamp server's host.
  * @returns {{ok: true, params: object} | {ok: false, reason: string}}
  */
 export function guard(tab, method, params = {}) {
@@ -120,6 +132,9 @@ export function guard(tab, method, params = {}) {
     const blank = target.href === "about:blank";
     // file: would read this computer's disk; chrome: and javascript: are not pages at all.
     if (!blank && !NAVIGABLE.has(target.protocol)) return refuse(`only http and https pages can be opened, not ${target.protocol}`);
+    if (onServer(target.href, tab.server)) {
+      return refuse("that is the Tallylamp dashboard, where the person at this browser approves what agents ask for");
+    }
     if (tab.sites && !blank && !tab.sites.some((site) => withinSite(target.href, site))) {
       return refuse(`this tab was shared for ${tab.sites.join(", ")} only, and ${target.hostname} is a different site. Ask the person at this browser to share it for any site`);
     }

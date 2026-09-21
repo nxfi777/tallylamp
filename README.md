@@ -283,7 +283,10 @@ browser. Install [Tallylamp Link](https://github.com/nxfi777/tallylamp/releases/
 approve the browser once in the dashboard, then share tabs one at a time from its
 side panel. One click takes a tab back. It suits sites that challenge a datacenter
 IP, and pages you already have open. It needs Tallylamp 0.6.0 or later; 0.6.1 adds choosing which agents may use it. Firefox
-and Safari cannot be linked. See [linked browsers](docs/linked-browsers.md).
+and Safari cannot be linked. Your Tallylamp dashboard can never be shared, because
+an agent there could approve its own requests. A site where a password manager or
+another extension has put its own frame will not share either, until that
+extension stops running there. See [linked browsers](docs/linked-browsers.md).
 
 ## How it runs
 

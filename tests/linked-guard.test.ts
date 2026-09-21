@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 // @ts-expect-error plain JS shipped in the extension; there are no types to import
-import { guard, siteOf, withinSite } from "../extension/guard.js";
+import { guard, onServer, siteOf, withinSite } from "../extension/guard.js";
 // @ts-expect-error plain JS shipped in the extension
 import { normalizeServer } from "../extension/address.js";
 
@@ -76,6 +76,23 @@ describe("extension guard: a shared tab is not the whole profile", () => {
     assert.equal(siteOf("https://www.example.com/a"), "example.com");
     assert.equal(siteOf("chrome://newtab"), null);
     assert.equal(withinSite("https://a.b.example.com/", "example.com"), true);
+  });
+
+  it("keeps a shared tab off the dashboard of the server it is linked to", () => {
+    // An agent there is signed in as the person, one click from approving its own requests.
+    const linked = { url: "https://app.example.com/inbox", sites: null, server: "tallylamp.example.com" };
+    assert.match(refused("Page.navigate", { url: "https://tallylamp.example.com/pair?code=KXQ7-M2PD" }, linked), /Tallylamp dashboard/);
+    refused("Page.navigate", { url: "http://tallylamp.example.com/" }, linked);
+    allowed("Page.navigate", { url: "https://docs.tallylamp.example.com/" }, linked);
+    // A local server is told apart by its port, not just its hostname.
+    const local = { url: "http://127.0.0.1:3000/", sites: ["127.0.0.1"], server: "127.0.0.1:8080" };
+    refused("Page.navigate", { url: "http://127.0.0.1:8080/browsers" }, local);
+    allowed("Page.navigate", { url: "/two" }, local);
+
+    assert.equal(onServer("https://tallylamp.example.com:443/", "tallylamp.example.com"), true);
+    assert.equal(onServer("https://tallylamp.example.com.evil.test/", "tallylamp.example.com"), false);
+    assert.equal(onServer("chrome://extensions", "tallylamp.example.com"), false);
+    assert.equal(onServer("https://tallylamp.example.com/", null), false);
   });
 });
 
