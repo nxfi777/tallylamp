@@ -42,6 +42,8 @@ sites where you need to sign in yourself.
   machine for a short time. Agents need a scope they do not get by default.
 - Install a Chrome extension in **Full browser**. Optionally let the owning
   agent use its popup after you turn on **Allow agent control**.
+- Let an agent look at one of your browsers without touching it. Approve its
+  request at **read**, and it can see pages but not click, type or navigate.
 
 Chrome runs in headed mode, not headless mode. Emulation changes selected browser
 settings for testing; it does not make an agent behave like a person. Sites may
@@ -172,6 +174,16 @@ it, take control from the agent, but never from you. Everything they do is
 recorded in the audit log under their name. A guest can use every login saved in
 that browser, so share one that holds only what they need. See
 [guest links](docs/guest-access.md).
+
+### Let an agent use one of your browsers
+
+An agent can ask for a browser you own. The request shows up on **Browsers** with
+the agent's name and its reason. You can approve it at **control**, which lets
+the agent act in the browser, or at **read**, which lets it see pages and nothing
+more. You can also approve a control request as read only. Pick how long the
+grant lasts, from 30 minutes up to until you revoke it. The browser's page lists
+everyone with access, with a **Revoke** button for each. See
+[lending and granting access](docs/architecture.md#lending-and-granting-access-to-a-browser).
 
 ### Per-browser proxies
 

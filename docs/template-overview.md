@@ -12,7 +12,7 @@ take control to sign in or finish a verification step, then return it to the age
 Websites can still expire logins or ask you to sign in again.
 
 Tallylamp is open source under the MIT license. You pay Railway for the
-infrastructure used by your deployment.
+infrastructure your deployment uses.
 
 ## About Hosting Tallylamp
 
@@ -35,7 +35,7 @@ password. You choose when to upgrade the application.
 - Keep a browser profile ready for an agent's recurring tasks.
 - Take control to sign in, then let the agent continue.
 - Let a colleague clear a 2FA prompt in one browser.
-- Watch a browser session live to inspect what the agent is doing.
+- Watch a browser live to see what the agent is doing.
 - Test pages with different user agents, mobile or desktop viewports, touch
   input, and locations through MCP's `emulate` tool.
 - Give one browser its own HTTP or HTTPS proxy without changing the others.
@@ -44,6 +44,7 @@ password. You choose when to upgrade the application.
   need a scope they do not get by default.
 - Install a Chrome extension from the Web Store in Full browser.
 - Share a tab from your own Chrome, logins included, with your agent.
+- Let an agent see one of your browsers, read only, once you approve.
 
 ## Dependencies for Tallylamp
 
@@ -98,7 +99,8 @@ a tab. It connects out to your domain, so Railway needs no extra setup.
 
 The agent gets only the tabs you share and acts as you inside them. The
 extension blocks the browser-wide cookie jar, other tabs and local files. You
-can take a tab back at any time. Firefox and Safari cannot be linked.
+can take a tab back at any time. It never shares your Tallylamp dashboard.
+Firefox and Safari cannot be linked.
 
 ## Let someone else sign in
 
@@ -116,17 +118,17 @@ the app waiting on your machine never sees it.
 A loopback tunnel binds one browser to one private `host:port` on your machine.
 Your machine dials out, with no new listener and no public URL. Only the
 browser's owner or an administrator can open one, and an agent also needs the
-non-default `browser:tunnel` scope. A tunnel expires after an hour by default. While it is open, any page in that
-browser can reach that address, so close it when the job is done. The
+`browser:tunnel` scope. A tunnel expires after an hour by default. While it is
+open, any page in that browser can reach that address, so close it when the job
+is done. The
 [tunnel guide](https://github.com/nxfi777/tallylamp/blob/main/docs/usage.md#loopback-tunnels)
 has the command to run on your machine.
 
 ## Use a proxy for one browser
 
-Enter the proxy server and optional username/password in **New browser**.
-For an existing browser, stop it, choose **Configure** beside **Proxy**, save, and start
-it again. The API and MCP tools accept the same per-browser settings.
-No shared proxy variable or credential is needed in Railway.
+Enter the proxy server and optional login in **New browser**, or stop a browser
+and choose **Configure** beside **Proxy**. The API and MCP tools accept the same
+settings, and Railway needs no shared proxy variable or credential.
 
 Settings persist on `/data` but are not copied into saved profile templates.
 HTTP and HTTPS CONNECT proxies are supported; SOCKS and PAC are not. DNS stays
@@ -161,9 +163,8 @@ they do not make an agent behave like a person.
 
 Persistent browsers keep their own data automatically across stops and redeploys.
 **Record signed-in site** only adds an inventory note for agents; it does not
-sign you in or copy cookies. **Edit browser details** changes the browser's name
-and metadata, whether or not you loaded a saved profile. Use **Copy browser ID**
-on the browser page to get its stable API/MCP ID, not its name-derived slug.
+sign you in or copy cookies. **Edit browser details** changes its name and
+metadata.
 
 **Save profile** creates a reusable snapshot, or updates the browser's linked
 profile. **Save as new profile** creates a separate snapshot. Existing browsers
