@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Tallylamp Link",
   "short_name": "Tallylamp",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Share a tab from this browser with an agent on your own Tallylamp server. You choose the tab, and you can take it back in one click.",
   "minimum_chrome_version": "125",
   "permissions": [
