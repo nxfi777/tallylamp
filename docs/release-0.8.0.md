@@ -160,8 +160,16 @@ TALLYLAMP_LEND_MAX_PENDING        3        requests one agent may have outstandi
 TALLYLAMP_LEND_MAX_GRANT_SEC      2592000  longest fixed grant an answer can set
 ```
 
-Template installations stay on the verified 0.7.1 digest until this image is
-tested and recorded.
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35554977191)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.8.0` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:27afb555cd44cdca4e6d4a0262f1a1dd9c6ddf01632503186f4bb26034c70d92
+```
 
 Existing deployments do not upgrade automatically. See the
 [release and upgrade notes](https://github.com/nxfi777/tallylamp/blob/main/docs/railway.md#releasing-and-upgrading)

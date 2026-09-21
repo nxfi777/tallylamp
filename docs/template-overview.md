@@ -143,10 +143,10 @@ accept automation.
 
 ## Updates are your choice
 
-The current release is `ghcr.io/nxfi777/tallylamp:0.7.1`. Pin this digest:
+The current release is `ghcr.io/nxfi777/tallylamp:0.8.0`. Pin this digest:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:c16e2c3e6daaf37cd004b4cfb3e3c1bfcc5b021ec4618042e6b82c52571d5538
+ghcr.io/nxfi777/tallylamp@sha256:27afb555cd44cdca4e6d4a0262f1a1dd9c6ddf01632503186f4bb26034c70d92
 ```
 
 Automatic image updates are disabled. Pushing source code or publishing a new
