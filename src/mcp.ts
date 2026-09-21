@@ -17,6 +17,7 @@ import { config } from "./config.js";
 import { startSseKeepalive } from "./http-util.js";
 import { log } from "./log.js";
 import { Err, errorBody } from "./errors.js";
+import { audit } from "./audit.js";
 import { requireScope, type Principal } from "./auth.js";
 import { CREATE_BROWSER_TOOL_DESCRIPTION } from "./metadata.js";
 import { BrowserManager, logToolActivity, type BrowserRow } from "./browsers.js";
@@ -26,10 +27,14 @@ import { assertMaySeeTunnels, createTunnel, listTunnels, revokeTunnel, tunnelIsC
 import {
   requestBrowser,
   answerRequest,
+  activeGrant,
+  grantAccess,
   inbox,
+  isPermanent,
   minePending,
   pendingFor,
   revokeGrant,
+  type GrantAccess,
   type RequestRow,
 } from "./lending.js";
 import { reportSiteAccess } from "./site-access.js";
@@ -37,7 +42,12 @@ import { agentDesktop } from "./agent-desktop.js";
 
 const require = createRequire(import.meta.url);
 
-const MUTATING_TOOLS = new Set([
+/**
+ * Exported so the read-level test can iterate the real set rather than a copy of it. A copy
+ * would agree with this list on the day it was written and silently stop covering whatever was
+ * added afterwards, which is exactly the tool that would leak.
+ */
+export const MUTATING_TOOLS = new Set([
   "click",
   "drag",
   "fill",
@@ -66,6 +76,33 @@ const MUTATING_TOOLS = new Set([
   "tallylamp_close_tunnel",
   "tallylamp_update_browser",
   "tallylamp_report_site_access",
+]);
+
+/**
+ * Tools a grant never reaches, at either level, however the grant was issued.
+ *
+ * Distinct from MUTATING_TOOLS, which is about the page: these are about the *browser* -- its
+ * profile, its lifetime, its saved logins, its network route, the operator's record of it.
+ * Being lent a browser is permission to use what is on screen, never to keep it, copy it,
+ * rewrite it or switch it off.
+ *
+ * Every one of these is also refused further down by its own owner check. This set exists so
+ * the refusal is one clear sentence at the door rather than an error shaped like a bug, and so
+ * that a tool added later is caught by the rule rather than by whoever remembers to guard it.
+ */
+const GRANT_NEVER = new Set([
+  "tallylamp_delete_browser",
+  "tallylamp_stop_browser",
+  "tallylamp_save_profile",
+  "tallylamp_update_profile",
+  "tallylamp_set_lendable",
+  "tallylamp_update_browser",
+  "tallylamp_report_site_access",
+  "tallylamp_desktop_action",
+  "tallylamp_desktop_screenshot",
+  "tallylamp_open_tunnel",
+  "tallylamp_close_tunnel",
+  "tallylamp_list_tunnels",
 ]);
 
 const MCP_INSTRUCTIONS = `Tallylamp runs persistent headed Chrome with Chrome DevTools MCP tools, a live viewer, and human takeover. It does not simulate human mouse paths or guarantee that websites will accept automation.
@@ -302,16 +339,24 @@ export const LIFECYCLE_TOOLS: Tool[] = [
       "tallylamp_use_browser), pending (with retryAfterSec to sleep for, and etaSec when the wait is " +
       "predictable), denied, or unavailable with the reason. A pending request keeps its place in the queue " +
       "after you stop asking, so coming back later is fine and asking repeatedly gains you nothing. If you " +
-      "cannot wait, call tallylamp_create_browser and use your own instead.",
+      "cannot wait, call tallylamp_create_browser and use your own instead. A browser the operator owns " +
+      "can also be asked for, by naming it: those are answered by a person in the Tallylamp dashboard, " +
+      "never automatically, so there is no eta and the wait is however long it takes them to look.",
     inputSchema: {
       type: "object",
       properties: {
         browserId: {
           type: "string",
           description:
-            "Omit to ask for any borrowable browser. Tallylamp then ranks every candidate -- skipping the ones under human control -- and asks the single best one, rather than asking all of them: several grants would leave you holding several Chromes.",
+            "Omit to ask for any borrowable browser. Tallylamp then ranks every AGENT-owned candidate -- skipping the ones under human control -- and asks the single best one, rather than asking all of them: several grants would leave you holding several Chromes. A browser owned by the operator is never picked this way; name it to ask for that one.",
         },
-        reason: { type: "string", description: "What you need it for. The owner sees this when deciding." },
+        access: {
+          type: "string",
+          enum: ["read", "control"],
+          description:
+            "How much you need. \"read\" lets you bind and call list_pages, take_snapshot, take_screenshot, list_console_messages, list_network_requests and their get_* companions, and tallylamp_select_page -- enough to read any page in the browser, and nothing that changes one. \"control\" adds navigating, clicking, typing and scripting. Ask for read when reading is what you need: it is far more likely to be approved, and it does not take control away from whoever is using the browser. Default: read for an operator-owned browser, control for an agent-owned one.",
+        },
+        reason: { type: "string", description: "What you need it for, in a sentence. Whoever decides reads this, and on an operator-owned browser that is a person; a request with no reason is usually declined." },
         maxWaitSec: { type: "number", description: "Give up after this long. Capped by the server." },
       },
     },
@@ -328,13 +373,23 @@ export const LIFECYCLE_TOOLS: Tool[] = [
     name: "tallylamp_answer_request",
     description:
       "Grant or deny a request for a browser you own. Denying with etaSec tells the requester when to come " +
-      "back, which is the one estimate you know better than the server does.",
+      "back, which is the one estimate you know better than the server does. Granting with a lower access " +
+      "level than was asked for is an answer in its own right: it gives the requester what it can safely " +
+      "have instead of nothing.",
     inputSchema: {
       type: "object",
       required: ["requestId", "decision"],
       properties: {
         requestId: { type: "string" },
         decision: { type: "string", enum: ["grant", "deny"] },
+        access: {
+          type: "string",
+          enum: ["read", "control"],
+          description:
+            "Grant at this level instead of the one requested. Only ever downward: answering a read request with control is ignored and the request is granted at read. Defaults to what was asked for.",
+        },
+        durationSec: { type: "number", description: "How long the grant lasts. Defaults to the server's grant TTL." },
+        untilRevoked: { type: "boolean", description: "Grant with no expiry. It then ends only when somebody revokes it, and stays listed on the browser until they do." },
         etaSec: { type: "number", description: "On a denial: roughly how long until you are done with it." },
         reason: { type: "string" },
       },
@@ -407,6 +462,23 @@ export const LIFECYCLE_TOOLS: Tool[] = [
         },
       },
     },
+  },
+  {
+    name: "tallylamp_select_page",
+    description:
+      "Choose which open tab your tools read, without touching what is on screen. Unlike select_page " +
+      "this never brings the tab to the front, so it is safe to call on a browser somebody else is " +
+      "using -- and it is the only way to change tabs when you hold read access, because select_page " +
+      "is refused at that level. Call list_pages first: pageId is the index it prints. The choice is " +
+      "yours alone and is not visible to anyone else using this browser.",
+    inputSchema: {
+      type: "object",
+      required: ["pageId"],
+      properties: {
+        pageId: { type: "number", description: "The index list_pages printed for the tab you want to read." },
+      },
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
   },
   {
     name: "tallylamp_revoke_grant",
@@ -521,6 +593,12 @@ type Session = {
   transport: StreamableHTTPServerTransport;
   server: Server;
   browserId?: string;
+  /**
+   * The level this session bound at. Descriptive only -- every actual refusal is decided
+   * against the grant table on the call itself, because a session that cached its own
+   * permission would outlive a revocation. This is here so the session can say what it is.
+   */
+  access?: GrantAccess;
   child?: { client: Client; transport: StdioClientTransport };
   clientInfo?: { name?: string; version?: string };
 };
@@ -606,7 +684,11 @@ export class McpGateway {
       } else {
         tools.push(...(await forwardedTools()));
       }
-      return { tools };
+      // A read session is shown what it can actually call. Advertising navigate_page to an
+      // agent that will be refused it invites a round of calls that all fail; the level is
+      // re-read here rather than taken from the session, for the same reason every other
+      // check re-reads it -- a grant downgraded or revoked mid-session has to show.
+      return { tools: this.readableOnly(session, tools) };
     });
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -619,6 +701,19 @@ export class McpGateway {
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
     startSseKeepalive(res);
+  }
+
+  /**
+   * Narrow an advertised tool list to what a read grant permits. A no-op for everybody else,
+   * including an owner and the administrator, so the manifest is unchanged for every session
+   * that is not holding a read grant on the browser it is bound to.
+   */
+  private readableOnly(session: Session, tools: Tool[]): Tool[] {
+    const p = session.principal;
+    if (p.type === "admin" || !session.browserId) return tools;
+    const grant = activeGrant(session.browserId, p.id);
+    if (!grant || grantAccess(grant) !== "read") return tools;
+    return tools.filter((t) => !MUTATING_TOOLS.has(t.name) && !GRANT_NEVER.has(t.name));
   }
 
   /** The last browser each principal bound, so a dropped session can pick up where it left off. */
@@ -675,6 +770,12 @@ export class McpGateway {
       // and was never thrown; the message text is unchanged, so string matchers still hold.
       return { isError: true, content: [{ type: "text", text: JSON.stringify(errorBody(Err.humanControlling())) }] };
     }
+    // Then the grant, re-read from the table on every single call. Nothing about a borrower's
+    // standing is cached on the session, which is the whole reason a revocation lands on the
+    // next call of a session that is already open and already bound, and the reason a grant
+    // outlives the session it was first used from.
+    const refused = this.guardGrant(session, name, args);
+    if (refused) return refused;
     if (name.startsWith("tallylamp_")) {
       const lifecycle = await this.callLifecycle(session, name, args);
       // The lending tools report on the queue themselves; everything else gets the note, so an
@@ -700,6 +801,84 @@ export class McpGateway {
   }
 
   /**
+   * What a borrower may do, decided per call against the grant table.
+   *
+   * Three things have to be true at once and none of them can be answered at bind time: the
+   * grant still exists (it may have been revoked or expired since), it is at a high enough
+   * level for this tool, and the tool is one a loan reaches at all. So this runs on every call
+   * rather than once, and reads the row rather than the session.
+   *
+   * The target is the browser named in the arguments when there is one, falling back to the
+   * bound browser. Without that, an agent holding a read grant on A and owning B would be
+   * refused an ordinary call on its own B for as long as A stayed bound.
+   */
+  private guardGrant(session: Session, name: string, args: Record<string, unknown>) {
+    const p = session.principal;
+    if (p.type === "admin") return null;
+    const target = typeof args.browserId === "string" && args.browserId ? args.browserId : session.browserId;
+    if (!target) return null;
+
+    let row: BrowserRow;
+    try {
+      row = this.browsers.row(target);
+    } catch {
+      return null; // no such browser: let the tool itself say so
+    }
+    // Owned, or somebody's own linked browser reached through its access list. Neither is a
+    // loan, and neither changes here.
+    if (row.kind === "linked") return null;
+    if (row.owner_type === "agent" && row.owner_id === p.id) return null;
+
+    const grant = activeGrant(target, p.id);
+    if (!grant) {
+      // Bound, but no longer entitled: the grant was revoked or ran out underneath a live
+      // session. Say so in the same words ownership uses, so a client that already handles
+      // "not yours" handles this too.
+      if (session.browserId === target) {
+        return this.toolError(Err.unauthorized("browser is owned by another principal"));
+      }
+      return null; // not bound to it either; the tool's own check produces the right error
+    }
+
+    const level = grantAccess(grant);
+    if (GRANT_NEVER.has(name)) {
+      return this.toolError(
+        Err.unauthorized(
+          `${name} is not something a lent browser permits, at either access level. It belongs to ` +
+            `whoever owns this browser. Use a browser you own, or ask them to do it.`,
+        ),
+      );
+    }
+    if (level === "read" && MUTATING_TOOLS.has(name)) {
+      return this.toolError(
+        Err.grantLevel(
+          `${name} changes the page, and your grant on ${target} is access level "read", which permits ` +
+            `only reading it: list_pages, take_snapshot, take_screenshot, list_console_messages, ` +
+            `list_network_requests and their get_* companions, plus tallylamp_select_page to choose ` +
+            `which tab you are reading. Do not retry this call -- waiting will not change the level. ` +
+            `Call tallylamp_request_browser with browserId "${target}" and access "control" to ask for ` +
+            `more; the administrator answers that, and your read access stays in force meanwhile.`,
+        ),
+      );
+    }
+    // H: every call made under a grant is recorded against the real agent, never the owner
+    // whose browser it is, and against the grant that permitted it.
+    audit({
+      actorType: "agent",
+      actorId: p.id,
+      action: "browser.grant.tool",
+      targetType: "browser",
+      targetId: target,
+      detail: { grantId: grant.id, access: level, tool: name },
+    });
+    return null;
+  }
+
+  private toolError(e: unknown) {
+    return { isError: true as const, content: [{ type: "text" as const, text: JSON.stringify(errorBody(e)) }] };
+  }
+
+  /**
    * Deliver the owner's inbox on the back of whatever it just called.
    *
    * An agent cannot be woken: an MCP notification reaches a client, not a model, and an idle
@@ -722,7 +901,9 @@ export class McpGateway {
     const r = result as { content?: Array<{ type: string; text?: string }> };
     if (!Array.isArray(r.content)) return result;
     const lines = waiting.map(
-      (w) => `- ${w.requester_name ?? w.requester_id} (requestId ${w.id})${w.reason ? `: ${w.reason}` : ""}`,
+      (w) =>
+        `- ${w.requester_name ?? w.requester_id} wants ${grantAccess(w)} access ` +
+        `(requestId ${w.id})${w.reason ? `: ${w.reason}` : ""}`,
     );
     return {
       ...r,
@@ -954,12 +1135,24 @@ export class McpGateway {
           browserId: typeof args.browserId === "string" && args.browserId ? args.browserId : undefined,
           reason: typeof args.reason === "string" ? args.reason : undefined,
           maxWaitSec: typeof args.maxWaitSec === "number" ? args.maxWaitSec : undefined,
+          access: args.access === "read" ? "read" : args.access === "control" ? "control" : undefined,
         });
         const note =
           out.state === "granted"
-            ? "Granted. Call tallylamp_use_browser to drive it. You are a borrower, not the owner: you cannot delete it, and the owner can take it back."
+            ? out.access === "read"
+              ? `Granted at access "read". Call tallylamp_use_browser to bind it, then list_pages, ` +
+                `tallylamp_select_page and take_snapshot. You cannot navigate, click, type or script: ` +
+                `those are refused and retrying will not help. ${out.expiresAt ? `It expires at ${out.expiresAt}.` : "It lasts until somebody revokes it."}`
+              : `Granted at access "control". Call tallylamp_use_browser to drive it. You are a borrower, ` +
+                `not the owner: you cannot delete, stop or copy it, and it can be taken back at any time.`
             : out.state === "pending"
-              ? `Queued. Sleep ${out.retryAfterSec}s and ask again with the same browserId; your place is kept either way. If you cannot sleep, stop and say the browser is busy, or create your own.`
+              ? out.answeredBy === "administrator"
+                ? `Queued for a person to answer in the Tallylamp dashboard, which may take hours and may ` +
+                  `never happen. Do not poll faster than every ${out.retryAfterSec}s and do not file another ` +
+                  `request: this one keeps its place. Check back by calling this tool again with the same ` +
+                  `browserId, or tallylamp_list_requests. If you cannot wait, say plainly that you are ` +
+                  `waiting on the operator to approve access.`
+                : `Queued. Sleep ${out.retryAfterSec}s and ask again with the same browserId; your place is kept either way. If you cannot sleep, stop and say the browser is busy, or create your own.`
               : "Not available. Create your own browser instead.";
         return { content: [{ type: "text", text: JSON.stringify({ ...out, note }) }] };
       }
@@ -970,6 +1163,7 @@ export class McpGateway {
           browserName: r.browserName,
           requester: r.requester_name ?? r.requester_id,
           requesterId: r.requester_id,
+          access: grantAccess(r),
           reason: r.reason,
           askedAt: r.created_at,
           expiresAt: r.expires_at,
@@ -981,10 +1175,25 @@ export class McpGateway {
         const row = answerRequest(this.browsers, p, {
           requestId: String(args.requestId ?? ""),
           decision,
+          access: args.access === "read" ? "read" : args.access === "control" ? "control" : undefined,
+          durationSec: typeof args.durationSec === "number" ? args.durationSec : undefined,
+          untilRevoked: args.untilRevoked === true,
           etaSec: typeof args.etaSec === "number" ? args.etaSec : undefined,
           reason: typeof args.reason === "string" ? args.reason : undefined,
         });
-        return { content: [{ type: "text", text: JSON.stringify({ requestId: row.id, state: row.state }) }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                requestId: row.id,
+                state: row.state,
+                requestedAccess: grantAccess(row),
+                grantedAccess: row.granted_access ?? null,
+              }),
+            },
+          ],
+        };
       }
       if (name === "tallylamp_set_lendable") {
         const row = this.browsers.setLendable(String(args.browserId ?? ""), args.lendable === true, p);
@@ -1059,17 +1268,61 @@ export class McpGateway {
         revokeGrant(this.browsers, String(args.browserId ?? ""), String(args.granteeId ?? ""), p);
         return { content: [{ type: "text", text: JSON.stringify({ revoked: true }) }] };
       }
+      if (name === "tallylamp_select_page") {
+        if (!session.browserId || !session.child) {
+          throw Err.invalid("bind a browser first with tallylamp_use_browser");
+        }
+        const pageId = Number(args.pageId);
+        if (!Number.isInteger(pageId) || pageId < 0) throw Err.invalid("pageId must be the index list_pages printed");
+        // bringToFront is hard-coded, never taken from the caller. The entire reason this tool
+        // exists alongside select_page is that it cannot foreground a tab; letting an argument
+        // decide would make it select_page with extra steps.
+        const out = await session.child.client.callTool({
+          name: "select_page",
+          arguments: { pageId, bringToFront: false },
+        });
+        logToolActivity(session.browserId, "select_page");
+        return out;
+      }
       if (name === "tallylamp_use_browser") {
         const id = String(args.browserId ?? "");
         const row = this.browsers.row(id);
-        this.browsers.assertAccess(p, row, "control");
-        await this.bind(session, row);
-        return { content: [{ type: "text", text: JSON.stringify({ browserId: row.id, bound: true }) }] };
+        const level = this.bindLevel(p, row);
+        await this.bind(session, row, level);
+        const grant = level === "read" ? activeGrant(row.id, p.id) : null;
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                browserId: row.id,
+                bound: true,
+                access: level,
+                ...(level === "read"
+                  ? {
+                      expiresAt: grant && !isPermanent(grant.expires_at) ? grant.expires_at : null,
+                      note:
+                        "Read-only. You can call list_pages, take_snapshot, take_screenshot, " +
+                        "list_console_messages, list_network_requests and their get_* companions, and " +
+                        "tallylamp_select_page to choose which tab you read. Anything that changes the " +
+                        "page -- navigate_page, click, evaluate_script, select_page and the rest -- is " +
+                        "refused, and retrying will not change that. You are not the controller of this " +
+                        "browser and a person may be using it while you read.",
+                    }
+                  : {}),
+              }),
+            },
+          ],
+        };
       }
       if (name === "tallylamp_stop_browser") {
         const id = String(args.browserId ?? session.browserId ?? "");
         const row = this.browsers.row(id);
         this.browsers.assertAccess(p, row, "control");
+        // Also caught by GRANT_NEVER at the door. Repeated here because this is the path a
+        // future caller that skips the gateway would take, and stopping somebody else's
+        // browser is not a mistake worth discovering in production.
+        this.browsers.assertNotBorrowed(p, row, "stopping a browser");
         await this.browsers.stop(id);
         // The bridge is a ~186 MB Node process; a stopped browser must not keep one alive.
         await this.releaseBrowser(id);
@@ -1098,9 +1351,12 @@ export class McpGateway {
     if (!id) return;
     try {
       const row = this.browsers.row(id);
-      if (session.principal.type !== "admin") this.browsers.assertAccess(session.principal, row, "control");
-      await this.bind(session, row);
-      log.info("mcp restored binding after a dropped session", { session: session.id, browser: id });
+      // Re-derived, never remembered. A grant downgraded, revoked or expired since the session
+      // dropped has to be felt here, and a reader that was restored as a controller would take
+      // the lease it was specifically never given.
+      const level = session.principal.type === "admin" ? "control" : this.bindLevel(session.principal, row);
+      await this.bind(session, row, level);
+      log.info("mcp restored binding after a dropped session", { session: session.id, browser: id, access: level });
     } catch (e) {
       // The browser may have been deleted, stopped, or handed to someone else. Fall through to
       // the ordinary "nothing is bound" message, which tells the caller what to do.
@@ -1109,7 +1365,37 @@ export class McpGateway {
     }
   }
 
-  private async bind(session: Session, row: BrowserRow): Promise<void> {
+  /**
+   * The level this principal may bind at, and the authorisation check for binding at all.
+   *
+   * A grant decides it when there is one, so a read grant binds read. Everything else keeps the
+   * check it always had -- an owner still needs `browser:control:own` to bind its own browser,
+   * because binding was and remains a control operation for an owner.
+   */
+  private bindLevel(p: Principal, row: BrowserRow): GrantAccess {
+    if (p.type === "admin") return "control";
+    if (row.kind !== "linked" && !(row.owner_type === "agent" && row.owner_id === p.id)) {
+      const grant = activeGrant(row.id, p.id);
+      if (grant) {
+        // Runs the full check for the level held, so the scope rules and the linked-browser
+        // rules are applied in exactly one place rather than restated here.
+        this.browsers.assertAccess(p, row, grantAccess(grant));
+        return grantAccess(grant);
+      }
+    }
+    this.browsers.assertAccess(p, row, "control");
+    return "control";
+  }
+
+  /**
+   * Attach a session to a browser.
+   *
+   * `access` is the difference between using a browser and watching one. A reader gets the
+   * bridge and nothing else: no control lease, so it never displaces an agent or makes a person
+   * take control back, and no foregrounding, so the tab in front of whoever is sitting there
+   * does not move.
+   */
+  private async bind(session: Session, row: BrowserRow, access: GrantAccess = "control"): Promise<void> {
     const rt = await this.browsers.ensureRunning(row.id);
     if (session.browserId && session.browserId !== row.id) {
       this.browsers.detachMcp(session.browserId);
@@ -1119,7 +1405,11 @@ export class McpGateway {
     this.lastBound.set(session.principal.id, row.id);
     this.browsers.attachMcp(row.id);
     this.browsers.recordClient(row.id, session.clientInfo?.name, session.clientInfo?.version);
-    if (!this.browsers.isHumanControlled(row.id)) {
+    session.access = access;
+    // A reader must never appear as the controller. Taking the lease here would show a person
+    // that an agent has their browser, and hand them a Take control back button for a session
+    // that cannot type -- which is worse than useless, it is a false alarm.
+    if (access === "control" && !this.browsers.isHumanControlled(row.id)) {
       this.browsers.acquireControl(row.id, "agent", session.principal.id);
     }
     // The fake stands in for a Chrome we would have launched. A linked browser's endpoint is
@@ -1133,7 +1423,7 @@ export class McpGateway {
     const client = new Client({ name: "tallylamp-bridge", version: config.version });
     await client.connect(transport);
     session.child = { client, transport };
-    await this.selectWorkingPage(session, row.id);
+    await this.selectWorkingPage(session, row.id, access);
     try {
       await session.server.notification({ method: "notifications/tools/list_changed" });
     } catch {
@@ -1153,9 +1443,23 @@ export class McpGateway {
    *
    * Skipped while a human holds control: selecting a page foregrounds it, and doing that under
    * someone who is driving would move the tab out from under them.
+   *
+   * A read bind is the exception, and it is safe for a reason worth writing down rather than
+   * trusting. `select_page` in chrome-devtools-mcp 1.8.0 only calls `Page.bringToFront` when
+   * the call passes `bringToFront: true` (see tools/pages.js); without it the tool sets a
+   * pointer inside the bridge and touches Chrome not at all. That pointer is per bridge child,
+   * and every session gets its own child, so a reader choosing a tab is invisible to every
+   * other session and to the person at the screen. This path therefore passes the flag
+   * explicitly as false rather than relying on the default, so a change to that default cannot
+   * quietly start foregrounding tabs under somebody.
+   *
+   * Without this a reader binds onto page 0, which is the about:blank tab Chrome launches
+   * with, and take_snapshot returns an empty document -- the whole feature, reading one page,
+   * would not work.
    */
-  private async selectWorkingPage(session: Session, browserId: string): Promise<void> {
-    if (!session.child || this.browsers.isHumanControlled(browserId)) return;
+  private async selectWorkingPage(session: Session, browserId: string, access: GrantAccess = "control"): Promise<void> {
+    if (!session.child) return;
+    if (access === "control" && this.browsers.isHumanControlled(browserId)) return;
     try {
       const listed = await session.child.client.callTool({ name: "list_pages", arguments: {} });
       const text = (listed.content as Array<{ type: string; text?: string }> | undefined)
@@ -1171,8 +1475,11 @@ export class McpGateway {
       const real = rows.filter((r) => r.url && !r.url.startsWith("about:blank"));
       const want = real.length ? real[real.length - 1]! : null;
       if (!want || want.index === 0) return;
-      await session.child.client.callTool({ name: "select_page", arguments: { pageId: want.index } });
-      log.info("mcp bound to working page", { browser: browserId, pageId: want.index, url: want.url });
+      await session.child.client.callTool({
+        name: "select_page",
+        arguments: { pageId: want.index, bringToFront: false },
+      });
+      log.info("mcp bound to working page", { browser: browserId, pageId: want.index, url: want.url, access });
     } catch (e) {
       // Never fail a bind over this. Landing on the wrong tab is a nuisance; not binding is not.
       log.debug("mcp page selection skipped", { browser: browserId, error: (e as Error).message });

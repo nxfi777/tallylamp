@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { getDb, nowIso } from "./db.js";
 import {
   AGENT_SCOPES,
+  DEFAULT_AGENT_SCOPES,
   createConnectorAgent,
   getAgent,
   issueCredential,
@@ -12,6 +13,7 @@ import {
   revokeCredential,
   revokeGrant,
   sha256,
+  updateAgent,
   type Principal,
 } from "./auth.js";
 import { rateLimit } from "./rate-limit.js";
@@ -422,6 +424,47 @@ function consentTokenValid(expected: string, supplied: string): boolean {
   return timingSafeEqual(a, b);
 }
 
+/**
+ * What each scope actually hands over, in the operator's words rather than the wire's.
+ *
+ * The consent form used to render `AGENT_SCOPES` as bare monospace ids, which asked the one
+ * person who can refuse this grant to know that `seed:use` means "copy every login in every
+ * saved profile". The dashboard already had those sentences on its Profile permissions modal;
+ * they belong here too, because this is the screen where the decision is actually made.
+ *
+ * The wording is deliberately the same on both screens. An operator who reads "Load saved
+ * profiles" here and something else in the dashboard has to work out whether they are looking
+ * at one permission or two.
+ */
+const SCOPE_COPY: Record<string, { label: string; detail: string }> = {
+  "seed:use": {
+    label: "Load saved profiles",
+    detail: "Copies every login inside any saved profile into a browser it controls. Grant this only if you trust this client with those accounts.",
+  },
+  "seed:write": {
+    label: "Save and update profiles",
+    detail: "Publishes the logins from its own browsers into saved profiles, and overwrites the linked profile other agents copy from.",
+  },
+  "browser:lend": {
+    label: "Lend its browsers to other agents",
+    detail: "Hands over a live browser rather than a copy, so the borrower gets every session still signed in.",
+  },
+  "browser:borrow": {
+    label: "Borrow browsers from other agents",
+    detail: "Takes control of browsers whose owner turned on Lend when idle, session cookies included.",
+  },
+  "browser:tunnel": {
+    label: "Reach private addresses on this machine",
+    detail: "Points a browser at localhost on the computer running Tallylamp, which the egress proxy otherwise refuses.",
+  },
+};
+
+/** The eight `browser:*:own` scopes: what a connector needs to be a connector at all. */
+const BASE_SCOPES = AGENT_SCOPES.filter((s) => !(s in SCOPE_COPY));
+
+/** The five held out of `DEFAULT_AGENT_SCOPES`, in the order they are worth thinking about. */
+const SENSITIVE_SCOPES = AGENT_SCOPES.filter((s) => s in SCOPE_COPY);
+
 const PAGE_CSS = `
   body { margin:0; min-height:100vh; display:grid; place-items:center; background:#0c1014; color:#fdffff;
     font-family:"IBM Plex Sans", system-ui, sans-serif; }
@@ -432,7 +475,19 @@ const PAGE_CSS = `
   dt { color:#93a0ab; font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; margin-top:.7rem; }
   dd { margin:.15rem 0 0; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; word-break:break-all; }
   ul.scopes { list-style:none; padding:0; margin:.4rem 0 0; font-size:.86rem; }
-  ul.scopes li { display:flex; align-items:center; gap:.5rem; padding:.15rem 0; }
+  ul.scopes li { display:grid; grid-template-columns:auto 1fr; gap:.1rem .6rem; padding:.5rem 0; }
+  ul.scopes input[type=checkbox] { width:1.05rem; height:1.05rem; margin:.15rem 0 0; accent-color:#177abf; }
+  ul.scopes label { font-weight:500; cursor:pointer; }
+  ul.scopes .detail { grid-column:2; color:#93a0ab; font-size:.8rem; line-height:1.45; margin:0; }
+  ul.scopes .asked { grid-column:2; color:#f0a92a; font-size:.74rem; letter-spacing:.03em; text-transform:uppercase; margin:.25rem 0 0; }
+  .base { margin:.4rem 0 0; }
+  .base > summary { cursor:pointer; color:#93a0ab; font-size:.82rem; padding:.2rem 0; }
+  .base ul { list-style:none; padding:0; margin:.4rem 0 0; }
+  .base li { display:flex; align-items:center; gap:.5rem; padding:.12rem 0; font-size:.82rem; }
+  .warn { background:#2a1d1d; border:1px solid #5c2a2c; border-radius:8px; padding:.6rem .7rem; margin:.9rem 0 0; }
+  .warn p { color:#f4cdcd; margin:0; font-size:.84rem; }
+  .note { background:#1c252e; border:1px solid #2a3540; border-radius:8px; padding:.6rem .7rem; margin:.9rem 0 0; }
+  .note p { color:#c6d1da; margin:0; font-size:.84rem; }
   input[type=number] { width:5rem; background:#1c252e; border:1px solid #2a3540; color:#fdffff; border-radius:6px; padding:.35rem .5rem; font:inherit; }
   .row { display:flex; gap:.6rem; margin-top:1.3rem; }
   button { font:inherit; flex:1; padding:.65rem .7rem; border-radius:6px; border:0; cursor:pointer; }
@@ -475,39 +530,79 @@ function consentPage(opts: {
   hidden: Record<string, string>;
   consent: string;
   defaultScopes: readonly string[];
+  /** Scopes the client named in its own `scope` parameter, so the form can say who asked. */
+  askedScopes: readonly string[];
+  /** True when this client already has a connector agent and approving will rewrite it. */
+  reauthorizing: boolean;
   maxBrowsers: number;
 }): string {
   const hidden = Object.entries(opts.hidden)
     .map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`)
     .join("\n    ");
-  const scopes = AGENT_SCOPES.map(
+
+  // The five that hand over logins get a sentence each and a checkbox of their own. They are
+  // the whole decision on this page; everything else is bookkeeping.
+  const sensitive = SENSITIVE_SCOPES.map((s) => {
+    const copy = SCOPE_COPY[s]!;
+    const asked = opts.askedScopes.includes(s)
+      ? `\n        <p class="asked">Requested by this client</p>`
+      : "";
+    return `<li>
+        <input type="checkbox" id="scope-${escapeHtml(s)}" name="grant_scope" value="${escapeHtml(s)}"${
+          opts.defaultScopes.includes(s) ? " checked" : ""
+        }>
+        <label for="scope-${escapeHtml(s)}">${escapeHtml(copy.label)}</label>
+        <p class="detail">${escapeHtml(copy.detail)}</p>${asked}
+      </li>`;
+  }).join("\n      ");
+
+  // The eight browser:*:own scopes are what "a connector" means -- a connector without them
+  // cannot do anything at all. They stay controllable, but folded away, so the five decisions
+  // that matter are not buried in a list of thirteen identical rows.
+  const base = BASE_SCOPES.map(
     (s) => `<li><input type="checkbox" id="scope-${escapeHtml(s)}" name="grant_scope" value="${escapeHtml(s)}"${
       opts.defaultScopes.includes(s) ? " checked" : ""
     }> <label for="scope-${escapeHtml(s)}"><code>${escapeHtml(s)}</code></label></li>`,
-  ).join("\n      ");
+  ).join("\n        ");
+
+  const unverified =
+    opts.client.source === "cimd"
+      ? ""
+      : `<div class="warn"><p><strong>This name is not verified.</strong> ${escapeHtml(
+          opts.client.name,
+        )} registered itself and chose what to call itself. Only the redirect host below is checked.</p></div>`;
+
+  const reauth = opts.reauthorizing
+    ? `<div class="note"><p>You have authorized this client before. The boxes below show what it
+      can do <strong>now</strong>; approving replaces those permissions with whatever is ticked here.</p></div>`
+    : "";
+
   return shell(
     "Authorize connector",
     `<h1>${escapeHtml(hostOf(opts.redirectUri))} wants to drive browsers</h1>
-  <p>Approving creates a <strong>connector agent</strong> on this Tallylamp. It can create and
-  drive browsers of its own. It cannot touch another agent's browsers, take control away from
-  you, or reach anything else on this server. Revoke it any time from the Agents page.</p>
+  <p>Approving creates a <strong>connector agent</strong> on this Tallylamp. It can create,
+  start, stop and drive browsers of its own, and nothing else unless you tick it below. Revoke
+  it any time from the Agents page.</p>
+  ${unverified}
+  ${reauth}
   <form method="post" action="/oauth/authorize">
     ${hidden}
     <input type="hidden" name="consent" value="${escapeHtml(opts.consent)}">
     <dl>
+      <dt>Also allow it to</dt>
+      <dd><ul class="scopes">
+      ${sensitive}
+      </ul>
+      <details class="base">
+        <summary>Browser control it always gets (${BASE_SCOPES.length} scopes)</summary>
+        <ul>
+        ${base}
+        </ul>
+      </details></dd>
       <dt>Claimed name</dt><dd>${escapeHtml(opts.client.name)}</dd>
       <dt>Client</dt><dd>${escapeHtml(opts.client.clientId)}</dd>
       <dt>Authorization code will be sent to</dt><dd>${escapeHtml(hostOf(opts.redirectUri))}</dd>
       <dt>Full redirect</dt><dd>${escapeHtml(opts.redirectUri)}</dd>
-      <dt>Name checked?</dt><dd>${
-        opts.client.source === "cimd"
-          ? "Yes — fetched from the client's own domain"
-          : "No — the client registered itself and chose this name"
-      }</dd>
-      <dt>Scopes</dt>
-      <dd><ul class="scopes">
-      ${scopes}
-      </ul></dd>
       <dt><label for="max-browsers">Browser cap</label></dt>
       <dd><input id="max-browsers" type="number" name="max_browsers" min="1" max="${config.maxBrowsers}" value="${opts.maxBrowsers}"></dd>
     </dl>
@@ -533,12 +628,35 @@ function authorizeRedirect(res: Response, redirectUri: string, extra: Record<str
   res.redirect(302, dest.toString());
 }
 
+/** The scopes a client named outright, ignoring the `mcp:tools` catch-all. */
+function namedScopes(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw.split(/\s+/).filter((s) => (AGENT_SCOPES as readonly string[]).includes(s));
+}
+
+/**
+ * Which boxes arrive ticked.
+ *
+ * This used to return all of `AGENT_SCOPES` whenever the client asked for nothing in
+ * particular, or asked for `mcp:tools` -- which is what every MCP client sends. So the
+ * common case pre-granted `seed:use` and `seed:write`: every login in every saved profile,
+ * handed to a client that in the DCR case picked its own name, on one unread click.
+ *
+ * `DEFAULT_AGENT_SCOPES` is the answer this codebase already reached for the same question
+ * on the dashboard side, with the reasoning written out above it. This path now uses it too.
+ * A client that names a sensitive scope outright still gets it *shown* and flagged as
+ * requested, but never pre-ticked: asking is not the same as being granted, and the operator
+ * has to tick it themselves.
+ */
 function requestedScopes(raw: string | undefined): string[] {
-  if (!raw) return [...AGENT_SCOPES];
-  const asked = raw.split(/\s+/).filter(Boolean);
-  if (asked.includes("mcp:tools")) return [...AGENT_SCOPES];
-  const matched = asked.filter((s) => (AGENT_SCOPES as readonly string[]).includes(s));
-  return matched.length ? matched : [...AGENT_SCOPES];
+  const asked = raw ? raw.split(/\s+/).filter(Boolean) : [];
+  const named = namedScopes(raw);
+  // Nothing specific, or the `mcp:tools` catch-all every MCP client sends: the safe default.
+  if (!named.length || asked.includes("mcp:tools")) return [...DEFAULT_AGENT_SCOPES];
+  const narrowed = named.filter((s) => (DEFAULT_AGENT_SCOPES as readonly string[]).includes(s));
+  // A client that named only sensitive scopes still needs the browser control every connector
+  // gets, or the form offers nothing to approve. Its sensitive asks stay unticked regardless.
+  return narrowed.length ? narrowed : [...DEFAULT_AGENT_SCOPES];
 }
 
 function resourceAcceptable(resource: string | undefined): boolean {
@@ -547,13 +665,25 @@ function resourceAcceptable(resource: string | undefined): boolean {
   return resource.replace(/\/$/, "") === want || resource.replace(/\/$/, "") === config.publicUrl;
 }
 
-/** Reuse the connector agent across reconnects so revoking it stays meaningful. */
+/**
+ * Reuse the connector agent across reconnects so revoking it stays meaningful -- but apply
+ * the selection that was just submitted.
+ *
+ * Returning `existing` untouched meant the consent form was authoritative exactly once. Every
+ * later approval rendered thirteen checkboxes and a browser cap, accepted whatever was
+ * changed, and silently discarded it: the operator could untick `seed:write`, press Approve,
+ * and still be handing over profile writes. The permissions were only ever editable from the
+ * dashboard, which is the opposite of what the screen said it was doing.
+ *
+ * The form is pre-filled from this same row (see the GET handler), so an unchanged approval
+ * is a no-op and a changed one means what it says.
+ */
 function connectorAgentFor(client: ClientInfo, scopes: string[], maxBrowsers: number): Principal {
   if (client.agentId) {
     const existing = getAgent(client.agentId);
     if (existing && existing.type === "agent") {
       if (!existing.enabled) throw new Error("connector-revoked");
-      return existing;
+      return updateAgent(existing.id, { scopes, maxBrowsers });
     }
   }
   const agent = createConnectorAgent({
@@ -639,6 +769,13 @@ export function mountOauth(app: Express): void {
       return;
     }
 
+    // A client that has been approved before already has a connector agent, and approving
+    // again now rewrites it. Pre-fill the form from what that agent can do today, so the
+    // boxes describe the grant being edited rather than a fresh request, and an operator who
+    // just clicks Approve changes nothing.
+    const priorAgent = resolved.client.agentId ? getAgent(resolved.client.agentId) : null;
+    const prior = priorAgent?.type === "agent" && priorAgent.enabled ? priorAgent : null;
+
     // Now that this redirect_uri is known to belong to this client, let the consent form
     // reach it. Every earlier exit from this handler keeps the bare `form-action 'self'`.
     secureHeaders(res, p.redirect_uri);
@@ -657,8 +794,10 @@ export function mountOauth(app: Express): void {
           response_type: "code",
         },
         consent: consentToken(session.token, p.client_id ?? "", p.redirect_uri),
-        defaultScopes: requestedScopes(p.scope),
-        maxBrowsers: config.oauthMaxBrowsers,
+        defaultScopes: prior ? prior.scopes : requestedScopes(p.scope),
+        askedScopes: namedScopes(p.scope),
+        reauthorizing: prior !== null,
+        maxBrowsers: prior ? prior.maxBrowsers : config.oauthMaxBrowsers,
       }),
     );
   }));

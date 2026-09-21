@@ -19,14 +19,16 @@ import { dialTunnel, dropTunnelsFor } from "./tunnels.js";
 import { startFakeChrome } from "./fake-chrome.js";
 import { startLinkedRuntime } from "./linked-cdp.js";
 import { dropLinksFor, linkedAllows, linkView, liveLink } from "./linked.js";
-import { activeGrant, grantsFor } from "./lending.js";
+import { accessAllows, activeGrant, grantAccess, grantsFor, isPermanent, type GrantAccess } from "./lending.js";
 import { dropGuestsFor, guestIdFromController, guestLeaseEnd, noteGuestControlEnded, startGuestCooldown } from "./guests.js";
 import { SiteDetector } from "./site-detection.js";
 import {
   deleteSiteAccessForBrowser,
   listSeedSiteAccess,
   listSiteAccess,
+  removeSeedSiteAccess,
   restoreSiteAccess,
+  setSeedSiteAccess,
   snapshotSiteAccess,
 } from "./site-access.js";
 
@@ -174,18 +176,18 @@ export class BrowserManager {
    * and a loan are kept visibly distinct -- `lentToMe` is what stops a borrower from mistaking
    * a browser it is holding for one it can delete.
    */
-  listVisible(p: Principal): Array<BrowserRow & { lentToMe: boolean }> {
+  listVisible(p: Principal): Array<BrowserRow & { lentToMe: boolean; grantAccess?: GrantAccess }> {
     if (p.type === "admin") return this.list().map((r) => ({ ...r, lentToMe: false }));
     const owned = this.list({ ownerType: "agent", ownerId: p.id });
     const seen = new Set(owned.map((r) => r.id));
     const borrowed = (
       getDb()
         .prepare(
-          `SELECT b.* FROM browsers b JOIN browser_grants g ON g.browser_id = b.id
+          `SELECT b.*, g.access AS grant_access FROM browsers b JOIN browser_grants g ON g.browser_id = b.id
            WHERE g.grantee_id = ? AND g.revoked_at IS NULL AND g.expires_at > ?
            ORDER BY b.created_at DESC`,
         )
-        .all(p.id, nowIso()) as BrowserRow[]
+        .all(p.id, nowIso()) as Array<BrowserRow & { grant_access: string }>
     ).filter((r) => !seen.has(r.id));
     for (const r of borrowed) seen.add(r.id);
     const linked = (
@@ -198,7 +200,9 @@ export class BrowserManager {
     ).filter((r) => !seen.has(r.id));
     return [
       ...owned.map((r) => ({ ...r, lentToMe: false })),
-      ...borrowed.map((r) => ({ ...r, lentToMe: true })),
+      // The level rides along with the row: an agent holding a read grant that is shown an
+      // undifferentiated "borrowed" will try to drive it and be refused tool by tool.
+      ...borrowed.map((r) => ({ ...r, lentToMe: true, grantAccess: grantAccess({ access: r.grant_access }) })),
       ...linked.map((r) => ({ ...r, lentToMe: false })),
     ];
   }
@@ -317,12 +321,29 @@ export class BrowserManager {
       return;
     }
     if (browser.owner_type !== "agent" || browser.owner_id !== p.id) {
-      // A live grant is the only thing that opens someone else's browser, and it opens it
-      // only for driving. Deleting a browser you were merely lent -- along with its profile,
-      // and every login inside it -- stays impossible however generous the owner was feeling,
-      // so `delete` never consults the grant table at all.
-      if (kind !== "delete" && activeGrant(browser.id, p.id)) {
-        requireScope(p, "browser:borrow");
+      // A live grant is the only thing that opens someone else's browser. Deleting a browser
+      // you were merely lent -- along with its profile, and every login inside it -- stays
+      // impossible however generous the owner was feeling, so `delete` never consults the
+      // grant table at all.
+      const needed: GrantAccess | null = kind === "delete" ? null : kind;
+      const grant = needed ? activeGrant(browser.id, p.id) : null;
+      if (grant && needed) {
+        const held = grantAccess(grant);
+        if (!accessAllows(held, needed)) {
+          throw Err.grantLevel(
+            `your grant on this browser is "read", which permits looking at pages and nothing else. ` +
+              `Ask for "control" with tallylamp_request_browser (access: "control"); the administrator ` +
+              `answers that, and your read access stays in force meanwhile.`,
+          );
+        }
+        // `browser:borrow` gates agent-to-agent lending and keeps doing so: borrowing a peer's
+        // profile hands over its live logins and the scope is the opt-in for that.
+        //
+        // A grant the ADMINISTRATOR issued on their own browser stands on its own. Requiring a
+        // scope there would mean an approval that does not actually grant anything -- the
+        // operator would click approve and the agent would still be refused until they went and
+        // edited its scopes, which is a second, invisible approval step and a support ticket.
+        if (browser.owner_type === "agent") requireScope(p, "browser:borrow");
         return;
       }
       throw Err.unauthorized("browser is owned by another principal");
@@ -330,6 +351,25 @@ export class BrowserManager {
     const scope =
       kind === "read" ? "browser:read:own" : kind === "delete" ? "browser:delete:own" : "browser:control:own";
     if (!p.scopes.includes(scope) && !p.scopes.includes("*")) throw Err.unauthorized(`missing ${scope}`);
+  }
+
+  /**
+   * Refuse an action whose only authorisation would be a grant.
+   *
+   * `assertAccess(..., "control")` admits a borrower, which is right for driving and wrong for
+   * everything that changes the resource rather than the page: stopping it, renaming it,
+   * editing its metadata, recording a signed-in site against it. Those belong to whoever owns
+   * the profile, and a loan -- at either level, however it was issued -- is not ownership.
+   *
+   * Deletion is not on this list because it never consulted the grant table in the first place.
+   */
+  assertNotBorrowed(p: Principal, browser: BrowserRow, what: string): void {
+    if (p.type === "admin") return;
+    if (browser.kind === "linked") return; // linked browsers keep their own access-list route
+    if (browser.owner_type === "agent" && browser.owner_id === p.id) return;
+    if (activeGrant(browser.id, p.id)) {
+      throw Err.unauthorized(`${what} is owner-only; being lent this browser is not permission to do it`);
+    }
   }
 
   create(input: {
@@ -755,7 +795,10 @@ export class BrowserManager {
 
   updateMetadata(id: string, metadata: unknown, principal: Principal): BrowserRow {
     const row = this.row(id);
-    if (principal.type !== "admin") this.assertAccess(principal, row, "control");
+    if (principal.type !== "admin") {
+      this.assertAccess(principal, row, "control");
+      this.assertNotBorrowed(principal, row, "changing browser metadata");
+    }
     const md = sanitizeMetadata(metadata);
     getDb()
       .prepare(`UPDATE browsers SET metadata_json = ?, labels_json = ? WHERE id = ?`)
@@ -980,7 +1023,15 @@ export class BrowserManager {
       lendable: row.lendable === 1,
       // Who is currently holding a loan of this browser. Provenance stays the authenticated
       // principal, so a borrower is shown as a borrower and never as the owner.
-      lentTo: grantsFor(row.id).map((g) => ({ granteeId: g.grantee_id, expiresAt: g.expires_at })),
+      lentTo: grantsFor(row.id).map((g) => ({
+        grantId: g.id,
+        granteeId: g.grantee_id,
+        access: grantAccess(g),
+        // Null, not the year 9999. The sentinel is a storage detail; what the operator is being
+        // told is that this one does not lapse on its own and only they can end it.
+        expiresAt: isPermanent(g.expires_at) ? null : g.expires_at,
+        grantedBy: g.granted_by,
+      })),
       mcpAttached: this.mcpCount(row.id),
       viewers: this.viewerCount(row.id),
       cdpBound: Boolean(rt),
@@ -1169,6 +1220,32 @@ export class BrowserManager {
     hub.emitEvent("profile.deleted", { id, name: seed.name });
     await this.cleanupDeletedProfiles(id);
     return { deleted: true, cleanupPending: !!getDb().prepare(`SELECT 1 FROM deleted_profile_snapshots WHERE id = ?`).get(id) };
+  }
+
+  /**
+   * Correct what a saved profile says it carries, without republishing the snapshot.
+   *
+   * Until now the manifest could only be rewritten wholesale, by snapshotting a browser over the
+   * profile — a heavy, destructive thing to do to fix one missed sign-in. The guards are
+   * deleteSeed's, for the same reason: snapshotSeed deletes and reinserts this whole table
+   * inside its transaction, so an edit landing mid-save would be silently thrown away.
+   */
+  editSeedSite(id: string, input: { origin: unknown; name?: unknown; state?: unknown }, principal: Principal) {
+    this.assertSeedInventoryEditable(id, principal);
+    return setSeedSiteAccess(id, input, principal);
+  }
+
+  removeSeedSite(id: string, origin: unknown, principal: Principal): boolean {
+    this.assertSeedInventoryEditable(id, principal);
+    return removeSeedSiteAccess(id, origin, principal);
+  }
+
+  private assertSeedInventoryEditable(id: string, principal: Principal): void {
+    // A shared profile's inventory is how every other agent decides which logins it can reach.
+    // seed:write is permission to publish a browser you own, not to relabel someone else's.
+    if (principal.type !== "admin") throw Err.unauthorized("only an administrator can edit a shared saved profile's recorded sites");
+    if (!getDb().prepare(`SELECT 1 FROM seeds WHERE id = ?`).get(id)) throw Err.notFound("saved profile not found");
+    if (this.savingSeeds.has(id)) throw Err.browserUnavailable("saved profile is being updated; retry after saving finishes");
   }
 
   private assertSnapshotPath(snapshotPath: string): void {

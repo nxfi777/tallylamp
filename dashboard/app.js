@@ -592,6 +592,19 @@ function linkStatus(b) {
   return n ? `${n} tab${n === 1 ? "" : "s"} shared` : "online, nothing shared";
 }
 
+/**
+ * The caption where a linked browser's live view would be. All three reasons for having no
+ * frame look identical from here and only one of them is anybody's to fix, so it names which.
+ * A tab shared but never used by an agent is the ordinary state between sessions -- there is no
+ * runtime yet, so no thumbnail -- and saying "not shared" directly under the badge that counts
+ * the shared tabs was simply wrong. The tab's own title is what the operator wants anyway.
+ */
+function linkedCaption(b) {
+  if (!b.link?.online) return "open this browser to reconnect";
+  const [tab] = b.link.sharedTabs;
+  return tab ? tab.title || tab.url : "its owner has not shared a tab";
+}
+
 /** A guest link's lease: a person, but never this operator, so never "You have control". */
 const guestHolds = (b) => String(b.control?.controllerId || "").startsWith("guest:");
 
@@ -616,13 +629,21 @@ function layout(main) {
           ["/security", "security", "Security"],
         ].map(([href, name, label]) => {
           const active = route().name === name;
+          // The inbox lives on Browsers, so an operator sitting on Agents or Security has no
+          // way to know an agent is waiting. A person cannot be woken by a tool result the way
+          // an owning agent can, so the count has to travel to wherever they already are.
+          const waiting = name === "home" ? (state.requests || []).length : 0;
           return h("a", {
             href,
             class: active ? "active" : "",
             // Without this the active page is signalled by background colour alone.
             "aria-current": active ? "page" : false,
             onClick: (e) => { e.preventDefault(); go(href); },
-          }, label);
+          }, label, waiting ? h("span", {
+            class: "nav-badge",
+            // The number alone reads as "4" to a screen reader, which is not a fact.
+            "aria-label": waiting === 1 ? "1 agent is waiting for access" : `${waiting} agents are waiting for access`,
+          }, String(waiting)) : null);
         }),
         h("div", { class: "spacer" }),
         searchButton(),
@@ -698,7 +719,7 @@ function card(b) {
   const thumb = h("div", { class: "thumb" }, badge(b),
     b.status === "starting" ? "starting…" : b.status === "stopping" ? "stopping…"
       // Nothing on this side can wake somebody's laptop, so say who can.
-      : b.kind === "linked" ? (b.link?.online ? "its owner has not shared a tab" : "open this browser to reconnect")
+      : b.kind === "linked" ? linkedCaption(b)
       : "no live view");
   if (b.status === "running") {
     const img = h("img", { alt: "", loading: "lazy", decoding: "async" });
@@ -826,57 +847,114 @@ function freeSlots() {
 function requestsPanel() {
   const list = state.requests || [];
   if (!list.length) return null;
-  return h("section", { class: "banner asks", "aria-label": "Borrow requests" },
+  const anyControl = list.some((r) => (r.access || "control") === "control");
+  return h("section", { class: "banner asks", "aria-label": "Access requests" },
     h("h2", { class: "asks-h" },
       list.length === 1 ? "1 agent is waiting on a browser" : `${list.length} agents are waiting on a browser`),
     // Said once for the panel, not repeated per row: three copies of the same warning is the
-    // noise that stops any of them being read.
-    h("p", { class: "sub" },
-      "Granting hands over the live logins in that profile, not a copy of them. You can revoke it at any time, and ignoring a request is safe -- it expires by itself."),
+    // noise that stops any of them being read. Worded by the strongest level being asked for,
+    // because the read-only case genuinely is a smaller thing and saying otherwise trains the
+    // operator to skip the sentence on the day it matters.
+    h("p", { class: "sub" }, anyControl
+      ? "Control lets an agent navigate, click, type and run scripts in that browser, signed in as you. Read lets it see pages and nothing else. You can approve a control request as read instead, and revoke either at any time."
+      : "Read access lets an agent see the pages in that browser, including anything you are signed in to. It cannot click, type, navigate or run scripts. You can revoke it at any time."),
+    h("p", { class: "sub" }, "Ignoring a request is safe: it expires by itself and nothing is blocked meanwhile."),
     ...list.map(askRow),
   );
 }
 
+/**
+ * How long an approval lasts.
+ *
+ * "Until revoked" is first for a read request because that is the shape of the thing asking:
+ * a daemon that reconnects after every restart and every idle reap, for which any fixed clock
+ * is a grant that fails overnight. A control request defaults to a working day instead, since
+ * standing permission to type in a browser signed in as you should have to be renewed.
+ */
+const GRANT_DURATIONS = [
+  { value: "revoked", label: "Until I revoke it" },
+  { value: "1800", label: "30 minutes" },
+  { value: "7200", label: "2 hours" },
+  { value: "28800", label: "8 hours" },
+  { value: "86400", label: "24 hours" },
+];
+
 function askRow(r) {
+  const asked = (r.access || "control") === "read" ? "read" : "control";
+  const who = r.requester_name || r.requester_id;
   const actions = h("div", { class: "row" });
-  const answer = (decision, btn, label) =>
+  const duration = h("select", { "aria-label": `How long to grant ${r.browserName} to ${who}` },
+    ...GRANT_DURATIONS.map((d) => h("option", { value: d.value }, d.label)));
+  // A read request is a standing subscription; a control request is a session. Different
+  // defaults because they are different bargains, not because one is friendlier.
+  duration.value = asked === "read" ? "revoked" : "28800";
+
+  const answer = (decision, btn, label, access) =>
     act(async () => {
       // Doherty: the click has to land visibly before the round trip does, or a slow answer
       // reads as a dropped one and gets clicked again.
       for (const b of actions.querySelectorAll("button")) b.disabled = true;
+      duration.disabled = true;
+      const was = btn.textContent;
       btn.textContent = label;
       try {
-        await api(`/api/v1/requests/${r.id}/answer`, { method: "POST", body: { decision } });
+        const body = { decision };
+        if (decision === "grant") {
+          body.access = access;
+          if (duration.value === "revoked") body.untilRevoked = true;
+          else body.durationSec = Number(duration.value);
+        }
+        await api(`/api/v1/requests/${r.id}/answer`, { method: "POST", body });
         await refresh();
         paintBrowsers();
-        // Peak-end: say what happened. The row vanishing on its own leaves the operator
-        // guessing which way it went.
+        // Peak-end: say what happened, at what level, and for how long. The row vanishing on
+        // its own leaves the operator guessing which way it went -- and after a downgrade,
+        // guessing wrong is the whole risk.
+        const how = duration.value === "revoked"
+          ? "until you revoke it"
+          : `for ${GRANT_DURATIONS.find((d) => d.value === duration.value).label.toLowerCase()}`;
         flash(
           decision === "grant"
-            ? `Lent ${r.browserName} to ${r.requester_name || r.requester_id}. Revoke it from that browser's page.`
-            : `Declined ${r.requester_name || r.requester_id}.`,
+            ? access === "read"
+              ? `${who} can now read ${r.browserName} ${how}${asked === "control" ? ", but not control it" : ""}. Revoke it from that browser's page.`
+              : `${who} can now control ${r.browserName} ${how}. Revoke it from that browser's page.`
+            : `Declined ${who}.`,
+          decision === "grant",
         );
       } catch (e) {
         for (const b of actions.querySelectorAll("button")) b.disabled = false;
-        btn.textContent = decision === "grant" ? "Grant" : "Deny";
+        duration.disabled = false;
+        btn.textContent = was;
         throw e;
       }
     });
 
-  const grant = h("button", { class: "btn secondary" }, "Grant");
+  // Read first when control was asked for: it is the smaller answer to the same question, and
+  // an operator who has not decided should fall into the one that cannot type.
+  if (asked === "control") {
+    const readOnly = h("button", { class: "btn secondary", title: `Let ${who} see pages in ${r.browserName} without acting on them` }, "Approve read only");
+    readOnly.addEventListener("click", () => answer("grant", readOnly, "Approving\u2026", "read"));
+    actions.append(readOnly);
+  }
+  const grant = h("button", { class: asked === "control" ? "btn" : "btn secondary" },
+    asked === "control" ? "Approve control" : "Approve read");
+  grant.addEventListener("click", () => answer("grant", grant, "Approving\u2026", asked));
   const deny = h("button", { class: "btn deny" }, "Deny");
-  grant.addEventListener("click", () => answer("grant", grant, "Granting\u2026"));
   deny.addEventListener("click", () => answer("deny", deny, "Declining\u2026"));
   actions.append(grant, deny);
 
   return h("div", { class: "ask" },
     h("div", { class: "ask-what" },
-      h("strong", {}, r.requester_name || r.requester_id),
-      " wants ",
+      h("strong", {}, who),
+      asked === "read" ? " wants to read " : " wants to control ",
       h("a", { href: `/browsers/${r.browser_id}`, onClick: (e) => { e.preventDefault(); go(`/browsers/${r.browser_id}`); } }, r.browserName),
-      h("div", { class: "sub" }, [r.reason ? `\u201c${r.reason}\u201d` : "No reason given", `asked ${ago(r.created_at)}`].join(" \u00b7 ")),
+      h("div", { class: "sub" }, [
+        r.reason ? `\u201c${r.reason}\u201d` : "No reason given",
+        `asked ${ago(r.created_at)}`,
+        asked === "read" ? "Reading only: no clicking, typing or navigating" : "Full control: clicking, typing, navigating and scripts",
+      ].join(" \u00b7 ")),
     ),
-    actions,
+    h("div", { class: "row ask-actions" }, duration, actions),
   );
 }
 
@@ -1124,20 +1202,31 @@ function settingsSection(b) {
             }
           }) })),
       loans.length ? h("div", { class: "setting-extra lending" },
-        h("div", { class: "sub" }, "Lent to"),
+        h("div", { class: "sub" }, "Agents with access"),
         h("ul", { class: "loans" },
-          ...loans.map((g) =>
-            h("li", {},
-              h("span", { class: "mono" }, g.granteeId),
+          ...loans.map((g) => {
+            const agent = (state.agents || []).find((a) => a.id === g.granteeId);
+            const level = g.access === "read" ? "read" : "control";
+            return h("li", {},
+              h("div", { class: "loan-who" },
+                h("span", { class: "mono" }, agent ? agent.name : g.granteeId),
+                // The level and the clock are the two things that decide whether this line is
+                // fine or wants acting on, so neither hides behind a tooltip.
+                h("div", { class: "sub" }, [
+                  level === "read" ? "Read only \u2014 sees pages, cannot act" : "Full control \u2014 can click, type and navigate",
+                  g.expiresAt ? `until ${new Date(g.expiresAt).toLocaleString()}` : "until revoked",
+                ].join(" \u00b7 "))),
               h("button", {
                 class: "btn tiny danger",
+                "aria-label": `Revoke ${level} access to ${b.name} from ${agent ? agent.name : g.granteeId}`,
                 onClick: () => act(async () => {
                   await api(`/api/v1/browsers/${id}/grants/${g.granteeId}`, { method: "DELETE" });
-                  flash(`Took ${b.name} back from ${g.granteeId}.`);
+                  flash(`Took ${b.name} back from ${agent ? agent.name : g.granteeId}. Its next call fails.`, true);
                   await refresh();
                   void render();
                 }),
-              }, "Revoke"))))) : null,
+              }, "Revoke"));
+          }))) : null,
       h("details", { class: "setting-more" },
         h("summary", {}, "How lending works"),
         h("p", {}, "Off by default. With it on, a waiting agent gets this browser once it has sat idle for a couple of minutes, without asking you. That is what lets a browser be recovered when its owning agent crashes. The borrower gets the live logins in this profile, so leave it off for anything you would not hand over.")),
@@ -2208,47 +2297,97 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
   await open();
 }
 
+/**
+ * What can reach my browsers right now, and should it? That is the only question this page is
+ * open for, and the table used to make the reader derive the answer: a revoked agent carried a
+ * full-weight row -- same ink, same buttons -- so twelve rows read as twelve live credentials
+ * until you scanned a Status column to find out otherwise. Live agents are the table now;
+ * revoked ones fold away behind their own count, reachable but not counted as inventory.
+ */
 async function agentsView() {
+  // created_at DESC is the server's order and it is not the order anyone triages in. Five
+  // connectors called "OpenCode" on 127.0.0.1 are one list item repeated five times until
+  // recency separates them, so the most recently used comes first and never-used sinks.
+  const seen = (a) => (a.lastSeenAt ? Date.parse(a.lastSeenAt) : 0);
+  const byRecency = (x, y) => seen(y) - seen(x);
+  const active = state.agents.filter((a) => a.enabled).sort(byRecency);
+  const revoked = state.agents.filter((a) => !a.enabled).sort(byRecency);
+
+  // The server names an OAuth agent "<client> (connector)", so with a Kind column the word
+  // landed twice in every row. The kind belongs under the name, next to the host it came from.
+  const isConnector = (a) => a.labels?.kind === "connector";
+  const displayName = (a) => (isConnector(a) ? a.name.replace(/\s*\(connector\)$/, "") : a.name);
+  const origin = (a) =>
+    isConnector(a) ? `connector · ${a.labels.client_host || "unknown host"}` : "agent";
+  // Max was a column of identical 2s -- the server default, printed twelve times. It only says
+  // anything when somebody has changed it for this one agent, so that is when it appears.
+  const limit = (a) =>
+    typeof state.status?.maxBrowsers === "number" && a.maxBrowsers !== state.status.maxBrowsers
+      ? ` · ${a.maxBrowsers} browser${a.maxBrowsers === 1 ? "" : "s"} max`
+      : "";
+
+  const head = h("thead", {}, h("tr", {},
+    h("th", { scope: "col" }, "Name"),
+    h("th", { scope: "col" }, "Id"),
+    h("th", { scope: "col" }, "Last seen"),
+    // An unlabelled column reads as nothing at all in a screen reader's table summary.
+    h("th", { scope: "col" }, "Actions"),
+  ));
+
+  const row = (a) => h("tr", {},
+    h("td", {}, displayName(a), h("div", { class: "sub" }, origin(a) + limit(a))),
+    h("td", { class: "mono" }, a.id),
+    // A raw ISO timestamp to the millisecond made the reader subtract dates to answer "is this
+    // one still in use?". The exact value stays on the title for when it is actually wanted --
+    // the same treatment saved profiles already use.
+    h("td", { title: a.lastSeenAt || false },
+      a.lastSeenAt ? ago(a.lastSeenAt) : h("span", { class: "sub" }, "Never used")),
+    h("td", {},
+      h("button", { class: "btn", onClick: () => editProfilePermissions(a) }, "Profile permissions"), " ",
+      h("button", { class: "btn", onClick: () => editLendingPermissions(a) }, "Lending"), " ",
+      // A connector has no dashboard token to rotate; its credentials come from the grant.
+      isConnector(a) ? null : h("button", { class: "btn", onClick: () => rotate(a.id) }, "Rotate"),
+      " ",
+      // Revoke cuts a live agent off. It sat next to Rotate in the same grey, and the two
+      // words even start alike.
+      // "Enable" read as an undo for Revoke. It is not: the token is gone for good.
+      h("button", { class: a.enabled ? "btn danger" : "btn", onClick: () => toggleAgent(a) },
+        a.enabled ? "Revoke" : "Re-enable"),
+    ),
+  );
+
+  const table = (list, label) =>
+    h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": label },
+      h("table", { class: "table" }, head.cloneNode(true), h("tbody", {}, ...list.map(row))));
+
   layout([
     h("div", { class: "top" },
-      h("div", {}, h("h1", {}, "Agents"), h("div", { class: "sub" }, "Agents and OAuth connectors that can drive browsers here. You see a token once, when you create or rotate it, because the server keeps only its SHA-256 hash. Revoking stops the agent at its next request and kills its token for good. Re-enabling brings the row back but not the token: a plain agent then needs a rotate, and a connector has to authorize again.")),
+      h("div", {},
+        h("h1", {}, "Agents"),
+        h("div", { class: "sub" }, "Agents and OAuth connectors that can drive browsers here."),
+      ),
       h("button", { class: "btn primary", onClick: createAgent }, "New agent"),
     ),
-    h("table", { class: "table" },
-      h("thead", {}, h("tr", {},
-        h("th", { scope: "col" }, "Name"),
-        h("th", { scope: "col" }, "Kind"),
-        h("th", { scope: "col" }, "Id"),
-        h("th", { scope: "col" }, "Max"),
-        h("th", { scope: "col" }, "Status"),
-        h("th", { scope: "col" }, "Last seen"),
-        // An unlabelled column reads as nothing at all in a screen reader's table summary.
-        h("th", { scope: "col" }, "Actions"),
-      )),
-      h("tbody", {},
-        state.agents.length === 0
-          ? h("tr", {}, h("td", { colspan: "7", class: "sub" }, "No agents yet. Create one to give an MCP client a token."))
-          : null,
-        ...state.agents.map((a) => h("tr", {},
-          h("td", {}, a.name),
-          h("td", {}, a.labels?.kind === "connector" ? `connector · ${a.labels.client_host || "?"}` : "agent"),
-          h("td", { class: "mono" }, a.id),
-          h("td", {}, String(a.maxBrowsers)),
-          h("td", {}, a.enabled ? "active" : "revoked"),
-          h("td", { class: "mono" }, a.lastSeenAt || "—"),
-          h("td", {},
-            h("button", { class: "btn", onClick: () => editProfilePermissions(a) }, "Profile permissions"), " ",
-            // A connector has no dashboard token to rotate; its credentials come from the grant.
-            a.labels?.kind === "connector" ? null : h("button", { class: "btn", onClick: () => rotate(a.id) }, "Rotate"),
-            " ",
-            // Revoke cuts a live agent off. It sat next to Rotate in the same grey, and the two
-            // words even start alike.
-            // "Enable" read as an undo for Revoke. It is not: the token is gone for good.
-            h("button", { class: a.enabled ? "btn danger" : "btn", onClick: () => toggleAgent(a) }, a.enabled ? "Revoke" : "Re-enable"),
-          ),
-        )),
-      ),
+    // Five lines of token policy sat above the table and answered nothing anyone arrives with.
+    // It is still one click away, which is where a rule you read once belongs.
+    h("details", { class: "setting-more plain" },
+      h("summary", {}, "How agent tokens work"),
+      h("p", {}, "You see a token once, when you create or rotate it, because the server keeps only its SHA-256 hash. Revoking stops the agent at its next request and kills its token for good."),
     ),
+    active.length
+      ? table(active, "Active agents")
+      : h("p", { class: "sub" },
+          state.agents.length === 0
+            ? "No agents yet. Create one to give an MCP client a token."
+            : "Nothing can reach your browsers. Every agent here has been revoked."),
+    // Closed by default: these are history. The count is on the summary so the page never hides
+    // the fact that they exist.
+    revoked.length
+      ? h("details", { class: "setting-more plain revoked" },
+          h("summary", {}, `Revoked · ${revoked.length}`),
+          h("p", {}, "These stop at their next request. Re-enabling brings the row back but not the token: a plain agent then needs a rotate, and a connector has to authorize again."),
+          table(revoked, "Revoked agents"))
+      : null,
   ]);
 }
 
@@ -2266,7 +2405,9 @@ async function seedsView() {
           : null,
         ...state.seeds.map((s) => h("tr", {},
           h("td", {}, s.name, h("div", { class: "sub" }, [s.metadata?.project, s.metadata?.purpose].filter(Boolean).join(" · "))),
-          h("td", {}, sitePills(s) || h("span", { class: "sub" }, "None recorded")),
+          h("td", {}, h("div", { class: "seed-sites" },
+            sitePills(s) || h("span", { class: "sub" }, "None recorded"),
+            h("button", { class: "btn tiny", "aria-label": `Edit recorded sites for ${s.name}`, onClick: () => editSeedSites(s) }, "Edit"))),
           h("td", { title: s.updated_at || s.created_at }, ago(s.updated_at || s.created_at)),
           h("td", {}, h("div", { class: "row" }, h("button", {
             class: "btn",
@@ -2278,6 +2419,116 @@ async function seedsView() {
       ),
     ),
   ]);
+}
+
+/**
+ * Correct what a saved profile says it carries.
+ *
+ * Detection runs in a browser, and a saved profile is a directory: whatever the source missed at
+ * snapshot time was missed for every copy made afterwards. The only fix was Update saved profile,
+ * which republishes the entire snapshot from a live browser to correct one name — so in practice
+ * the list stayed wrong, and agents picked profiles from it.
+ *
+ * Each change posts on its own and the list repaints from the server, because a form with a Save
+ * button would let an operator remove three sites, hit Escape, and not know which of those stuck.
+ */
+function editSeedSites(seed) {
+  let sites = [...(seed.signedInSites || [])];
+  let touched = false;
+  const body = h("div", { class: "site-access" });
+  const error = h("div", { class: "err", role: "alert" });
+
+  async function run(fn, focusAdd = false) {
+    error.textContent = "";
+    try {
+      await fn();
+      touched = true;
+      paint(focusAdd);
+    } catch (e) {
+      error.textContent = e.message;
+    }
+  }
+
+  const save = (site, focusAdd = false) => run(async () => {
+    const result = await api(`/api/v1/seeds/${seed.id}/sites`, { method: "POST", body: site });
+    sites = result.seed?.signedInSites || sites;
+  }, focusAdd);
+
+  const drop = (site) => run(async () => {
+    await api(`/api/v1/seeds/${seed.id}/sites`, { method: "DELETE", body: { origin: site.origin } });
+    sites = sites.filter((entry) => entry.origin !== site.origin);
+  });
+
+  function paint(focusAdd = false) {
+    const origin = h("input", { id: "seed-site-origin", type: "text", placeholder: "mobbin.com", maxlength: "2048", autocomplete: "off" });
+    const name = h("input", { id: "seed-site-name", type: "text", placeholder: "Optional — defaults to the hostname", maxlength: "80", autocomplete: "off" });
+    body.replaceChildren(
+      sites.length
+        ? h("ul", { class: "site-list" }, ...sites.map((site) => h("li", {},
+            h("div", { class: "site-main" },
+              h("strong", {}, site.name),
+              h("span", { class: "mono" }, site.origin),
+              // Four provenances, and only one of them is an observation. A hand-written entry
+              // never gets a timestamp, so it must never borrow the sentence that has one.
+              h("span", { class: "sub" },
+                site.state === "needs_sign_in"
+                  ? "Sign-in needed"
+                  : site.lastConfirmedAt
+                    ? `Last confirmed ${ago(site.lastConfirmedAt)}, before this profile was saved`
+                    : site.state === "expected"
+                      ? "Copied from another profile · never confirmed"
+                      : "Recorded here · never observed"),
+            ),
+            h("div", { class: "row site-actions" },
+              site.state === "needs_sign_in"
+                ? h("button", { class: "btn tiny", onClick: () => save({ origin: site.origin, name: site.name, state: "confirmed" }) }, "Signed in")
+                : h("button", { class: "btn tiny", onClick: () => save({ origin: site.origin, name: site.name, state: "needs_sign_in" }) }, "Needs sign-in"),
+              h("button", { class: "btn tiny danger", "aria-label": `Remove ${site.name}`, onClick: () => drop(site) }, "Remove"),
+            ),
+          )))
+        : h("div", { class: "sub" }, "Nothing recorded. The snapshot may still carry logins; this list is only what was noticed when it was saved."),
+      h("form", { class: "seed-site-add", onSubmit: (e) => { e.preventDefault(); save({ origin: origin.value.trim(), name: name.value.trim() || undefined, state: "confirmed" }, true); } },
+        h("label", { for: "seed-site-origin" }, "Website"),
+        origin,
+        h("label", { for: "seed-site-name" }, "Service name"),
+        name,
+        h("button", { class: "btn", type: "submit" }, "Record site")),
+    );
+    if (focusAdd) origin.focus();
+  }
+
+  paint();
+  openModal(`Recorded sites · ${seed.name}`, (close) => [
+    h("h2", {}, "Recorded sites"),
+    h("p", { class: "sub" }, `What ${seed.name} claims to carry. Agents read this list to choose a profile, and a new browser starts from it with every site marked not yet checked. Editing it changes no stored login and copies no cookies.`),
+    body,
+    error,
+    h("div", { class: "row modal-foot" }, h("button", { class: "btn primary", type: "button", onClick: () => close() }, "Done")),
+  ], () => { if (touched) void refresh().then(() => render()); });
+}
+
+/**
+ * Whether this agent may take part in agent-to-agent lending.
+ *
+ * Neither of these is needed to ask YOU for one of your browsers: that goes through the
+ * requests panel on Browsers and an approval there is the whole permission. These two are
+ * about agents lending to each other behind your back, which is a live credential transfer
+ * between two things you are not watching, and so stays off unless you say otherwise.
+ */
+async function editLendingPermissions(agent) {
+  const options = [{ value: "no", label: "Not allowed" }, { value: "yes", label: "Allowed" }];
+  const answers = await askFor(`Lending \u00b7 ${agent.name}`, [
+    { name: "borrow", label: "Borrow other agents' browsers", value: agent.scopes.includes("browser:borrow") ? "yes" : "no", options,
+      hint: "Lets it ask another agent for a browser and use one it is lent, logins included. Not needed to ask you for one of yours." },
+    { name: "lend", label: "Lend its own browsers out", value: agent.scopes.includes("browser:lend") ? "yes" : "no", options,
+      hint: "Lets it answer requests for browsers it owns, and turn on lending when idle. Its own browsers only; never yours." },
+  ], "Save permissions", async values => {
+    const scopes = agent.scopes.filter(scope => !["browser:borrow", "browser:lend"].includes(scope));
+    if (values.borrow === "yes") scopes.push("browser:borrow");
+    if (values.lend === "yes") scopes.push("browser:lend");
+    await api(`/api/v1/agents/${agent.id}`, { method: "PATCH", body: { scopes } });
+  });
+  if (answers) { await render(); flash(`Lending permissions saved for ${agent.name}.`, true); }
 }
 
 async function editProfilePermissions(agent) {

@@ -122,12 +122,17 @@ is `linked` for these rows. They take no fleet slot, have an empty profile
 directory, and refuse everything that needs launch flags or an X display.
 Details are in [linked-browsers.md](linked-browsers.md).
 
-## Lending a browser between agents
+## Lending and granting access to a browser
 
 An agent requesting another agent's browser gets `unauthorized` (403) by default.
-Lending requires explicit `browser:lend` and `browser:borrow` scopes. Both are
-excluded from `DEFAULT_AGENT_SCOPES`, as is `seed:use`, because access to a browser
-also gives access to the sessions still logged into its profile.
+Agent-to-agent lending requires explicit `browser:lend` and `browser:borrow` scopes.
+Both are excluded from `DEFAULT_AGENT_SCOPES`, as is `seed:use`, because access to a
+browser also gives access to the sessions still logged into its profile.
+
+Requesting a browser the **administrator** owns is a separate path with different
+rules, described under [asking the administrator](#asking-the-administrator) below.
+Linked browsers are excluded from both: they are shared from the browser's own page
+in the dashboard and can never be lent on.
 
 Tallylamp cannot wake an idle or crashed agent to answer a request. Lending must
 therefore work without an immediate answer from the owner. A request is resolved
@@ -140,9 +145,11 @@ when one of these events occurs:
   by default; an idle browser without that opt-in is not automatically lent.
 - The request expires, and the requester learns that it is no longer pending.
 
-`tallylamp_request_browser` returns immediately. Its result is `granted`,
-`pending` with a `retryAfterSec`, `denied`, or `unavailable`. Holding the call
-open would occupy an MCP request slot and SSE stream until a client timeout.
+`tallylamp_request_browser` returns immediately. Its result is `granted` with the
+`access` level and an `expiresAt` (`null` means until revoked), `pending` with a
+`retryAfterSec`, `answeredBy` and the `access` asked for, `denied`, or `unavailable`.
+Holding the call open would occupy an MCP request slot and SSE stream until a client
+timeout.
 A pending request keeps its queue position even when the requester stops polling,
 so an agent can return later without starting over, and repeated calls do not
 move it forward in the queue.
@@ -150,13 +157,70 @@ move it forward in the queue.
 Omitting `browserId` asks for any suitable browser. The server ranks candidates
 from local database rows, favouring opted-in and longer-idle browsers, then asks
 exactly one. It does not broadcast requests that could leave one requester
-holding several Chrome instances.
+holding several Chrome instances. Administrator-owned browsers are never ranked
+here: they must be named, because nothing about them resolves without a person.
 
 A browser under human control returns `unavailable`; lending requests cannot
-queue behind a human lease. A grant permits driving but never deletion, and
-`publicView` reports the borrower in `lentTo`. Ownership and creator provenance
-remain unchanged. Lending also closes the browser's loopback tunnels; see the
+queue behind a human lease. A grant never permits deletion, stopping, saving or
+copying the profile, or changing the browser's proxy, name, metadata or signed-in
+sites, at either access level. `publicView` reports every live grant in `lentTo`
+with its `granteeId`, `access` and `expiresAt`. Ownership and creator provenance
+remain unchanged. Granting `control` also closes the browser's loopback tunnels; a
+`read` grant does not, because a reader cannot reach one. See the
 [tunnel security rules](security.md#loopback-tunnels).
+
+### Access levels
+
+A grant carries one of two levels. `control` is the historic behaviour and the
+default for agent-to-agent requests, so existing callers are unaffected.
+
+`read` permits binding and the non-mutating tools only: `list_pages`,
+`take_snapshot`, `take_screenshot`, `list_console_messages`,
+`list_network_requests`, their `get_*` companions, and `tallylamp_select_page`.
+Every tool in `MUTATING_TOOLS` is refused with a non-retryable
+`grant_level_insufficient` error naming the level, and a read session is not
+offered those tools in `tools/list` at all.
+
+A read bind differs from a control bind in two further ways. It does not take the
+agent control lease, so a reader never displaces another agent and never shows a
+person that their browser has been taken. And it never foregrounds a tab: the bind
+and `tallylamp_select_page` both pass `bringToFront: false`, which
+chrome-devtools-mcp honours by moving only its own per-child page pointer. Reading
+therefore continues to work while a human holds control, as non-mutating tools
+already did.
+
+Levels are re-read from the `browser_grants` row on every tool call rather than
+cached on the session. A revoked or expired grant therefore fails the next call on
+a session that is already connected and already bound, and a grant outlives the
+session that first used it.
+
+### Asking the administrator
+
+A managed browser owned by the administrator can be requested by any agent, and is
+answered only by the administrator, in the dashboard or through
+`POST /api/v1/requests/:id/answer`. The idle auto-grant never applies: a person can
+be asked, so there is no crashed-owner problem to solve, and absence from the
+keyboard is not consent.
+
+Filing such a request needs no scope. A scope the administrator must add first
+would make the request flow unreachable by the agent that needs it, and asking
+grants nothing by itself. Two limits bound it instead, both per agent and both
+returning a non-retryable `lend_request_throttled` error:
+`TALLYLAMP_LEND_REQUESTS_PER_MIN` (default 2, burst
+`TALLYLAMP_LEND_REQUEST_BURST`) and `TALLYLAMP_LEND_MAX_PENDING` outstanding
+requests (default 3). Re-asking for a browser an agent already has a pending
+request for reuses that request and is not charged.
+
+Unqualified requests default to `read` for an administrator-owned browser and
+`control` for an agent-owned one. An answer may grant a lower level than was asked
+for but never a higher one, and may set a fixed duration
+(capped by `TALLYLAMP_LEND_MAX_GRANT_SEC`) or no expiry at all. An agent holding
+`read` can request `control` on the same browser; that is a new request, the read
+grant stays in force while it is pending, and approval replaces it.
+
+Requests, answers, revocations and every tool call made under a grant are written
+to the audit log against the requesting agent's own id and the grant id, never the
+owner's.
 
 ## Memory
 

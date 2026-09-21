@@ -14,7 +14,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "test": "tsx --test --test-concurrency=1 tests/agent-desktop.test.ts tests/desktop-viewer.test.ts tests/dashboard-identity.test.ts tests/auth.test.ts tests/metadata.test.ts tests/site-access.test.ts tests/saved-profiles.test.ts tests/ssrf.test.ts tests/names.test.ts tests/ownership.test.ts tests/takeover.test.ts tests/mcp.test.ts tests/isolation.test.ts tests/persistence.test.ts tests/oauth.test.ts tests/data-dir.test.ts tests/migration.test.ts tests/egress.test.ts tests/browser-proxy.test.ts tests/memory.test.ts tests/lending.test.ts tests/tunnel.test.ts tests/linked.test.ts tests/linked-guard.test.ts tests/guest.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/agent-desktop.test.ts tests/desktop-viewer.test.ts tests/dashboard-identity.test.ts tests/auth.test.ts tests/metadata.test.ts tests/site-access.test.ts tests/saved-profiles.test.ts tests/ssrf.test.ts tests/names.test.ts tests/ownership.test.ts tests/takeover.test.ts tests/mcp.test.ts tests/isolation.test.ts tests/persistence.test.ts tests/oauth.test.ts tests/data-dir.test.ts tests/migration.test.ts tests/egress.test.ts tests/browser-proxy.test.ts tests/memory.test.ts tests/lending.test.ts tests/read-access.test.ts tests/tunnel.test.ts tests/linked.test.ts tests/linked-guard.test.ts tests/guest.test.ts",
     "test:realism": "tsx --test tests/realism.test.ts",
     "test:desktop": "tsx --test tests/desktop-linux.test.ts",
     "test:all": "tsx --test --test-concurrency=1 tests/**/*.test.ts",

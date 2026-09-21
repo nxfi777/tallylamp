@@ -277,6 +277,43 @@ describe("linked browsers", () => {
     await ext.closed;
   });
 
+  it("turns the domains a client enabled back off once the last client has gone", async () => {
+    const { token, browserId } = await pair();
+    const ext = await FakeExtension.connect(token, [[1, "https://example.test/a", "A"]]);
+    const rt = await ctx.browsers.ensureRunning(browserId);
+    const wsUrl = await browserWsUrl(rt.cdpUrl);
+
+    const open = async () => {
+      const cdp = new CdpClient(wsUrl);
+      await cdp.connect();
+      const sid = ((await cdp.send("Target.attachToTarget", { targetId: "TARGET1", flatten: true })) as { sessionId: string }).sessionId;
+      return { cdp, sid };
+    };
+    const a = await open();
+    const b = await open();
+
+    await a.cdp.send("Network.enable", {}, a.sid);
+    await a.cdp.send("Page.enable", {}, a.sid);
+    await a.cdp.send("Runtime.enable", {}, a.sid);
+    await a.cdp.send("Runtime.disable", {}, a.sid);
+    const disables = () => ext.calls.filter((c) => c.method.endsWith(".disable")).map((c) => c.method);
+    assert.deepEqual(disables(), ["cdp:Runtime.disable"]);
+
+    // One client leaving proves nothing. The debugger attachment is shared, so turning a domain
+    // off here would take the other client's events with it.
+    await a.cdp.close();
+    await sleep(50);
+    assert.deepEqual(disables(), ["cdp:Runtime.disable"]);
+
+    await b.cdp.close();
+    await sleep(50);
+    // Runtime is not turned off twice: the client that enabled it had already disabled it.
+    assert.deepEqual(disables().slice(1).sort(), ["cdp:Network.disable", "cdp:Page.disable"]);
+
+    ext.close();
+    await ext.closed;
+  });
+
   it("drives a shared tab through the real chrome-devtools-mcp bridge", async () => {
     const owner = createAgent({ name: "Linked driver", scopes: [...DEFAULT_AGENT_SCOPES], maxBrowsers: 1 });
     const { token, browserId } = await pair({ agentIds: [owner.agent.id] }, "Driver's Chrome");

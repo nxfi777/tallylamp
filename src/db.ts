@@ -207,7 +207,14 @@ CREATE TABLE IF NOT EXISTS browser_grants (
   grantee_id TEXT NOT NULL,
   granted_by TEXT NOT NULL,
   reason TEXT,
+  -- 'read' or 'control'. A read grant admits binding and the non-mutating tools and nothing
+  -- else, which is what lets an operator hand out the contents of a page without handing over
+  -- the ability to act on it. Defaults to 'control' so every grant written before this column
+  -- existed keeps exactly the access it was issued with.
+  access TEXT NOT NULL DEFAULT 'control',
   created_at TEXT NOT NULL,
+  -- Far-future sentinel for "until revoked" rather than NULL: every lookup compares
+  -- expires_at > now, and a nullable column would have to special-case each one.
   expires_at TEXT NOT NULL,
   revoked_at TEXT,
   UNIQUE(browser_id, grantee_id)
@@ -221,6 +228,11 @@ CREATE TABLE IF NOT EXISTS browser_requests (
   requester_id TEXT NOT NULL,
   requester_name TEXT,
   reason TEXT,
+  -- What was asked for, and what the answer actually gave. They differ when an administrator
+  -- approves a request for 'control' at 'read', which is a downgrade rather than a denial and
+  -- has to be legible to the requester as such.
+  access TEXT NOT NULL DEFAULT 'control',
+  granted_access TEXT,
   state TEXT NOT NULL DEFAULT 'pending',
   eta_sec INTEGER,
   created_at TEXT NOT NULL,
@@ -403,6 +415,12 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   // through the extension. Everything that needs launch flags, a profile directory or an X
   // display keys off this, because none of those exist for a browser we did not start.
   ["browsers", "kind", "TEXT NOT NULL DEFAULT 'managed'"],
+  // Lending gained an access level. 'control' is the right default for both: it is what every
+  // grant and request written before the column existed meant, so an upgrade changes nobody's
+  // standing access.
+  ["browser_grants", "access", "TEXT NOT NULL DEFAULT 'control'"],
+  ["browser_requests", "access", "TEXT NOT NULL DEFAULT 'control'"],
+  ["browser_requests", "granted_access", "TEXT"],
   ["seeds", "metadata_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["seeds", "updated_at", "TEXT"],
 ];

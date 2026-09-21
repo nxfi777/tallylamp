@@ -79,6 +79,34 @@ async function exchange(code: string, verifier: string, clientId: string, redire
   return { status: res.status, body: (await res.json()) as Record<string, string> };
 }
 
+/** GET the consent page and report which boxes arrive ticked, the way an operator sees them. */
+async function consentBoxes(clientId: string, scope?: string) {
+  const { challenge } = pkce();
+  const query = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: REDIRECT,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    state: "xyz",
+    resource: `${ctx.url}/mcp`,
+  });
+  if (scope) query.set("scope", scope);
+  const page = await fetch(`${ctx.url}/oauth/authorize?${query}`, { headers: { cookie: ctx.cookie }, redirect: "manual" });
+  const html = await page.text();
+  const ticked = [...html.matchAll(/name="grant_scope" value="([^"]+)"( checked)?>/g)]
+    .filter((m) => m[2])
+    .map((m) => m[1]!);
+  return { html, ticked };
+}
+
+async function connectorFor(clientId: string) {
+  const agents = await json(`${ctx.url}/api/v1/agents`, { headers: { cookie: ctx.cookie } });
+  const list = (agents.body as { agents: Array<{ id: string; scopes: string[]; maxBrowsers: number; labels: Record<string, string> }> })
+    .agents;
+  return list.find((a) => a.labels?.client_id === clientId)!;
+}
+
 async function fullGrant() {
   const { verifier, challenge } = pkce();
   const reg = await register();
@@ -635,6 +663,68 @@ describe("oauth for MCP hosts that refuse static bearer tokens", () => {
       const out = await exchange(code, verifier, clientId);
       assert.equal(out.status, 200);
       assert.deepEqual(out.body.scope.split(" ").sort(), ["browser:create", "browser:list:own"]);
+    });
+  });
+
+  // The consent screen is the only place most operators will ever decide this, because it is
+  // the only screen the connect flow puts in front of them. It has to be able to carry the
+  // decision: say what is being handed over, default to the safe answer, and still mean
+  // something on the second connect.
+  describe("profile permissions are decided on the consent screen", () => {
+    const HANDS_OVER_LOGINS = ["seed:use", "seed:write", "browser:lend", "browser:borrow", "browser:tunnel"];
+
+    it("never pre-ticks a scope that hands over logins", async () => {
+      const reg = await register();
+      const clientId = (reg.body as { client_id: string }).client_id;
+      const { ticked } = await consentBoxes(clientId, "mcp:tools");
+      for (const scope of HANDS_OVER_LOGINS) {
+        assert.ok(!ticked.includes(scope), `${scope} must not be granted by one unread click`);
+      }
+      assert.ok(ticked.includes("browser:create"), "a connector still arrives able to drive its own browsers");
+    });
+
+    it("says what each one hands over instead of printing the scope id", async () => {
+      const reg = await register();
+      const clientId = (reg.body as { client_id: string }).client_id;
+      const { html } = await consentBoxes(clientId, "mcp:tools");
+      assert.match(html, /Load saved profiles/);
+      assert.match(html, /Copies every login inside any saved profile/);
+      assert.match(html, /Save and update profiles/);
+    });
+
+    it("shows a scope the client asked for without ticking it", async () => {
+      const reg = await register();
+      const clientId = (reg.body as { client_id: string }).client_id;
+      const { html, ticked } = await consentBoxes(clientId, "mcp:tools seed:use");
+      assert.match(html, /Requested by this client/);
+      assert.ok(!ticked.includes("seed:use"), "asking for it is not the same as being granted it");
+    });
+
+    it("applies a changed selection when the same client reconnects", async () => {
+      const reg = await register();
+      const clientId = (reg.body as { client_id: string }).client_id;
+      await approve({ clientId, challenge: pkce().challenge });
+      assert.ok((await connectorFor(clientId)).scopes.includes("seed:write"));
+
+      await approve({
+        clientId,
+        challenge: pkce().challenge,
+        scopes: AGENT_SCOPES.filter((s) => s !== "seed:write"),
+      });
+      const after = await connectorFor(clientId);
+      assert.ok(!after.scopes.includes("seed:write"), "unticking a box on reconnect has to change the grant");
+      assert.ok(after.scopes.includes("seed:use"), "and must leave the rest of the grant alone");
+    });
+
+    it("pre-fills a reconnect from the grant being edited, not from the request", async () => {
+      const reg = await register();
+      const clientId = (reg.body as { client_id: string }).client_id;
+      await approve({ clientId, challenge: pkce().challenge, scopes: ["browser:create", "browser:list:own", "seed:use"] });
+
+      const { html, ticked } = await consentBoxes(clientId, "mcp:tools");
+      assert.ok(ticked.includes("seed:use"), "a plain re-approve must not silently strip a permission");
+      assert.ok(!ticked.includes("browser:control:own"), "nor silently add one back");
+      assert.match(html, /approving replaces those permissions/);
     });
   });
 

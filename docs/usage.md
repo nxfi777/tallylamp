@@ -79,11 +79,11 @@ Chrome's own toolbar and tabs are drawn in the viewer.
 
 Persistent browsers keep installed extensions and their settings. Disable
 extensions to skip loading them on the next start; that does not uninstall them.
-A copied profile still needs the Extensions switch turned on for the new browser.
 
-Set `TALLYLAMP_EXTENSIONS_DEFAULT=1` to start every new browser with extension
-support on, copies included. Existing browsers keep their saved choice, and
-turning the Extensions switch off still wins. It installs nothing.
+New browsers start with extension support on, copies included, on any host that
+can run Full browser. Set `TALLYLAMP_EXTENSIONS_DEFAULT=0` to start them with it
+off instead. Existing browsers keep their saved choice, and turning the
+Extensions switch off still wins. It installs nothing.
 
 **Allow agent control** is a second permission, for the owning agent only.
 Borrowed browsers do not get it. Copies do not inherit it. New agent-owned
@@ -153,8 +153,13 @@ scopes such as `browser:create` and `browser:list:own`.
 Five scopes require an explicit grant: `seed:use`, `seed:write`, `browser:lend`,
 `browser:borrow`, and `browser:tunnel`. They allow access to copied logins,
 shared profile updates, another agent's browser, or a private network address.
-Use **Agents → Profile permissions** to grant profile access, or set scopes
-with `PATCH /api/v1/agents/:id`.
+Use **Agents → Profile permissions** for the first two and **Agents → Lending**
+for the next two, or set scopes with `PATCH /api/v1/agents/:id`.
+
+`browser:borrow` and `browser:lend` cover lending *between agents*. Neither is
+needed for an agent to ask **you** for a browser you own: that request appears in
+the panel on **Browsers** and your approval is the whole permission. See
+[asking the administrator](architecture.md#asking-the-administrator).
 
 Agents create browsers through `tallylamp_create_browser` or
 `POST /api/v1/browsers`. Source, project, and purpose metadata are optional.
@@ -165,8 +170,10 @@ if its metadata claims `source: human`.
 MCP `clientInfo` is stored alongside the authenticated principal as a reported
 client name. If you want to prepare an account before an agent uses it, you can
 create a browser in the dashboard, sign into sites, stop it, and let the agent
-use that profile later. See [browser lending](architecture.md#lending-a-browser-between-agents)
-for the separate rules for handing a browser between agents.
+use that profile later. See
+[lending and granting access](architecture.md#lending-and-granting-access-to-a-browser)
+for the separate rules for handing a browser to an agent, and for the read-only
+access level that lets one see pages without acting on them.
 
 ## Browser details and identity
 
@@ -249,10 +256,30 @@ Their next Save creates a new profile rather than overwriting an older one.
 Only an administrator can delete shared profiles. If disk cleanup fails, the
 profile becomes unavailable immediately and cleanup retries in the background.
 
+### Correct a saved profile's recorded sites
+
+A saved profile carries the site records its source browser had when it was
+snapshotted. Detection misses sites, so that list can be incomplete or out of
+date, and agents read it when choosing a profile. **Edit** beside the badges on
+its **Saved profiles** row opens the list: record a site detection missed, fix a
+service name, mark one as needing sign-in, or drop one that was wrong. Each
+change applies on its own; there is no separate save.
+
+This edits the inventory only. It copies no cookies, changes no stored login,
+and leaves the snapshot on disk and any existing browsers untouched. Because a
+snapshot cannot be inspected the way a live page can, a site recorded by hand
+carries no confirmation timestamp, and editing an entry that has one keeps the
+time the source browser actually saw it. New browsers still inherit every site
+as not yet checked. Administrators only: `seed:write` lets an agent publish a
+browser it owns, not relabel what a shared profile claims to reach.
+
 The compatibility API calls profiles seeds: `POST /api/v1/seeds` creates one,
 and `PUT /api/v1/seeds/:id` updates it. Both accept `browserId`, `name`, and optional
 `metadata`. Omitting metadata preserves it on updates; new profiles copy the
-source browser's metadata.
+source browser's metadata. `POST /api/v1/seeds/:id/sites` records or
+amends one site in the inventory and `DELETE /api/v1/seeds/:id/sites` drops the
+one named by `body.origin`; neither touches the snapshot, and both are
+administrator-only.
 
 ### Save and update through MCP
 

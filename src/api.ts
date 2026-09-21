@@ -305,6 +305,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
   api.post("/api/v1/browsers/:id/sites", (req, res) => {
     const row = browsers.row(req.params.id);
     browsers.assertAccess(req.principal!, row, "control");
+    browsers.assertNotBorrowed(req.principal!, row, "recording a signed-in site");
     rateLimit(`site-report:${req.principal!.id}`, 120, 60);
     const site = reportSiteAccess(
       row.id,
@@ -317,6 +318,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
   api.delete("/api/v1/browsers/:id/sites/:siteId", (req, res) => {
     const row = browsers.row(req.params.id);
     browsers.assertAccess(req.principal!, row, "control");
+    browsers.assertNotBorrowed(req.principal!, row, "removing a signed-in site");
     if (!removeSiteAccess(row.id, req.params.siteId, req.principal!)) throw Err.notFound("signed-in site not found");
     res.status(204).end();
   });
@@ -344,6 +346,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     asyncRoute(async (req, res) => {
       const row = browsers.row(req.params.id);
       browsers.assertAccess(req.principal!, row, "control");
+      browsers.assertNotBorrowed(req.principal!, row, "stopping a browser");
       await browsers.stop(row.id);
       res.json({ browser: browsers.publicView(browsers.row(row.id)) });
     }),
@@ -354,6 +357,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     asyncRoute(async (req, res) => {
       const row = browsers.row(req.params.id);
       browsers.assertAccess(req.principal!, row, "control");
+      browsers.assertNotBorrowed(req.principal!, row, "restarting a browser");
       await browsers.restart(row.id);
       res.json({ browser: browsers.publicView(browsers.row(row.id)) });
     }),
@@ -396,6 +400,11 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     const row = answerRequest(browsers, req.principal!, {
       requestId: req.params.id,
       decision,
+      // The three things an operator decides at the moment of approving: how much, for how
+      // long, and whether it lapses on its own at all.
+      access: req.body?.access === "read" ? "read" : req.body?.access === "control" ? "control" : undefined,
+      durationSec: typeof req.body?.durationSec === "number" ? req.body.durationSec : undefined,
+      untilRevoked: req.body?.untilRevoked === true,
       etaSec: typeof req.body?.etaSec === "number" ? req.body.etaSec : undefined,
       reason: typeof req.body?.reason === "string" ? req.body.reason : undefined,
     });
@@ -556,6 +565,24 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
       { seedId: req.params.id, metadata: req.body?.metadata });
     res.json({ seed });
   }));
+
+  // Correcting the manifest, not the snapshot: no browser is involved and nothing on disk moves.
+  api.post("/api/v1/seeds/:id/sites", requireAdmin, (req, res) => {
+    rateLimit(`seed-site:${req.principal!.id}`, 120, 60);
+    const site = browsers.editSeedSite(
+      req.params.id,
+      { origin: req.body?.origin, name: req.body?.name, state: req.body?.state },
+      req.principal!,
+    );
+    res.status(201).json({ site, seed: browsers.listSeeds().find((seed) => seed.id === req.params.id) });
+  });
+
+  // The origin is the key here — seed_site_access has no row id — and it is a URL, which is why
+  // it travels in the body rather than a path segment, as the seed delete's confirmName does.
+  api.delete("/api/v1/seeds/:id/sites", requireAdmin, (req, res) => {
+    if (!browsers.removeSeedSite(req.params.id, req.body?.origin, req.principal!)) throw Err.notFound("recorded site not found");
+    res.status(204).end();
+  });
 
   api.delete("/api/v1/seeds/:id", requireAdmin, asyncRoute(async (req, res) => {
     res.json(await browsers.deleteSeed(req.params.id, req.body?.confirmName, req.principal!));

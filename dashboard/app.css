@@ -710,6 +710,25 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
    of the two. */
 .ask .btn.deny { color: var(--muted); border-color: transparent; }
 .ask .btn.deny:hover, .ask .btn.deny:focus-visible { color: var(--text); border-color: var(--line); }
+/* The duration sits with the buttons rather than above them: it is part of the same decision,
+   and an operator who never looks at it has still answered the question, because it carries a
+   default chosen for the level being asked for. */
+/* Sits on the nav link, not in a corner of the page: it has to be visible from the two views
+   that are not the inbox, which is the only reason it exists. */
+.nav-badge {
+  display: inline-block; margin-left: 0.4rem; padding: 0 0.38rem;
+  min-width: 1.15rem; border-radius: 999px; text-align: center;
+  font-size: 0.72rem; font-weight: 600; line-height: 1.35rem;
+  background: var(--human); color: #fff;
+}
+
+.ask-actions { gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.ask-actions select { font-size: 0.85rem; padding: 0.3rem 0.4rem; min-height: 32px; }
+
+/* A grant is two facts -- who, and how much for how long. Stacked, because reading them as one
+   run-on line is how "read only" gets skimmed as "access". */
+.lending .loans .loan-who { display: grid; gap: 0.1rem; min-width: 0; }
+.lending .loans .loan-who .sub { font-size: 0.78rem; }
 
 .lending .loans, .tunnels .loans { list-style: none; margin: 0.4rem 0 0.7rem; padding: 0; font-size: 0.85rem; }
 .lending .loans li, .tunnels .loans li {
@@ -727,6 +746,14 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
 .site-main .sub { font-size: 0.75rem; }
 .site-actions { flex: none; }
 .site-add { margin: 0.45rem 0; }
+/* Saved-profile rows: pills and their Edit button read as one cell, and the pills' card margin
+   is wrong inside a table row. */
+.seed-sites { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+.seed-sites .site-pills { margin-top: 0; }
+/* A profile with a dozen sign-ins must not push Done off the bottom of the dialog. */
+.modal-box .site-list { max-height: 44vh; overflow-y: auto; }
+.modal-box .seed-site-add { border-top: 1px solid var(--line); padding-top: 0.2rem; }
+.modal-box .seed-site-add button { align-self: flex-start; margin-top: 0.7rem; }
 @media (pointer: coarse) {
   .switch { width: 48px; height: 28px; }
   .switch::after { width: 20px; height: 20px; }
@@ -828,3 +855,21 @@ body.busy::before {
 .agent-pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; max-height: 22rem; overflow-y: auto; }
 .agent-pick input:disabled + label { color: var(--muted); }
 .linked-access .row { margin-top: 0.7rem; }
+
+/* The Agents page groups by liveness rather than listing everything at one weight. The token
+   policy that used to sit above the table folds away here too: it is a rule you read once, and
+   it was occupying the space the table needed to answer "what can reach my browsers right now?". */
+.main > .setting-more.plain { margin-bottom: 1rem; }
+/* Revoked agents are history, not inventory. Behind a rule and a count so the page never
+   pretends they are gone, and muted once opened so a dead credential cannot read with the same
+   weight as a live one -- .setting-more already sets the muted colour these rows inherit. */
+.main > .setting-more.revoked { margin: 1.6rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--line); }
+.setting-more summary { font-weight: 500; }
+/* Name, id, last seen and two buttons do not fit 375px, and the old fallback was to crush every
+   cell until "connector · chatgpt.com" wrapped over three lines. Scroll the table instead. The
+   wrapper is focusable and labelled on purpose: a pane you can only reach by dragging is a pane
+   a keyboard cannot reach. */
+.table-wrap { overflow-x: auto; }
+.table-wrap .table { min-width: 620px; }
+.table-wrap:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.main > .setting-more.revoked .table-wrap { margin-top: 0.6rem; }

@@ -214,18 +214,19 @@ administrators and extensions you trust.
 
 To install an extension:
 
-1. Stop the browser. Turn on the **Extensions** switch.
-2. Start it, take control, and open **Full browser**. Chrome is fitted to the
-   display for you; **Refit Chrome window** puts it back if a dialog moves it.
-3. Open the Chrome Web Store in Chrome's address bar and install it there.
+1. Take control and open **Full browser**. Chrome is fitted to the display for
+   you; **Refit Chrome window** puts it back if a dialog moves it. New browsers
+   already have the **Extensions** switch on; if it was turned off, stop the
+   browser, turn it back on, and start it again.
+2. Open the Chrome Web Store in Chrome's address bar and install it there.
    Permission dialogs show in this view.
-4. Use the toolbar for popups, or **Manage extensions** for
+3. Use the toolbar for popups, or **Manage extensions** for
    `chrome://extensions/`. Switch back to **Tab** for ordinary work.
 
 Persistent browsers keep installed extensions and their settings. **Disable
 extensions** skips loading them on the next start; it does not uninstall them.
-A copied profile still needs the **Extensions** switch turned on for the new browser. There is
-no upload API.
+A copied profile brings its extensions with it, and new browsers load them by
+default. There is no upload API.
 
 Agents cannot turn extension support on. To let the owning agent use popups,
 turn on **Allow agent control**. That is a second permission. It gives the

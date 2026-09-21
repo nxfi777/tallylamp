@@ -99,6 +99,18 @@ export const config = {
   get lendRequestTtlMs() { return int("TALLYLAMP_LEND_REQUEST_TTL_SEC", 600) * 1000; },
   /** What a waiting requester is told to sleep for before asking again. */
   get lendPollSec() { return int("TALLYLAMP_LEND_POLL_SEC", 30); },
+  /**
+   * Asking costs an agent nothing and grants it nothing, so what bounds it is not a scope the
+   * operator has to add first -- that would make the feature unreachable for exactly the agent
+   * that needs to ask -- but a rate. These two are the whole defence against a daemon in a
+   * retry loop turning the operator's inbox into a denial of service.
+   */
+  get lendRequestsPerMin() { return int("TALLYLAMP_LEND_REQUESTS_PER_MIN", 2); },
+  get lendRequestBurst() { return int("TALLYLAMP_LEND_REQUEST_BURST", 5); },
+  /** How many requests one agent may have outstanding across the whole fleet at once. */
+  get lendMaxPendingPerAgent() { return int("TALLYLAMP_LEND_MAX_PENDING", 3); },
+  /** The longest fixed grant an administrator can hand out from the dashboard, in seconds. */
+  get lendMaxGrantSec() { return int("TALLYLAMP_LEND_MAX_GRANT_SEC", 30 * 86400); },
   /** How long a loopback tunnel lives before it expires itself. */
   get tunnelTtlMs() { return int("TALLYLAMP_TUNNEL_TTL_SEC", 3600) * 1000; },
   get tunnelMaxTtlMs() { return int("TALLYLAMP_TUNNEL_MAX_TTL_SEC", 12 * 3600) * 1000; },
@@ -145,7 +157,7 @@ export const config = {
   /** Creation-time policy only; saved per-browser revocations always win. */
   get agentDesktopDefault() { return bool("TALLYLAMP_AGENT_DESKTOP_DEFAULT", true); },
   /** Creation-time policy only, like agentDesktopDefault. Needs fullBrowser to mean anything. */
-  get extensionsDefault() { return bool("TALLYLAMP_EXTENSIONS_DEFAULT", false) && this.fullBrowser; },
+  get extensionsDefault() { return bool("TALLYLAMP_EXTENSIONS_DEFAULT", true) && this.fullBrowser; },
   get fakeChrome() { return bool("TALLYLAMP_FAKE_CHROME", false); },
   get sessionTtlMs() { return int("TALLYLAMP_SESSION_TTL_SEC", 86400) * 1000; },
   get viewerTicketTtlMs() { return int("TALLYLAMP_VIEWER_TICKET_TTL_SEC", 60) * 1000; },

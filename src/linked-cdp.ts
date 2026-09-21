@@ -113,6 +113,14 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
   // each session that asks; one shared attachment cannot, so the replay is done from here.
   const children = new Map<number, Map<string, ChildAttach>>();
   const autoAttached = new Set<number>();
+  // Domains a client switched on, per tab. The extension holds ONE debugger attachment per tab
+  // however many clients are looking at it, so nothing Chrome does when a client's socket dies
+  // turns these off again: the attachment is still there and the domain is still enabled. Left
+  // alone, a tab whose agent finished an hour ago keeps pushing Network and Page events up the
+  // link for nobody, and a left-behind Fetch.enable holds every request in that tab waiting on
+  // a handler that has gone. Undone when the LAST client leaves, never before -- while one is
+  // still attached the events are its events.
+  const enabled = new Map<number, Set<string>>();
   let closed = false;
   let wsUrl = "";
 
@@ -126,6 +134,18 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
     canAccessOpener: false,
     browserContextId: tab.info.browserContextId,
   });
+
+  /** Remember what a client turns on, so the last one out can turn it off again. */
+  const note = (tabId: number, method: string): void => {
+    const [domain, verb] = method.split(".");
+    if (verb === "enable") {
+      let on = enabled.get(tabId);
+      if (!on) enabled.set(tabId, (on = new Set()));
+      on.add(domain);
+    } else if (verb === "disable") {
+      enabled.get(tabId)?.delete(domain);
+    }
+  };
 
   const byTarget = (targetId: unknown): LinkedTab | undefined => {
     for (const tab of peer.tabs().values()) {
@@ -179,6 +199,7 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
     for (const [sid, t] of childTab) if (t === tabId) childTab.delete(sid);
     children.delete(tabId);
     autoAttached.delete(tabId);
+    enabled.delete(tabId);
     for (const f of fronts) {
       // Pages before tabs: a page session hangs off its tab session, and Puppeteer walks the
       // same order when it tears a target down.
@@ -289,7 +310,9 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
     if (msg.method.startsWith("Browser.") || msg.method === "Target.createBrowserContext" || msg.method === "Target.disposeBrowserContext") {
       throw new Refused(`${msg.method} is not available on a linked browser; it is a person's own window. Use emulate to change the viewport.`);
     }
-    return peer.call("cdp", { tabId: tab.tabId, method: msg.method, params: p });
+    const result = await peer.call("cdp", { tabId: tab.tabId, method: msg.method, params: p });
+    note(tab.tabId, msg.method);
+    return result;
   }
 
   function detach(front: Front, sessionId: string): Record<string, never> {
@@ -335,12 +358,33 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
       return {};
     }
     const result = await peer.call("cdp", { tabId: s.tabId, method: msg.method, params: p });
+    note(s.tabId, msg.method);
     if (msg.method === "Target.setAutoAttach") {
       if (p.autoAttach === false) autoAttached.delete(s.tabId);
       else autoAttached.add(s.tabId);
     }
     return result;
   }
+
+  /**
+   * The last client has gone. Put the tabs back the way they were found: turn off every domain
+   * a client turned on, and stop auto-attaching to new children. Best effort and unawaited --
+   * the usual reason a socket closed is that the far end is already gone, and anything that
+   * fails here is something the next client switches on again for itself. Stopping the browser
+   * does not come through here: that hands every tab back, and the domains go with the
+   * debugger attachment.
+   */
+  const quiesce = (): void => {
+    if (closed || fronts.size) return;
+    const send = (tabId: number, method: string, params: Record<string, unknown> = {}) =>
+      void peer.call("cdp", { tabId, method, params }).catch(() => undefined);
+    for (const [tabId, domains] of enabled) for (const domain of domains) send(tabId, `${domain}.disable`);
+    enabled.clear();
+    for (const tabId of autoAttached) {
+      send(tabId, "Target.setAutoAttach", { autoAttach: false, waitForDebuggerOnStart: false, flatten: true });
+    }
+    autoAttached.clear();
+  };
 
   const server = http.createServer((req, res) => {
     const json = (body: unknown) => {
@@ -365,8 +409,12 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
     wss.handleUpgrade(req, socket, head, (ws) => {
       const front = new Front(ws);
       fronts.add(front);
-      ws.on("close", () => fronts.delete(front));
-      ws.on("error", () => fronts.delete(front));
+      const gone = () => {
+        fronts.delete(front);
+        quiesce();
+      };
+      ws.on("close", gone);
+      ws.on("error", gone);
       ws.on("message", (raw) => {
         let msg: CdpRequest;
         try {

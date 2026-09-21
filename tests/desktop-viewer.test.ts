@@ -62,7 +62,7 @@ describe("extensions and full-browser authorization", () => {
   const setting = (enabled: unknown, agent = false) => json(`${ctx.url}/api/v1/browsers/${id}/extensions`, {
     method: "PUT", headers: { ...(agent ? { Authorization: `Bearer ${ctx.agentToken}` } : { Cookie: ctx.cookie }), "Content-Type": "application/json" }, body: JSON.stringify({ enabled }),
   });
-  it("defaults extensions off, requires admin and a supported host, and validates boolean input", async () => {
+  it("defaults extensions off without Full browser, requires admin and a supported host, and validates boolean input", async () => {
     assert.equal(ctx.browsers.row(id).extensions_enabled, 0);
     assert.equal((await setting(true, true)).status, 403);
     assert.equal((await setting("yes")).status, 400);
@@ -80,10 +80,11 @@ describe("extensions and full-browser authorization", () => {
       assert.equal((await setting(true)).status, 200);
       ctx.browsers.releaseControl(id);
       const admin = { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] } as const;
-      assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).extensions_enabled, 0);
-      process.env.TALLYLAMP_EXTENSIONS_DEFAULT = "1";
       const defaulted = ctx.browsers.create({ principal: admin, via: "dashboard" });
-      assert.equal(defaulted.extensions_enabled, 1);
+      assert.equal(defaulted.extensions_enabled, 1, "extension support is on by default on a Full browser host");
+      process.env.TALLYLAMP_EXTENSIONS_DEFAULT = "0";
+      assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).extensions_enabled, 0, "the env flag still turns the default off");
+      delete process.env.TALLYLAMP_EXTENSIONS_DEFAULT;
       process.env.TALLYLAMP_FAKE_CHROME = "1";
       assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).extensions_enabled, 0, "no default on a host that cannot show Full browser");
       process.env.TALLYLAMP_FAKE_CHROME = "0";

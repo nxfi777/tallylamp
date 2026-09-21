@@ -241,11 +241,17 @@ The default is written into the browser record at creation; runtime checks alway
 that saved value. Changing the default does not change existing browsers, and a saved
 revocation is never overridden by it. It does not enable or install extensions.
 
-`TALLYLAMP_EXTENSIONS_DEFAULT=1` is the same kind of creation-time policy for extension
+`TALLYLAMP_EXTENSIONS_DEFAULT` is the same kind of creation-time policy for extension
 support, and applies to every new managed browser rather than only agent-owned ones. It
-removes the per-browser confirmation that extensions can read signed-in pages, so set it
-only on a host where the administrator installs every extension themselves. It installs
+defaults to on, so a new browser carries no per-browser confirmation that extensions can
+read signed-in pages; set `TALLYLAMP_EXTENSIONS_DEFAULT=0` and grant support per browser
+on a host where the administrator does not install every extension themselves. It installs
 nothing, and does nothing on a host without Full browser.
+
+Both defaults are on, so a new agent-owned browser has native Chrome UI access and
+extension loading at once, and its owning agent can install an extension through
+`chrome://extensions` with no human step in between. Turn one of the two off on a host
+where that matters.
 
 This permits full native UI access, including host-file dialogs and Chrome settings.
 It is not a sandbox limited to extension popups. Treat this as granting the agent the
@@ -344,6 +350,41 @@ Chrome treats `http://127.0.0.1:PORT` as potentially trustworthy, so a page serv
 there can register a service worker and write storage. Those changes survive the
 tunnel's closure, and a later binding to the same authority inherits them.
 Delete the browser if a tunnel served content you do not trust.
+
+## Granting an agent access to your browser
+
+An agent can ask for a managed browser you own. The request reaches you in the
+dashboard, on **Browsers**, with a count on the nav link; it never reaches you as
+a notification, and nothing is granted while it waits. Filing one requires no
+scope, because asking is not access, and requiring one would mean an agent had to
+ask you out of band for permission to ask you. What bounds it is a rate and a cap
+per agent, both non-retryable when hit, so a daemon in a retry loop cannot flood
+the panel.
+
+Approve at `read` and the agent can see every page in that browser, including
+anything you are signed in to, and can do nothing else: navigating, clicking,
+typing, `evaluate_script`, `select_page`, the desktop tools and the tunnel tools
+are all refused. Approve at `control` and it can act as you on those sites.
+A request for `control` can be approved at `read` instead. An answer can never
+grant more than was asked for.
+
+Neither level permits deleting the browser, stopping it, saving or cloning its
+profile, or changing its proxy, name, metadata or signed-in-site records. A
+`read` grant does not take the control lease and does not bring any tab to the
+front, so an agent reading a page cannot be mistaken for one driving it and
+cannot move the tab you are looking at.
+
+The idle auto-grant never applies to a browser you own. A browser its *owning
+agent* marked lendable is handed over after
+`TALLYLAMP_LEND_AUTO_GRANT_IDLE_SEC`, because an agent cannot be woken to answer;
+you can be, so your browsers are handed over only when you say so.
+
+Grants are rows, not sessions. Every browser page lists who has access, at what
+level and until when, with **Revoke**. A grant with no expiry lasts until you
+revoke it; revocation and expiry are re-checked on every tool call, so either one
+lands on the next call of a session that is already connected. Requests, answers,
+revocations and each tool call made under a grant are audited against the
+requesting agent and the grant, not against you.
 
 ## Linked browsers
 

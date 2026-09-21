@@ -132,6 +132,9 @@ describe("agent native access", () => {
     const existing = ctx.browsers.create({ principal: policy.agent, via: "mcp" });
     assert.equal(existing.agent_desktop_enabled, 0);
     process.env.TALLYLAMP_AGENT_DESKTOP_DEFAULT = "1";
+    // Pin extensions off: the claim under test is that granting native access does not
+    // itself enable them, which the on-by-default policy would otherwise mask.
+    process.env.TALLYLAMP_EXTENSIONS_DEFAULT = "0";
     try {
       const allowed = ctx.browsers.create({ principal: policy.agent, via: "mcp" });
       assert.equal(allowed.agent_desktop_enabled, 1);
@@ -147,7 +150,7 @@ describe("agent native access", () => {
       delete process.env.TALLYLAMP_AGENT_DESKTOP_DEFAULT;
       assert.equal(ctx.browsers.create({ principal: policy.agent, via: "mcp" }).agent_desktop_enabled, 1, "unset means on");
       assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).agent_desktop_enabled, 0, "never for a browser no agent owns");
-    } finally { process.env.TALLYLAMP_AGENT_DESKTOP_DEFAULT = "0"; }
+    } finally { process.env.TALLYLAMP_AGENT_DESKTOP_DEFAULT = "0"; delete process.env.TALLYLAMP_EXTENSIONS_DEFAULT; }
   });
   it("tells agents where to request permission and to wait instead of bypassing it", () => {
     for (const name of ["tallylamp_desktop_screenshot", "tallylamp_desktop_action"]) {

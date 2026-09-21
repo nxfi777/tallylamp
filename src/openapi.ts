@@ -105,6 +105,10 @@ export const openApiSpec = {
       put: { summary: "Update a saved profile from a browser. Agents need seed:write, ownership, and a matching linked profile.", responses: { "200": { description: "updated" }, "403": { description: "not authorized" } } },
       delete: { summary: "Delete a saved snapshot, not its existing browsers. Administrator only; body.confirmName must match the current name.", responses: { "200": { description: "deleted; cleanupPending reports any pending disk cleanup" }, "400": { description: "confirmation missing or stale" }, "403": { description: "not authorized" }, "404": { description: "not found" } } },
     },
+    "/seeds/{id}/sites": {
+      post: { summary: "Record or amend one site in a saved profile's inventory, without republishing the snapshot. Administrator only. Copies no cookies and invents no confirmation timestamp; clones still inherit it as expected.", responses: { "201": { description: "recorded" }, "400": { description: "origin missing or not http(s)" }, "403": { description: "not authorized" }, "404": { description: "saved profile not found" }, "409": { description: "the profile is being saved; retry" } } },
+      delete: { summary: "Drop one site from a saved profile's inventory; body.origin identifies it. Administrator only. Existing browsers and stored logins are unchanged.", responses: { "204": { description: "removed" }, "403": { description: "not authorized" }, "404": { description: "saved profile or site not found" } } },
+    },
     "/audit": { get: { summary: "Recent audit events", responses: { "200": { description: "ok" } } } },
     "/events": { get: { summary: "SSE control-plane events", responses: { "200": { description: "ok" } } } },
   },

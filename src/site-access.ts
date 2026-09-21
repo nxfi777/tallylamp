@@ -186,12 +186,15 @@ export function restoreSiteAccess(seedId: string, browserId: string): void {
     .run(browserId, seedId, at, seedId, seedId);
 }
 
-export function listSeedSiteAccess(seedId: string): Array<{
+/** A saved profile's manifest carries no reporter: the snapshot, not an agent, is the subject. */
+export type SeedSiteAccessView = {
   origin: string;
   name: string;
   state: SiteAccessState;
   lastConfirmedAt: string | null;
-}> {
+};
+
+export function listSeedSiteAccess(seedId: string): SeedSiteAccessView[] {
   return (
     getDb()
       .prepare(`SELECT origin, name, source_state, last_confirmed_at FROM seed_site_access WHERE seed_id = ? ORDER BY name COLLATE NOCASE`)
@@ -202,4 +205,65 @@ export function listSeedSiteAccess(seedId: string): Array<{
     state: row.source_state,
     lastConfirmedAt: row.last_confirmed_at,
   }));
+}
+
+/**
+ * Correct a saved profile's manifest by hand.
+ *
+ * Detection runs inside a browser; a saved profile is a directory. Whatever the source missed
+ * at snapshot time stayed missed for every copy made afterwards, and the only remedy was to
+ * publish a whole new snapshot over the profile to fix one name.
+ *
+ * A snapshot cannot be observed the way a live page can, so nothing here invents a
+ * confirmation: a hand-written entry carries no timestamp at all, and editing an existing one
+ * keeps the observation the snapshot actually came with. restoreSiteAccess still downgrades
+ * everything but needs_sign_in to "expected", so no copy inherits a claim as fact.
+ */
+export function setSeedSiteAccess(
+  seedId: string,
+  input: { origin: unknown; name?: unknown; state?: unknown },
+  principal: Principal,
+): SeedSiteAccessView {
+  const origin = normalizeSiteOrigin(input.origin);
+  const name = cleanName(input.name, origin);
+  const state = cleanState(input.state);
+  const existing = getDb()
+    .prepare(`SELECT last_confirmed_at FROM seed_site_access WHERE seed_id = ? AND origin = ?`)
+    .get(seedId, origin) as { last_confirmed_at: string | null } | undefined;
+  const lastConfirmedAt = existing?.last_confirmed_at ?? null;
+  getDb()
+    .prepare(
+      `INSERT INTO seed_site_access(seed_id, origin, name, source_state, last_confirmed_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(seed_id, origin) DO UPDATE SET
+         name = excluded.name,
+         source_state = excluded.source_state`,
+    )
+    .run(seedId, origin, name, state, lastConfirmedAt);
+  audit({
+    actorType: principal.type,
+    actorId: principal.id,
+    action: existing ? "seed.site.updated" : "seed.site.recorded",
+    targetType: "seed",
+    targetId: seedId,
+    detail: { origin, state },
+  });
+  hub.emitEvent("profile.sites.changed", { id: seedId, origin, name, state });
+  return { origin, name, state, lastConfirmedAt };
+}
+
+export function removeSeedSiteAccess(seedId: string, origin: unknown, principal: Principal): boolean {
+  const canonical = normalizeSiteOrigin(origin);
+  const removed = getDb().prepare(`DELETE FROM seed_site_access WHERE seed_id = ? AND origin = ?`).run(seedId, canonical);
+  if (!Number(removed.changes ?? 0)) return false;
+  audit({
+    actorType: principal.type,
+    actorId: principal.id,
+    action: "seed.site.removed",
+    targetType: "seed",
+    targetId: seedId,
+    detail: { origin: canonical },
+  });
+  hub.emitEvent("profile.sites.changed", { id: seedId, origin: canonical, removed: true });
+  return true;
 }

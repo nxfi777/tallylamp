@@ -23,6 +23,18 @@ export const Err = {
   alreadyControlled: (m = "browser already has a controller") => new AppError("already_controlled", m, 409),
   credentialRevoked: (m = "credential revoked") => new AppError("credential_revoked", m, 401),
   rateLimited: (m = "rate limited") => new AppError("rate_limited", m, 429, true),
+  /**
+   * Asking for a browser too often. Deliberately NOT retryable: the whole point is to stop a
+   * daemon that cannot sleep from turning its retry loop into the operator's inbox, and a
+   * retryable flag is an invitation to do exactly that. The message carries when to come back.
+   */
+  lendThrottled: (m: string) => new AppError("lend_request_throttled", m, 429, false),
+  /**
+   * The caller holds a grant, but at a level below what this tool needs. Not retryable: no
+   * amount of waiting turns a read grant into a control grant -- only a new request does, and
+   * the message says so.
+   */
+  grantLevel: (m: string) => new AppError("grant_level_insufficient", m, 403, false),
   conflict: (m: string) => new AppError("conflict", m, 409),
   invalid: (m: string) => new AppError("invalid_request", m, 400),
 };

@@ -14,6 +14,8 @@ import { resetRateLimits } from "../src/rate-limit.js";
 
 export type TestCtx = {
   url: string;
+  /** Where this server's sqlite file lives, so a restart test can point a second one at it. */
+  dataDir: string;
   /** The Express app, so a test can register a route of its own after startup. */
   app: ReturnType<typeof createApp>;
   adminSecret: string;
@@ -24,8 +26,14 @@ export type TestCtx = {
   agentToken: string;
 };
 
-export async function startTestServer(opts?: { adminSecret?: string }): Promise<TestCtx> {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "tallylamp-test-"));
+export async function startTestServer(opts?: {
+  adminSecret?: string;
+  /** Reuse an existing data directory, which is how a test restarts "the same" service. */
+  dataDir?: string;
+  /** Leave the data directory on disk at close, so a second server can be pointed at it. */
+  keepDataDir?: boolean;
+}): Promise<TestCtx> {
+  const dir = opts?.dataDir ?? mkdtempSync(path.join(os.tmpdir(), "tallylamp-test-"));
   process.env.TALLYLAMP_DATA_DIR = dir;
   process.env.ADMIN_SECRET = opts?.adminSecret ?? "test-admin-secret-value";
   process.env.TALLYLAMP_FAKE_CHROME = "1";
@@ -59,6 +67,7 @@ export async function startTestServer(opts?: { adminSecret?: string }): Promise<
 
   return {
     url,
+    dataDir: dir,
     app,
     adminSecret: process.env.ADMIN_SECRET!,
     browsers,
@@ -76,7 +85,7 @@ export async function startTestServer(opts?: { adminSecret?: string }): Promise<
         server.close(() => resolve());
         setTimeout(resolve, 1000);
       });
-      rmSync(dir, { recursive: true, force: true });
+      if (!opts?.keepDataDir) rmSync(dir, { recursive: true, force: true });
     },
   };
 }

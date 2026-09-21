@@ -74,9 +74,10 @@ you have control.
 
 ## Chrome extensions
 
-Tab view is the page. Full browser is Chrome's toolbar and dialogs. Stop the
-browser, turn on the Extensions switch, take control, then switch to Full browser
-to install from the Chrome Web Store.
+Tab view is the page. Full browser is Chrome's toolbar and dialogs. Take control,
+then switch to Full browser to install from the Chrome Web Store. New browsers
+have the Extensions switch on already; if it was turned off, stop the browser and
+turn it back on first.
 
 Chrome's own UI can open files on the host and change browser settings. An
 installed extension can read signed-in pages. Use this only with administrators
