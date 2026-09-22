@@ -24,3 +24,14 @@ No schema change. Existing agents and connectors keep the cap stored on them.
 To remove one, reconnect the connector and enter `0` on the consent page, or send
 `PATCH /api/v1/agents/:id` with `{"maxBrowsers": 0}`. A deployment that sets
 `TALLYLAMP_MAX_BROWSERS` keeps that cap until you delete the variable.
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35707777437)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.8.1` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:81570764653561c9b5b4eb875d1f1c3e6a65c0d834b0b9960ee388c992616c5f
+```
