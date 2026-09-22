@@ -708,6 +708,40 @@ function matches(b, q) {
   return blob.includes(q.toLowerCase());
 }
 
+// ---------------------------------------------------------------- card thumbnails
+
+/**
+ * The thumbnail already on screen for each running browser, so a repaint can carry it across
+ * instead of asking for a new one. Every SSE event repaints every card, and a card that made a
+ * fresh <img> each time had the server screenshot every running browser whenever anything about
+ * any browser changed -- for a linked browser, a screenshot of its owner's own tab, taken on
+ * their laptop. A browser gets a new picture when it has moved on (page, title, activity) and
+ * otherwise on a slow clock, and only while somebody is looking at this page.
+ */
+const thumbs = new Map();
+const THUMB_REFRESH_MS = 20000;
+let thumbTimer = 0;
+
+function thumbnail(b) {
+  const key = `${b.url}\n${b.title}\n${b.lastActivityAt}`;
+  const kept = thumbs.get(b.id);
+  if (kept && kept.key === key) return kept.img;
+  const img = h("img", { alt: "", loading: "lazy", decoding: "async" });
+  img.src = `/api/v1/browsers/${b.id}/thumbnail?t=${Date.now()}`;
+  thumbs.set(b.id, { key, img });
+  if (!thumbTimer) {
+    thumbTimer = setInterval(() => {
+      for (const [id, t] of thumbs) {
+        // Its card is gone: the browser stopped, was filtered out, or this is not the home page.
+        if (!t.img.isConnected) { thumbs.delete(id); continue; }
+        // A hidden tab is not somebody looking.
+        if (document.visibilityState === "visible") t.img.src = `/api/v1/browsers/${id}/thumbnail?t=${Date.now()}`;
+      }
+    }, THUMB_REFRESH_MS);
+  }
+  return img;
+}
+
 function card(b) {
   const md = b.metadata || {};
   // create() falls back to metadata.project when no name is given (src/browsers.ts), so for a
@@ -722,10 +756,10 @@ function card(b) {
       : b.kind === "linked" ? linkedCaption(b)
       : "no live view");
   if (b.status === "running") {
-    const img = h("img", { alt: "", loading: "lazy", decoding: "async" });
-    img.src = `/api/v1/browsers/${b.id}/thumbnail?t=${Date.now()}`;
+    const img = thumbnail(b);
     // A swallowed error left a black rectangle that looked like a browser showing a black page.
-    img.onerror = () => thumb.replaceChildren(badge(b), h("span", {}, "preview failed to load"));
+    // Forgotten as well, so the next repaint tries again rather than carrying the failure over.
+    img.onerror = () => { thumbs.delete(b.id); thumb.replaceChildren(badge(b), h("span", {}, "preview failed to load")); };
     thumb.replaceChildren(img, badge(b));
   }
   return h("article", {

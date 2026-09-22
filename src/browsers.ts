@@ -77,6 +77,8 @@ type SavedProfileResult = { id: string; path: string; resumed: boolean; resumeEr
 
 export class BrowserManager {
   private siteDetector = new SiteDetector();
+  /** What each runtime was last seen showing, so the page poll can tell a change from a repeat. */
+  private lastPage = new WeakMap<ChromeRuntime, string>();
   private runtimes = new Map<string, ChromeRuntime>();
   private windowContents = new Map<string, { width: number; height: number }>();
   private starting = new Map<string, Promise<ChromeRuntime>>();
@@ -975,12 +977,20 @@ export class BrowserManager {
       const pages = await listPages(rt.cdpUrl);
       void this.siteDetector.scan(id, pages, () => this.runtimes.get(id) === rt);
       const page = pages.find((p) => p.type === "page") ?? pages[0];
-      if (page) {
-        getDb()
-          .prepare(`UPDATE browsers SET current_url = ?, current_title = ? WHERE id = ?`)
-          .run(page.url, page.title, id);
-        hub.emitEvent("browser.url_changed", { url: page.url, title: page.title }, id);
-      }
+      if (!page) return;
+      // Polled every four seconds for every running browser, and each emit here has every open
+      // dashboard refetch the fleet and ask for a fresh thumbnail of every running browser --
+      // for a linked browser, a screenshot of its owner's own tab, taken on their laptop. So
+      // only a change is written or announced. Remembered per runtime rather than read back
+      // from the row: a new runtime always reports once, which is what brings the row into
+      // step with it.
+      const showing = `${page.url}\n${page.title}`;
+      if (this.lastPage.get(rt) === showing) return;
+      this.lastPage.set(rt, showing);
+      getDb()
+        .prepare(`UPDATE browsers SET current_url = ?, current_title = ? WHERE id = ?`)
+        .run(page.url, page.title, id);
+      hub.emitEvent("browser.url_changed", { url: page.url, title: page.title }, id);
     } catch {
       /* ignore */
     }

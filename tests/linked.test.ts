@@ -9,6 +9,7 @@ import { resetRateLimits } from "../src/rate-limit.js";
 import { getDb, resetDbForTests } from "../src/db.js";
 import { dbPath } from "../src/config.js";
 import { linkedAccess } from "../src/linked.js";
+import { hub } from "../src/events.js";
 import { candidates, requestBrowser } from "../src/lending.js";
 
 let ctx: TestCtx;
@@ -273,6 +274,33 @@ describe("linked browsers", () => {
 
     await a.cdp.close();
     await b.cdp.close();
+    ext.close();
+    await ext.closed;
+  });
+
+  it("announces the page a shared tab is showing once per change, not once per poll", async () => {
+    const { token, browserId } = await pair();
+    const ext = await FakeExtension.connect(token, [[1, "https://example.test/a", "A"]]);
+    const seen: string[] = [];
+    const onEvent = (ev: { type: string; browserId?: string; payload: { url?: string } }) => {
+      if (ev.type === "browser.url_changed" && ev.browserId === browserId) seen.push(String(ev.payload.url));
+    };
+    hub.on("event", onEvent);
+    try {
+      await ctx.browsers.ensureRunning(browserId);
+      for (let i = 0; i < 3; i++) await ctx.browsers.refreshPageInfo(browserId);
+      await sleep(50);
+      // Starting reports the page once. Polling it again while nothing moved reports nothing.
+      assert.deepEqual(seen, ["https://example.test/a"]);
+      ext.emit({ event: "tab.updated", tabId: 1, url: "https://example.test/b", title: "B" });
+      await sleep(50);
+      for (let i = 0; i < 3; i++) await ctx.browsers.refreshPageInfo(browserId);
+      assert.deepEqual(seen, ["https://example.test/a", "https://example.test/b"]);
+      const row = getDb().prepare("SELECT current_url FROM browsers WHERE id = ?").get(browserId) as { current_url: string };
+      assert.equal(row.current_url, "https://example.test/b");
+    } finally {
+      hub.off("event", onEvent);
+    }
     ext.close();
     await ext.closed;
   });
