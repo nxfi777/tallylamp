@@ -387,7 +387,8 @@ export class BrowserManager {
     const proxy = parseBrowserProxy(input.proxy);
     if (input.principal.type === "agent") {
       const own = this.list({ ownerType: "agent", ownerId: input.principal.id }).length;
-      if (own >= input.principal.maxBrowsers) {
+      // 0 is no per-agent cap.
+      if (input.principal.maxBrowsers > 0 && own >= input.principal.maxBrowsers) {
         throw Err.fleetFull(`agent ${input.principal.name} is at max browsers (${input.principal.maxBrowsers})`);
       }
     }
@@ -550,8 +551,9 @@ export class BrowserManager {
     const kindOf = (b: string) => (getDb().prepare(`SELECT kind FROM browsers WHERE id = ?`).get(b) as { kind: string } | undefined)?.kind;
     const linked = kindOf(id) === "linked";
     for (const other of occupied) if (other !== id && kindOf(other) === "linked") occupied.delete(other);
-    if (!linked && occupied.size >= config.maxBrowsers && !occupied.has(id)) {
-      throw Err.fleetFull(`fleet is full (max ${config.maxBrowsers})`);
+    const cap = config.maxBrowsers;
+    if (cap !== null && !linked && occupied.size >= cap && !occupied.has(id)) {
+      throw Err.fleetFull(`fleet is full (max ${cap})`);
     }
     const p = this.start(id);
     this.starting.set(id, p);

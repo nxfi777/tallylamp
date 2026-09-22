@@ -369,8 +369,9 @@ page in that browser can reach its bound address. Read the
 
 ## Fleet limits and browser realism
 
-The default fleet cap is four browsers. `/api/v1/status` reports the available
-slots. Idle Chrome processes stop while persistent profiles remain; the fleet
+There is no fleet cap by default; `TALLYLAMP_MAX_BROWSERS` sets one, and
+`/api/v1/status` reports it (`null` when uncapped). An agent's cap of `0` means
+no per-agent cap. Idle Chrome processes stop while persistent profiles remain; the fleet
 and idle limits are configured in the [Railway settings](railway.md#browser-and-session-settings).
 
 Tallylamp connects MCP to headed Chrome without Puppeteer stealth plugins.

@@ -604,7 +604,7 @@ function consentPage(opts: {
       <dt>Authorization code will be sent to</dt><dd>${escapeHtml(hostOf(opts.redirectUri))}</dd>
       <dt>Full redirect</dt><dd>${escapeHtml(opts.redirectUri)}</dd>
       <dt><label for="max-browsers">Browser cap</label></dt>
-      <dd><input id="max-browsers" type="number" name="max_browsers" min="1" max="${config.maxBrowsers}" value="${opts.maxBrowsers}"></dd>
+      <dd><input id="max-browsers" type="number" name="max_browsers" min="0"${config.maxBrowsers === null ? "" : ` max="${config.maxBrowsers}"`} value="${opts.maxBrowsers}"> <small>0 means no cap</small></dd>
     </dl>
     <p>Access tokens last ${Math.round(config.oauthAccessTtlSec / 60)} minutes and renew
     silently until you revoke the connector.</p>
@@ -865,7 +865,10 @@ export function mountOauth(app: Express): void {
     }
     const scopes = chosen;
     const capRaw = Number(p.max_browsers);
-    const cap = Number.isFinite(capRaw) ? Math.min(Math.max(Math.trunc(capRaw), 1), config.maxBrowsers) : config.oauthMaxBrowsers;
+    const fleetCap = config.maxBrowsers;
+    const cap = Number.isFinite(capRaw)
+      ? Math.min(Math.max(Math.trunc(capRaw), 0), fleetCap ?? Number.MAX_SAFE_INTEGER)
+      : config.oauthMaxBrowsers;
 
     let agent: Principal;
     try {

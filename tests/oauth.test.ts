@@ -405,7 +405,7 @@ describe("oauth for MCP hosts that refuse static bearer tokens", () => {
       const list = (agents.body as { agents: Array<{ name: string; labels: Record<string, string>; maxBrowsers: number }> }).agents;
       const connector = list.find((a) => a.labels?.kind === "connector");
       assert.ok(connector, "the grant should appear on the Agents page");
-      assert.equal(connector!.maxBrowsers, 2);
+      assert.equal(connector!.maxBrowsers, 0);
       assert.ok(token.access_token);
     });
 

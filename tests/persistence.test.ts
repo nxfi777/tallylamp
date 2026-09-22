@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
 import { existsSync } from "node:fs";
 import { profileDir } from "../src/config.js";
+import { createAgent } from "../src/auth.js";
 
 let ctx: TestCtx;
 
@@ -86,6 +87,30 @@ describe("persistence", () => {
         settled.some((s) => s.status === "rejected" && (s.reason as { code?: string }).code === "fleet_full"),
         "the calls over the cap must fail with fleet_full, not silently launch",
       );
+    } finally {
+      delete process.env.TALLYLAMP_MAX_BROWSERS;
+      for (const r of rows) await ctx.browsers.stop(r.id);
+    }
+  });
+
+  it("has no cap when TALLYLAMP_MAX_BROWSERS is unset or 0, and no per-agent cap at 0", async () => {
+    for (const r of ctx.browsers.list()) if (ctx.browsers.runtime(r.id)) await ctx.browsers.stop(r.id);
+    const { agent } = createAgent({ name: "Uncapped", maxBrowsers: 0 });
+    const rows: Array<{ id: string }> = [];
+    try {
+      for (const value of [undefined, "0"]) {
+        if (value === undefined) delete process.env.TALLYLAMP_MAX_BROWSERS;
+        else process.env.TALLYLAMP_MAX_BROWSERS = value;
+        // Past both old defaults: 4 for the fleet, 2 per agent.
+        for (let n = 0; n < 5; n++) {
+          const row = ctx.browsers.create({ principal: agent, via: "control_api", name: `open-${value ?? "unset"}-${n}`, persistent: false });
+          rows.push(row);
+          await ctx.browsers.ensureRunning(row.id);
+        }
+      }
+      assert.equal(ctx.browsers.runningCount(), 10);
+      const status = await json(`${ctx.url}/api/v1/status`, { headers: { Cookie: ctx.cookie } });
+      assert.equal((status.body as { maxBrowsers: number | null }).maxBrowsers, null);
     } finally {
       delete process.env.TALLYLAMP_MAX_BROWSERS;
       for (const r of rows) await ctx.browsers.stop(r.id);

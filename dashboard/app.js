@@ -2319,10 +2319,10 @@ async function agentsView() {
   const displayName = (a) => (isConnector(a) ? a.name.replace(/\s*\(connector\)$/, "") : a.name);
   const origin = (a) =>
     isConnector(a) ? `connector · ${a.labels.client_host || "unknown host"}` : "agent";
-  // Max was a column of identical 2s -- the server default, printed twelve times. It only says
-  // anything when somebody has changed it for this one agent, so that is when it appears.
+  // Max was a column of identical 2s -- the server default, printed twelve times. The default
+  // is now no cap, so a number only appears when somebody has set one for this agent.
   const limit = (a) =>
-    typeof state.status?.maxBrowsers === "number" && a.maxBrowsers !== state.status.maxBrowsers
+    a.maxBrowsers > 0
       ? ` · ${a.maxBrowsers} browser${a.maxBrowsers === 1 ? "" : "s"} max`
       : "";
 
@@ -2591,7 +2591,7 @@ async function securityView() {
       s.xvfb === undefined ? h("dd", { class: "warn" }, "unknown") : h("dd", {}, s.xvfb ? "virtual (Xvfb)" : "host display"),
       h("dt", {}, "OAuth connectors"),
       s.oauth === undefined ? h("dd", { class: "warn" }, "unknown") : h("dd", {}, s.oauth ? "accepted" : "refused"),
-      h("dt", {}, "Fleet"), h("dd", {}, s.running === undefined ? "unknown" : `${s.running}/${s.maxBrowsers}`),
+      h("dt", {}, "Fleet"), h("dd", {}, s.running === undefined ? "unknown" : s.maxBrowsers ? `${s.running}/${s.maxBrowsers}` : `${s.running} running, no cap`),
     ),
     // The old text here said the viewer "listens on loopback only". It does not: viewer.ts
     // attaches its upgrade handler to the same http server that index.ts binds to config.host,

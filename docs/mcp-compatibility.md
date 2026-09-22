@@ -129,7 +129,7 @@ The consent page uses that session rather than asking for `ADMIN_SECRET` again.
 
 Before approval, it shows the client, the host receiving the authorization code,
 the requested scopes, and the browser cap. Approval creates a connector agent
-named after the client, with `TALLYLAMP_OAUTH_MAX_BROWSERS` set to 2 by default.
+named after the client, with no browser cap unless `TALLYLAMP_OAUTH_MAX_BROWSERS` sets one.
 
 With its default permissions, the connector can create and drive its own browsers.
 Its token cannot access another agent's browsers, the control API, the audit log,

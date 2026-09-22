@@ -12,7 +12,7 @@ The volume keeps browser profiles and the database across redeploys.
    updates disabled.
 2. Attach a volume at `/data`.
 3. Set **`ADMIN_SECRET`** (`openssl rand -hex 32`); the template generates it for you.
-   Do not paste `.env.example`. Start with `TALLYLAMP_MAX_BROWSERS=2`.
+   Do not paste `.env.example`. There is no browser cap unless you set `TALLYLAMP_MAX_BROWSERS`.
 4. Set the healthcheck to `/healthz` with a 120-second timeout.
 5. Generate a public domain on port **8080**.
 6. Open the URL and log in.
@@ -51,7 +51,7 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 
 | Name | Required | Notes |
 | --- | --- | --- |
-| `TALLYLAMP_MAX_BROWSERS` | no | default 4; Chrome is memory-heavy |
+| `TALLYLAMP_MAX_BROWSERS` | no | Unset or `0` = no cap. A positive number caps running Chromes; each is memory-heavy. |
 | `TALLYLAMP_IDLE_TTL_SEC` | no | default 900. Idle *unattached* browsers are stopped (profiles kept). `0` disables reaping. |
 | `TALLYLAMP_ATTACHED_IDLE_TTL_SEC` | no | default 14400. Applies while an MCP session, a watcher or a human controller is attached. |
 | `TALLYLAMP_MCP_SESSION_IDLE_SEC` | no | default 600. Closes an MCP session whose client vanished without `DELETE /mcp`. |
@@ -86,7 +86,7 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 | `TALLYLAMP_OAUTH` | no | Default on. Required for OAuth-only clients. Turning it off stops discovery and new OAuth flows; revoke existing grants on the Agents page. |
 | `TALLYLAMP_OAUTH_ACCESS_TTL_SEC` | no | default 3600 |
 | `TALLYLAMP_OAUTH_REFRESH_TTL_SEC` | no | default 2592000 (30 days) |
-| `TALLYLAMP_OAUTH_MAX_BROWSERS` | no | Default 2. Browser cap for a new connector agent. |
+| `TALLYLAMP_OAUTH_MAX_BROWSERS` | no | Default `0` = no cap. Browser cap for a new connector agent. |
 | `TALLYLAMP_OAUTH_CLIENT_HOSTS` | no | empty = accept any https client-metadata URL. Comma-separated hostnames to restrict it. |
 | `TALLYLAMP_ADMIN_BEARER` | no | default **off**. Turning it on lets `ADMIN_SECRET` be used as a bearer token, which is a brute-forceable master key. |
 | `TALLYLAMP_EXTENSIONS_DEFAULT` | no | default **on**. Every new managed browser starts with extension support enabled, whoever created it. Set `0` to start them with it off. Existing browsers keep their saved choice, and Disable extensions still wins. It installs nothing. Extensions can read signed-in pages and keep running after control returns to an agent. Ignored on a host without Full browser. |
@@ -119,7 +119,6 @@ and a `/healthz` healthcheck with a 120-second timeout. Set these template varia
 | Variable | Template value |
 | --- | --- |
 | `ADMIN_SECRET` | `${{secret(64, "abcdef0123456789")}}` |
-| `TALLYLAMP_MAX_BROWSERS` | `2` (conservative starting cap; app default is 4) |
 | `TALLYLAMP_ALLOW_PRIVATE_NETWORK` | `0` |
 | `TALLYLAMP_SANDBOX` | `auto` |
 

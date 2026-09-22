@@ -78,7 +78,11 @@ export const config = {
   },
   get adminSecret() { return process.env.ADMIN_SECRET ?? ""; },
   get dataDir() { return defaultDataDir(); },
-  get maxBrowsers() { return int("TALLYLAMP_MAX_BROWSERS", 4); },
+  /** Unset or 0 means no fleet cap; any positive number caps running Chromes on this host. */
+  get maxBrowsers(): number | null {
+    const n = int("TALLYLAMP_MAX_BROWSERS", 0);
+    return n > 0 ? n : null;
+  },
   get idleTtlMs() { return int("TALLYLAMP_IDLE_TTL_SEC", 900) * 1000; },
   get attachedIdleTtlMs() { return int("TALLYLAMP_ATTACHED_IDLE_TTL_SEC", 14400) * 1000; },
   /** Deliberately shorter than idleTtlMs so an abandoned session cannot mask an idle browser. */
@@ -144,7 +148,8 @@ export const config = {
   get trustProxy() { return bool("TALLYLAMP_TRUST_PROXY", Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PUBLIC_DOMAIN)); },
   get oauthAccessTtlSec() { return int("TALLYLAMP_OAUTH_ACCESS_TTL_SEC", 3600); },
   get oauthRefreshTtlSec() { return int("TALLYLAMP_OAUTH_REFRESH_TTL_SEC", 30 * 86400); },
-  get oauthMaxBrowsers() { return int("TALLYLAMP_OAUTH_MAX_BROWSERS", 2); },
+  /** Per-connector cap for a new OAuth grant; 0 means none. */
+  get oauthMaxBrowsers() { return Math.max(0, int("TALLYLAMP_OAUTH_MAX_BROWSERS", 0)); },
   get oauthClientHosts() {
     return str("TALLYLAMP_OAUTH_CLIENT_HOSTS", "")
       .split(",")

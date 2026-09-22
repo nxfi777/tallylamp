@@ -189,7 +189,7 @@ export function createAgent(input: {
     .prepare(
       `INSERT INTO agents(id, name, scopes_json, max_browsers, enabled, created_at, labels_json) VALUES (?, ?, ?, ?, 1, ?, ?)`,
     )
-    .run(id, input.name, JSON.stringify(scopes), input.maxBrowsers ?? 2, nowIso(), JSON.stringify(input.labels ?? {}));
+    .run(id, input.name, JSON.stringify(scopes), input.maxBrowsers ?? 0, nowIso(), JSON.stringify(input.labels ?? {}));
   const token = issueCredential("agent", id);
   audit({ actorType: "admin", actorId: "admin", action: "agent.created", targetType: "agent", targetId: id });
   return { agent: getAgent(id)!, token };

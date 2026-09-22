@@ -86,7 +86,7 @@ before changing an existing deployment's image.
 
 Tallylamp infers its public URL from Railway's domain. Leave
 `TALLYLAMP_DATA_DIR` unset in Railway variables and keep `.env.example` for local
-use. The template starts with `TALLYLAMP_MAX_BROWSERS=2`; the app default is four.
+use. There is no browser cap by default; set `TALLYLAMP_MAX_BROWSERS` to add one.
 Budget roughly 1–2 GB per active Chrome, plus the server, and measure your workload.
 
 [Railway setup, variables, and deployment limits](docs/railway.md).

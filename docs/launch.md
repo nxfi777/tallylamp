@@ -80,7 +80,7 @@ a setup time or monthly bill until a fresh install has been measured.
    a published CLI can be a later convenience.
 3. Create a clean Railway test project from the public release image. Apply the settings
    in `docs/railway.md`: one service, `/data` volume, port 8080, healthcheck, a
-   generated secret in the template, and an initial cap of two browsers. Verify
+   generated secret in the template, and no browser cap. Verify
    the IaC configuration with Railway; its checked-in description alone is not
    proof that all template settings are applied.
 4. Create an unpublished template and deploy it into a fresh project. Test a real

@@ -178,9 +178,9 @@ profiles contain every login, so share them only with agents you trust.
 
 Site badges show detected or reported sign-ins, not every saved login.
 
-Chrome needs memory. Start with a cap of two browsers and budget roughly
-1–2 GB per active browser, plus the server. Measure your own workload before
-raising the cap.
+Chrome needs memory. There is no browser cap by default, so budget roughly
+1–2 GB per active browser, plus the server. Set `TALLYLAMP_MAX_BROWSERS` if
+you want a limit.
 
 A volume-backed deployment uses one replica. Redeploys interrupt active browsers;
 their profiles remain, and Chrome starts again on the next use. Railway provides
