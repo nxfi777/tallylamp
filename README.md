@@ -72,7 +72,7 @@ name-derived slug. Editing browser details changes neither. See the
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/tallylamp?referralCode=nxfi777&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
-The template sets up the public `0.8.1` image, a persistent `/data` volume,
+The template sets up the public `0.8.2` image, a persistent `/data` volume,
 healthcheck, HTTPS domain, and a generated dashboard password. It pins the image
 digest and leaves automatic upgrades disabled.
 
@@ -102,7 +102,7 @@ docker run --rm --platform linux/amd64 -p 127.0.0.1:8080:8080 \
   -e ADMIN_SECRET \
   -e TALLYLAMP_PUBLIC_URL=http://127.0.0.1:8080 \
   -v tallylamp-data:/data \
-   ghcr.io/nxfi777/tallylamp:0.8.1
+   ghcr.io/nxfi777/tallylamp:0.8.2
 ```
 
 Open <http://127.0.0.1:8080> and log in with that secret. This command binds to
@@ -216,7 +216,7 @@ stored **unencrypted in SQLite**, so protect `/data` and its backups. See the
 
 **Tab** shows the page. **Full browser** shows Chrome itself: toolbar, popups,
 side panels, and dialogs. Switch it on the browser page. It needs Linux, a
-dedicated Xvfb display, ffmpeg, and xdotool. The published `0.8.1` image
+dedicated Xvfb display, ffmpeg, and xdotool. The published `0.8.2` image
 includes those tools.
 
 Chrome's own UI can open files on the host and change browser settings. An
