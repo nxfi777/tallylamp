@@ -19,6 +19,8 @@ const OUT = process.argv[2] ?? path.join(os.tmpdir(), "tallylamp-linked-e2e"); m
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(...a);
 const pages = http.createServer((req, res) => { res.setHeader("content-type", "text/html");
+  // A cross-site frame (localhost, not 127.0.0.1) that arrives three seconds after the page.
+  if (req.url.includes("crosssite")) return res.end(`<title>Cross-site</title><h1>Hello from a real tab</h1><script>setTimeout(() => { const f = document.createElement("iframe"); f.src = "http://localhost:" + location.port + "/two"; document.body.append(f); }, 3000)</script>`);
   res.end(req.url.startsWith("/two") ? "<title>Second page</title><h1>Second</h1>" : "<title>Linked e2e page</title><h1 id=h>Hello from a real tab</h1><button onclick=\"document.getElementById('h').textContent='clicked'\">Press me</button><input type=file id=f>"); });
 await new Promise((r) => pages.listen(0, "127.0.0.1", r)); const PP = pages.address().port;
 const data = path.join(OUT, "e2e-data"); rmSync(data, { recursive: true, force: true }); mkdirSync(data, { recursive: true });
@@ -150,9 +152,15 @@ try {
   // Chrome announces a frame that arrives after the agent attached before it has an address.
   const lateShare = await inExt2(`return await chrome.runtime.sendMessage({type:"shareTab", tabId:${await openTab2("late")}, site:null})`);
   await sleep(4500);
-  // No snapshot of this page: in 0.8.3 any cross-site frame that arrives after the agent
-  // attached hangs take_snapshot for its full timeout, extension or not.
+  const snap3 = await call("take_snapshot", { pageId: await pageOf("late") });
   check("a frame that arrives while the tab is shared is kept out too", lateShare.ok && (await inVault()) === 0, lateShare.error ?? await inVault());
+  check("and the agent can still read that page", !snap3.err && /Hello from a real tab/.test(snap3.text) && !/e2e-vault-secret/.test(snap3.text), snap3.text);
+  // Up to 0.8.3 any cross-site frame that loaded after the agent connected hung take_snapshot
+  // for its full minute: the shim announced the frame to both of the bridge's page sessions.
+  const crossShare = await inExt2(`return await chrome.runtime.sendMessage({type:"shareTab", tabId:${await openTab2("crosssite")}, site:null})`);
+  await sleep(4500);
+  const t0 = Date.now(); const snap4 = await call("take_snapshot", { pageId: await pageOf("crosssite") });
+  check("a cross-site frame that loads after the agent connected is snapshotted, frame included", crossShare.ok && !snap4.err && /Second/.test(snap4.text) && Date.now() - t0 < 10_000, `${Date.now() - t0}ms ${snap4.text}`);
 } catch (e) { check("script ran to completion", false, e.stack ?? e); }
 finally { for (const c of chromes) c.kill("SIGKILL"); svc.kill("SIGTERM"); pages.close(); }
 log(failed ? `\n${failed} FAILED` : "\nALL PASSED"); await sleep(300); process.exit(failed ? 1 : 0);

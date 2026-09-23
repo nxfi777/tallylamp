@@ -278,6 +278,48 @@ describe("linked browsers", () => {
     await ext.closed;
   });
 
+  it("announces a child frame once per client, to the session that asked for children", async () => {
+    // chrome-devtools-mcp keeps a second session on every page. Puppeteer keys a child by its
+    // session id alone, so a frame announced under both replaced the session object its frame
+    // was bound to, and the next snapshot waited on the old one until it timed out.
+    const { token, browserId } = await pair();
+    const ext = await FakeExtension.connect(token, [[1, "https://example.test/a", "A"]]);
+    const rt = await ctx.browsers.ensureRunning(browserId);
+    const events: Array<{ method: string; sessionId?: string; params: Record<string, unknown> }> = [];
+    const cdp = new CdpClient(await browserWsUrl(rt.cdpUrl));
+    cdp.onEvent = (method, params, sessionId) => events.push({ method, params, sessionId });
+    await cdp.connect();
+    const main = ((await cdp.send("Target.attachToTarget", { targetId: "TARGET1", flatten: true })) as { sessionId: string }).sessionId;
+    const extra = ((await cdp.send("Target.attachToTarget", { targetId: "TARGET1", flatten: true })) as { sessionId: string }).sessionId;
+    await cdp.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, main);
+
+    const child = { sessionId: "CHILD1", targetInfo: { targetId: "FRAME1", type: "iframe", url: "" }, waitingForDebugger: true };
+    ext.emit({ event: "cdp", tabId: 1, method: "Target.attachedToTarget", params: child });
+    ext.emit({ event: "cdp", tabId: 1, sessionId: "CHILD1", method: "Page.frameNavigated", params: { frame: { id: "FRAME1", url: "https://pay.example.test/" } } });
+    ext.emit({ event: "cdp", tabId: 1, method: "Page.loadEventFired", params: { timestamp: 1 } });
+    ext.emit({ event: "cdp", tabId: 1, method: "Target.detachedFromTarget", params: { sessionId: "CHILD1", targetId: "FRAME1" } });
+    await sleep(50);
+    // Target.* events here are about the child, not the two page sessions announced above.
+    const on = (method: string) => events.filter((e) => e.method === method && (!method.startsWith("Target.") || String(e.params.sessionId).startsWith("CHILD"))).map((e) => e.sessionId);
+    assert.deepEqual(on("Target.attachedToTarget"), [main]);
+    assert.deepEqual(on("Page.frameNavigated"), ["CHILD1"]);
+    assert.deepEqual(on("Target.detachedFromTarget"), [main]);
+    // Everything else on the page still reaches both sessions, as it did.
+    assert.deepEqual(on("Page.loadEventFired").sort(), [main, extra].sort());
+
+    // A session asking later, while another on the same client already has the children, is
+    // not handed them a second time.
+    ext.emit({ event: "cdp", tabId: 1, method: "Target.attachedToTarget", params: { ...child, sessionId: "CHILD2", targetInfo: { ...child.targetInfo, targetId: "FRAME2" } } });
+    await sleep(50);
+    await cdp.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, extra);
+    await sleep(50);
+    assert.deepEqual(on("Target.attachedToTarget"), [main, main]);
+
+    await cdp.close();
+    ext.close();
+    await ext.closed;
+  });
+
   it("announces the page a shared tab is showing once per change, not once per poll", async () => {
     const { token, browserId } = await pair();
     const ext = await FakeExtension.connect(token, [[1, "https://example.test/a", "A"]]);

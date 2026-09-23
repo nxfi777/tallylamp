@@ -58,7 +58,8 @@ export interface LinkPeer extends EventEmitter {
 }
 
 type CdpRequest = { id: number; method: string; params?: Record<string, unknown>; sessionId?: string };
-type Session = { tabId: number; level: "tab" | "page"; parent?: string };
+/** `children`: this session asked for auto-attach, so the tab's child frames are announced to it. */
+type Session = { tabId: number; level: "tab" | "page"; parent?: string; children?: boolean };
 type ChildAttach = { envelope?: string; params: Record<string, unknown> };
 
 const tabTargetId = (tabId: number) => `tab-${tabId}`;
@@ -102,6 +103,12 @@ class Front {
 
   pageSessions(tabId: number): string[] {
     return [...this.sessions].filter(([, s]) => s.tabId === tabId && s.level === "page").map(([id]) => id);
+  }
+
+  /** The one session on this tab that the tab's child frames are announced to, if any. */
+  childOwner(tabId: number): string | undefined {
+    for (const [id, s] of this.sessions) if (s.tabId === tabId && s.level === "page" && s.children) return id;
+    return undefined;
   }
 }
 
@@ -227,13 +234,22 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
       childTab.delete(params.sessionId);
       children.get(tabId)?.delete(params.sessionId);
     }
+    // A child comes and goes under one session per client: the one that asked for children.
+    // Puppeteer keys a child by its session id alone, so a frame announced under a second
+    // parent replaced the session object that frame was bound to, and whatever it waited for
+    // next never came. chrome-devtools-mcp holds two sessions on every page, so any cross-site
+    // frame that loaded after it connected hung the next snapshot until it timed out.
+    const lifecycle = !sessionId && (method === "Target.attachedToTarget" || method === "Target.detachedFromTarget");
     for (const f of fronts) {
       const pages = f.pageSessions(tabId);
       if (!pages.length) continue;
       // A child session's events belong to the tab, not to any one synthetic session, so a
       // client holding two sessions on the tab still hears them once.
       if (sessionId) f.send({ method, params, sessionId });
-      else for (const sid of pages) f.send({ method, params, sessionId: sid });
+      else if (lifecycle) {
+        const owner = f.childOwner(tabId);
+        if (owner) f.send({ method, params, sessionId: owner });
+      } else for (const sid of pages) f.send({ method, params, sessionId: sid });
     }
   };
 
@@ -352,6 +368,10 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
       return detach(front, p.sessionId);
     }
     if (msg.method === "Target.setAutoAttach" && p.autoAttach !== false && autoAttached.has(s.tabId)) {
+      // Another session on this client already has the children; a second copy of each is
+      // exactly what the announcement above avoids.
+      if (front.childOwner(s.tabId)) return {};
+      s.children = true;
       for (const c of children.get(s.tabId)?.values() ?? []) {
         front.send({ method: "Target.attachedToTarget", params: { ...c.params, waitingForDebugger: false }, sessionId: c.envelope ?? sessionId });
       }
@@ -360,6 +380,7 @@ export function startLinkedRuntime(peer: LinkPeer): Promise<{ runtime: ChromeRun
     const result = await peer.call("cdp", { tabId: s.tabId, method: msg.method, params: p });
     note(s.tabId, msg.method);
     if (msg.method === "Target.setAutoAttach") {
+      s.children = p.autoAttach !== false;
       if (p.autoAttach === false) autoAttached.delete(s.tabId);
       else autoAttached.add(s.tabId);
     }
