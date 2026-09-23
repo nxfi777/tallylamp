@@ -10,7 +10,7 @@
 // the person pressed Cancel on Chrome's debugging bar, or keep tabs attached while the server
 // is unreachable for more than a minute.
 
-import { guard, onServer, siteOf, withinSite } from "./guard.js";
+import { extensionFrameIn, extensionUrl, guard, onServer, siteOf, withinSite } from "./guard.js";
 import { normalizeServer } from "./address.js";
 
 const PROTOCOL = "1.3";
@@ -261,7 +261,19 @@ async function handle(method, params) {
     if (!tab) throw new Error("that tab is not shared");
     const verdict = guard({ url: tab.info.url, sites: tab.sites, server: serverHost() }, String(params.method), params.params ?? {});
     if (!verdict.ok) throw new Error(verdict.reason);
-    const target = params.sessionId ? { tabId: tab.tabId, sessionId: String(params.sessionId) } : { tabId: tab.tabId };
+    const sessionId = params.sessionId ? String(params.sessionId) : undefined;
+    if (walled.has(sessionId)) throw new Error(`${params.method} is not allowed on a linked browser: that frame belongs to another extension.`);
+    if (children.has(sessionId)) {
+      // A frame Chrome announced before it had an address may hold another extension's page by
+      // now, and an agent that never turns on Page or Runtime would not be told. So ask first.
+      const { targetInfo } = await chrome.debugger.sendCommand({ tabId: tab.tabId, sessionId }, "Target.getTargetInfo").catch(() => ({}));
+      const url = extensionUrl(targetInfo?.url);
+      if (url) {
+        await wallOff(tab.tabId, sessionId, children.get(sessionId)?.parent, url, true);
+        throw new Error(`${params.method} is not allowed on a linked browser: that frame belongs to another extension.`);
+      }
+    }
+    const target = sessionId ? { tabId: tab.tabId, sessionId } : { tabId: tab.tabId };
     return chrome.debugger.sendCommand(target, String(params.method), verdict.params);
   }
   if (method === "tabs.create") {
@@ -311,6 +323,9 @@ async function handle(method, params) {
 
 const CHROME_PAGE = "Chrome doesn't let extensions control this page. Open a normal website to share it.";
 const DASHBOARD = "This is your Tallylamp dashboard, where you approve what agents ask for. An agent here could approve its own requests, so it can't be shared.";
+const FRAME_HELP = "https://tallylamp.dev/guides/another-extension-blocks-sharing";
+const FLAGGED = (site) =>
+  `Another extension has a frame inside ${site}. Chrome let the tab share anyway, which usually means its "Extensions on chrome-extension:// URLs" flag is on. Your agent has been kept out of that frame.`;
 const OTHER_EXTENSION = (site) =>
   `Another extension has put a frame inside ${site}, and Chrome won't let an extension control a page with a different extension's frame in it. Stop that extension running on ${site}, reload the page, then share again.`;
 
@@ -412,6 +427,7 @@ async function unshare(tabId, reason, { detach = true } = {}) {
   const tab = shared.get(tabId);
   if (!tab) return;
   shared.delete(tabId);
+  for (const sessions of [children, walled]) for (const [id, s] of sessions) if (s.tabId === tabId) sessions.delete(id);
   if (detach) await chrome.debugger.detach({ tabId }).catch(() => {});
   chrome.tabs.ungroup?.(tabId).catch(() => {});
   send({ event: "tab.unshared", tabId, reason });
@@ -426,8 +442,44 @@ async function unshareAll(reason) {
   for (const tabId of [...shared.keys()]) await unshare(tabId, reason);
 }
 
+// ---------------------------------------------------------------- other extensions' frames
+
+/** Child sessions the agent was handed (frames, workers), by session id: { tabId, parent }. */
+const children = new Map();
+/**
+ * Sessions shut out of another extension's frame: { tabId, told }. `told` if the agent heard
+ * the session announced before its frame gave itself away, so it also hears it end.
+ */
+const walled = new Map();
+
+/**
+ * Detach the debugger from another extension's frame and say so. Chrome only lets one this far
+ * when chrome://flags "Extensions on chrome-extension:// URLs" is on, and there is no API to
+ * read flags, so this is also how the panel finds out.
+ */
+async function wallOff(tabId, sessionId, parent, url, told) {
+  if (walled.has(sessionId)) return;
+  walled.set(sessionId, { tabId, told });
+  children.delete(sessionId);
+  await chrome.debugger.sendCommand(parent ? { tabId, sessionId: parent } : { tabId }, "Target.detachFromTarget", { sessionId }).catch(() => {});
+  notice = FLAGGED(siteOf(shared.get(tabId)?.info.url ?? "") ?? "this site");
+  fixIn = { id: /^chrome-extension:\/\/([a-p]{32})/.exec(url)?.[1] ?? null };
+  changed();
+}
+
 chrome.debugger.onEvent.addListener((source, method, params) => {
   if (!shared.has(source.tabId)) return;
+  if (walled.has(source.sessionId)) return;
+  if (method === "Target.detachedFromTarget" && walled.has(params.sessionId) && !walled.get(params.sessionId).told) return;
+  if (method === "Target.attachedToTarget") {
+    const url = extensionFrameIn(method, params);
+    if (url) return void wallOff(source.tabId, params.sessionId, source.sessionId, url, false);
+    children.set(params.sessionId, { tabId: source.tabId, parent: source.sessionId });
+  } else if (children.has(source.sessionId)) {
+    const url = extensionFrameIn(method, params);
+    if (url) return void wallOff(source.tabId, source.sessionId, children.get(source.sessionId).parent, url, true);
+  }
+  if (method === "Target.detachedFromTarget") children.delete(params.sessionId);
   send({ event: "cdp", tabId: source.tabId, sessionId: source.sessionId, method, params });
 });
 
@@ -516,6 +568,8 @@ const actions = {
   },
   // Another extension's details page, where its site access is changed. The list when unknown.
   openExtensions: async ({ id }) => chrome.tabs.create({ url: /^[a-p]{32}$/.test(id ?? "") ? `chrome://extensions/?id=${id}` : "chrome://extensions/" }),
+  // The fixes, and what the Chrome flag that lifts the rule costs, are too long for the panel.
+  openFrameHelp: async () => chrome.tabs.create({ url: FRAME_HELP }),
   unpair: () => unpair(),
 };
 

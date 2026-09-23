@@ -105,7 +105,9 @@ function banners() {
   // The fix for another extension's frame is in that extension's settings, so the way there
   // goes under whichever message explains it. Its own line: two links beside the text crowd it.
   const fix = state.extensions
-    ? h("div", { style: "margin-top:6px" }, h("button", { class: "link", onclick: () => ask("openExtensions", { id: state.extensions.id }) }, state.extensions.id ? "Show that extension" : "Open your extensions"))
+    ? h("div", { style: "margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 14px" },
+      h("button", { class: "link", onclick: () => ask("openExtensions", { id: state.extensions.id }) }, state.extensions.id ? "Show that extension" : "Open your extensions"),
+      h("button", { class: "link", onclick: () => ask("openFrameHelp") }, "Why, and other fixes"))
     : null;
   const error = state.error && state.link !== "unpaired";
   if (error) out.push(h("div", { class: "banner err", role: "alert" }, h("div", { class: "grow" }, state.error, fix), h("button", { class: "link", onclick: () => ask("dismiss") }, "OK")));

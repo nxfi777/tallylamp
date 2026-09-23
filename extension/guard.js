@@ -61,6 +61,28 @@ export function onServer(url, server) {
   }
 }
 
+/** The address if it is an extension's page, any extension's. Otherwise null. */
+export function extensionUrl(url) {
+  return typeof url === "string" && /^chrome-extension:\/\//i.test(url) ? url : null;
+}
+
+/**
+ * The extension page a CDP event says a debugger session is inside, or null.
+ *
+ * Chrome keeps one extension out of another's frames, but chrome://flags "Extensions on
+ * chrome-extension:// URLs" lifts that, and then auto-attach hands the agent a session inside,
+ * say, a password manager's menu. Chrome announces a frame that arrives later before it has an
+ * address, so the session's own events are read as well: where its frame navigated, and the
+ * origin of its main world. Content scripts' worlds carry an extension origin inside ordinary
+ * pages too, which is why only the default world counts.
+ */
+export function extensionFrameIn(method, params = {}) {
+  if (method === "Target.attachedToTarget" || method === "Target.targetInfoChanged") return extensionUrl(params.targetInfo?.url);
+  if (method === "Page.frameNavigated") return extensionUrl(params.frame?.url);
+  if (method === "Runtime.executionContextCreated" && params.context?.auxData?.isDefault) return extensionUrl(params.context.origin);
+  return null;
+}
+
 function namedOrigins(params) {
   const found = [];
   for (const key of ["origin", "securityOrigin", "storageKey"]) if (typeof params?.[key] === "string") found.push(params[key]);

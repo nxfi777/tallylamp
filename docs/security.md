@@ -410,6 +410,16 @@ other origins' storage, files on disk and download paths. The list is in
 `extension/guard.js`. It never re-attaches after Cancel on Chrome's debugging bar,
 and it hands every tab back if the server is unreachable for a minute.
 
+Chrome keeps one extension out of another's frames, so a tab holding a password
+manager's menu cannot normally be shared at all. The chrome://flags setting
+"Extensions on chrome-extension:// URLs" lifts that rule, and Chrome then hands a
+debugger session inside such a frame to whoever auto-attaches. The extension
+detaches from any frame that turns out to be another extension's page before the
+agent can use it. That covers a frame announced with its address, one whose own
+events give it away, and one that is checked again before every command. The
+panel then says the flag is probably on, since no API reads Chrome's flags.
+`scripts/linked-e2e.mjs` runs this against a real Chrome with the flag on.
+
 A compromised server, or a stolen link token, can drive the tabs that are shared
 at that moment and nothing else. It cannot share a tab, and it cannot widen a
 site limit. See [linked browsers](linked-browsers.md).

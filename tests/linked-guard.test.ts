@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 // @ts-expect-error plain JS shipped in the extension; there are no types to import
-import { guard, onServer, siteOf, withinSite } from "../extension/guard.js";
+import { extensionFrameIn, guard, onServer, siteOf, withinSite } from "../extension/guard.js";
 // @ts-expect-error plain JS shipped in the extension
 import { normalizeServer } from "../extension/address.js";
 
@@ -93,6 +93,20 @@ describe("extension guard: a shared tab is not the whole profile", () => {
     assert.equal(onServer("https://tallylamp.example.com.evil.test/", "tallylamp.example.com"), false);
     assert.equal(onServer("chrome://extensions", "tallylamp.example.com"), false);
     assert.equal(onServer("https://tallylamp.example.com/", null), false);
+  });
+
+  it("spots a debugger session inside another extension's frame", () => {
+    const vault = "chrome-extension://abcdefghijklmnopabcdefghijklmnop/menu.html";
+    // Announced with its address: a frame that was already in the page.
+    assert.equal(extensionFrameIn("Target.attachedToTarget", { sessionId: "s", targetInfo: { type: "iframe", url: vault } }), vault);
+    // Announced before it had one, then given away by its own events.
+    assert.equal(extensionFrameIn("Target.attachedToTarget", { sessionId: "s", targetInfo: { type: "iframe", url: "" } }), null);
+    assert.equal(extensionFrameIn("Page.frameNavigated", { frame: { id: "f", url: vault } }), vault);
+    assert.equal(extensionFrameIn("Runtime.executionContextCreated", { context: { origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop", auxData: { isDefault: true } } }), "chrome-extension://abcdefghijklmnopabcdefghijklmnop");
+    // A content script's world in an ordinary frame carries an extension origin too.
+    assert.equal(extensionFrameIn("Runtime.executionContextCreated", { context: { origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop", auxData: { isDefault: false } } }), null);
+    for (const url of ["https://pay.example.com/card", "about:blank", "chrome://newtab/"]) assert.equal(extensionFrameIn("Page.frameNavigated", { frame: { url } }), null);
+    assert.equal(extensionFrameIn("Network.requestWillBeSent", { request: { url: vault } }), null);
   });
 });
 
