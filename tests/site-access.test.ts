@@ -91,8 +91,10 @@ describe("profile site inventory", () => {
     const code = source.match(/^async function saveProfileTemplate\([\s\S]*?^}/m)![0];
     const calls: Array<{ url: string; method: string; body: { name: string; metadata: unknown } }> = [];
     let message = "";
+    let cancelledWith: unknown = "not cancelled";
     const browser = { id: "browser", name: "Renamed browser", savedProfileId: "linked-id", metadata: { project: "Browser metadata" } };
     const sandbox = { browser,
+      viewer: { cancel: (keepControl: unknown) => { cancelledWith = keepControl; } } as { cancel: (keepControl: unknown) => void } | null,
       state: { seeds: [{ id: "linked-id", name: "Original saved name", metadata: { project: "Saved metadata" } }] },
       askFor: async (_title: string, fields: Array<{ name: string; value?: string }>, _label: string, submit: (values: unknown) => Promise<void>) => {
         const values = Object.fromEntries(fields.map(field => [field.name, field.value || ""]));
@@ -106,6 +108,9 @@ describe("profile site inventory", () => {
     assert.equal(calls[0].url, "/api/v1/seeds/linked-id");
     assert.equal(calls[0].body.name, "Original saved name");
     assert.equal(JSON.stringify(calls[0].body.metadata), JSON.stringify({ project: "Saved metadata" }));
+    // Saving restarts Chrome under a human who holds control. A plain teardown closes with 1000,
+    // which the server takes as the operator leaving and hands the browser back to the agent.
+    assert.equal(cancelledWith, true, "the re-render after a save must keep the control lease");
     await runInNewContext(`${code}\nsaveProfileTemplate(browser, null, true)`, sandbox);
     assert.equal(calls[1].method, "POST");
     assert.equal(calls[1].url, "/api/v1/seeds");

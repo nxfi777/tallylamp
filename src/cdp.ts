@@ -13,6 +13,8 @@ export class CdpClient {
    * whole of what tab switching needs to get right.
    */
   onEvent: ((method: string, params: Record<string, unknown>, sessionId?: string) => void) | null = null;
+  /** Chrome closed the connection: stopped, crashed, or restarted under us. Not called by close(). */
+  onClose: (() => void) | null = null;
 
   constructor(public readonly browserWsUrl: string, private readonly timeoutMs = 8_000) {}
 
@@ -22,12 +24,18 @@ export class CdpClient {
       this.ws!.once("open", () => resolve());
       this.ws!.once("error", reject);
     });
-    this.ws.on("close", () => {
+    const ws = this.ws;
+    ws.on("close", () => {
       for (const [, p] of this.pending) {
         clearTimeout(p.timer);
         p.reject(new Error("CDP closed"));
       }
       this.pending.clear();
+      // close() nulls this.ws before the event lands, so only a close from Chrome's side gets here.
+      if (this.ws === ws) {
+        this.ws = null;
+        this.onClose?.();
+      }
     });
     this.ws.on("message", (data) => {
       const msg = JSON.parse(String(data)) as {

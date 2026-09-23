@@ -2807,6 +2807,9 @@ async function saveProfileTemplate(b, saved = null, asNew = false) {
   });
   if (!answers) return;
   await act(async () => {
+    // Saving restarts Chrome but leaves the lease alone. A plain teardown closes with 1000,
+    // which the server reads as the operator leaving and hands control back to the agent.
+    if (viewer) { viewer.cancel(true); viewer = null; }
     await render();
     flash(result.seed.resumeError
       ? `${answers.name} saved, but the source could not resume: ${result.seed.resumeError}. Press Start to retry.`

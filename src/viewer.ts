@@ -624,6 +624,19 @@ async function runViewer(
       await cdp.close();
       return;
     }
+    // Chrome going away (a stop, a crash, a profile save restarting it) used to leave this
+    // socket open and silent, so the stage sat on a dead frame and never reconnected. 1011,
+    // not 1000: the dashboard reads 1000 as its own navigation and does not retry, and
+    // teardown reads it as the operator leaving and hands control back to the agent.
+    cdp.onClose = () => {
+      if (closed) return;
+      teardown(1011);
+      try {
+        ws.close(1011, "browser went away");
+      } catch {
+        /* already gone */
+      }
+    };
 
     // Kept only as the belt-and-braces ceiling for a socket that has stopped draining entirely.
     // With one frame in flight the app-level queue is a single frame, so this should never be
@@ -1179,21 +1192,60 @@ async function runViewer(
       return;
     }
 
+    /**
+     * The tabs Chrome is actually showing. Headful Chrome composites only the foreground tab,
+     * so streaming any other one gets the priming screenshot and then nothing. Target order is
+     * no guide to which that is: a restart (Restart, or a profile save) restores the tabs in a
+     * different order, and "newest" then lands on a background tab while the page the operator
+     * was on is still in front. Asked, never arranged: activating a tab here would move it out
+     * from under whoever is at the screen.
+     */
+    const shownTabs = async (candidates: Array<{ targetId: string }>): Promise<Set<string>> => {
+      const shown = new Set<string>();
+      await Promise.all(
+        candidates.map(async ({ targetId }) => {
+          let sid: string | undefined;
+          try {
+            ({ sessionId: sid } = (await cdp!.send("Target.attachToTarget", { targetId, flatten: true })) as {
+              sessionId: string;
+            });
+            // Bounded: a restored tab that has not loaded yet can leave this unanswered.
+            const r = (await Promise.race([
+              cdp!.send("Runtime.evaluate", { expression: "document.visibilityState", returnByValue: true }, sid),
+              new Promise((resolve) => setTimeout(resolve, 1000)),
+            ])) as { result?: { value?: unknown } } | undefined;
+            if (r?.result?.value === "visible") shown.add(targetId);
+          } catch {
+            /* a tab that cannot be asked is simply not preferred */
+          } finally {
+            if (sid) void cdp!.send("Target.detachFromTarget", { sessionId: sid }).catch(noop);
+          }
+        }),
+      );
+      return shown;
+    };
+
     const tabs = projectTabs();
     if (!tabs.length) throw new Error("no page");
     // Chrome is launched with about:blank as the startup tab, so the first page target is the
     // blank one for the whole life of a browser whose agent opened its work in a new tab.
-    // Prefer the newest tab that has actually gone somewhere.
+    // Prefer a tab that has actually gone somewhere: the one in front, else the newest.
     const real = tabs.filter((t) => t.url && t.url !== "about:blank");
-    const newest = (real.length ? real[real.length - 1] : tabs[0])!.targetId;
+    const shown = real.length > 1 ? await shownTabs(real) : new Set<string>();
+    const inFront = real.filter((t) => shown.has(t.targetId));
+    const landing = (inFront.length ? inFront[inFront.length - 1] : real.length ? real[real.length - 1] : tabs[0])!.targetId;
+    if (closed) {
+      await cdp.close();
+      return;
+    }
     if (!guest) {
-      await attach(newest);
+      await attach(landing);
     } else {
       // A guest lands on the tab its link was handed over on, pinned by its first viewer, so a
       // reconnect cannot move it to whatever happens to be newest. If that tab has gone, it
       // gets a tab its link allows, and failing that, nothing.
       const home = guestHomeTarget(guest.id);
-      if (!home) pinGuestHomeTarget(guest.id, newest);
+      if (!home) pinGuestHomeTarget(guest.id, landing);
       const pinned = guestHomeTarget(guest.id);
       const pick = tabs.find((t) => t.targetId === pinned) ?? [...tabs].reverse().find((t) => guestMaySee(t.targetId, t.url));
       if (!pick) {
