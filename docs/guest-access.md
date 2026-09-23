@@ -39,8 +39,9 @@ else may have opened it first: revoke it and make a new one. The dashboard shows
 whether each link has been opened yet.
 
 Before you send the link, open the page you want the guest to use (take control
-and navigate, or let the agent get there). The guest lands on the newest tab that
-has a page loaded and stays on it, so open that page last or close newer tabs.
+and navigate, or let the agent get there). The guest lands on the tab Chrome is
+showing, which is the tab you last had open in the live view, and stays on it. If
+that tab is blank, they land on the newest tab with a page loaded.
 
 Over the API, an administrator session can call:
 
@@ -76,8 +77,8 @@ agent. **Leave** ends the link for good.
 
 The guest can:
 
-- watch the tab they land on (the newest tab with a page loaded when they first
-  open the link)
+- watch the tab they land on (the tab Chrome is showing when they first open the
+  link)
 - take control when the agent holds it or nobody does
 - click, type, scroll, paste text and reload
 - go back and forward, but not into pages that were open before you shared the
