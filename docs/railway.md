@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.8.4` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.8.5` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -145,27 +145,28 @@ Then publish and add its real deploy URL to the README and website.
 
 ## Releasing and upgrading
 
-The current release is [0.8.4](https://github.com/nxfi777/tallylamp/releases/tag/v0.8.4)
+The current release is [0.8.5](https://github.com/nxfi777/tallylamp/releases/tag/v0.8.5)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:6ef9ba9c927c6ece3575569b37985ff57ee55a602c3fbe756e34aaf0623a7df7
+ghcr.io/nxfi777/tallylamp@sha256:2249f50395670f789eea0fe408da742f2f7f65af46e71c7da2590e65aba44801
 ```
 
-The [0.8.4 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35946405119)
+The [0.8.5 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35996153125)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, the version and source-revision labels, and the zip's manifest version
 were verified afterward. The image's source revision is
-`374c419e5e8be272af6f2faa7bcfa8535fd72310`.
+`ba32ea9a7f294ce7b689f8385282dfd1eeea21a2`.
 
-The Railway template pins the `0.8.4` digest for new installations. Its
+The Railway template pins the `0.8.5` digest for new installations. Its
 published configuration was read back after the update, and the image was the
-only change. The listing copy changed where it names the release. Existing
-deployments keep their selected image. Version 0.8.4 changes no database tables
+only change. The listing copy changed where it names the release and where it
+describes the host's process limit. Existing
+deployments keep their selected image. Version 0.8.5 changes no database tables
 and adds no settings. Railway redeploy persistence and unique passwords across
-two template installations were checked for `0.1.1`, not repeated for `0.8.4`.
+two template installations were checked for `0.1.1`, not repeated for `0.8.5`.
 The maintainer's own Railway service, built from the same commit, redeployed and
 passed its healthcheck; the published image itself was not deployed to Railway
 before the pin. These checks do not certify every
@@ -198,8 +199,8 @@ notes](release-0.6.0.md), [0.6.1 linked-browser access notes](release-0.6.1.md),
 [0.7.0 guest-link release notes](release-0.7.0.md), [0.7.1 Full browser
 notes](release-0.7.1.md), [0.8.0 read-access notes](release-0.8.0.md), [0.8.1 browser-cap
 notes](release-0.8.1.md), [0.8.2 dashboard thumbnail notes](release-0.8.2.md),
-[0.8.3 profile-save live view notes](release-0.8.3.md), and [0.8.4 linked-browser
-frame notes](release-0.8.4.md).
+[0.8.3 profile-save live view notes](release-0.8.3.md), [0.8.4 linked-browser
+frame notes](release-0.8.4.md), and [0.8.5 process-limit notes](release-0.8.5.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing
