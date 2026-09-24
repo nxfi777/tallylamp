@@ -371,7 +371,9 @@ page in that browser can reach its bound address. Read the
 
 There is no fleet cap by default; `TALLYLAMP_MAX_BROWSERS` sets one, and
 `/api/v1/status` reports it (`null` when uncapped). An agent's cap of `0` means
-no per-agent cap. Idle Chrome processes stop while persistent profiles remain; the fleet
+no per-agent cap. On a host with a process limit, such as Railway's 1,000, Tallylamp
+also refuses a start that would leave too few processes for another Chrome. Idle
+Chrome processes stop while persistent profiles remain; the fleet
 and idle limits are configured in the [Railway settings](railway.md#browser-and-session-settings).
 
 Tallylamp connects MCP to headed Chrome without Puppeteer stealth plugins.

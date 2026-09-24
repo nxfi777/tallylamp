@@ -100,7 +100,11 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 - One replica. Redeploy stops every browser process; **profiles survive** on
   the volume and are lazy-started on the next use.
 - Memory: budget roughly 1–2 GB per headed Chrome plus the Node process.
-  Default max browsers is 4.
+- Processes: Railway limits a container to 1,000 processes and threads, and
+  each Chrome uses 230–420, so two or three browsers run at once. Past the
+  limit Chrome cannot start renderers and tabs crash in every browser, so
+  Tallylamp refuses a start that would cross it, and logs `host process limit
+  reached` if a running browser grows past it.
 
 ## Publishing the template
 

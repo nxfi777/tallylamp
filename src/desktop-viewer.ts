@@ -5,10 +5,24 @@ import { config } from "./config.js";
 import { hub } from "./events.js";
 import { audit } from "./audit.js";
 import { CdpClient, browserWsUrl } from "./cdp.js";
+import { log } from "./log.js";
 
 type Message = { type: string; [key: string]: unknown };
 const active = new Set<string>();
 const MAX_JPEG = 4 * 1024 * 1024;
+
+/**
+ * Why a helper could not start. This used to say ffmpeg was missing whatever the cause, and
+ * the usual cause on a container is the host's process limit (host-limits.ts), not a
+ * missing binary.
+ */
+function spawnFailure(tool: string, e: NodeJS.ErrnoException): string {
+  if (e.code === "ENOENT") return `Full browser requires ${tool} on the host.`;
+  if (e.code === "EAGAIN" || e.code === "ENOMEM") {
+    return `The host has run out of processes, so ${tool} could not start. Stop a browser you are not using, then reopen Full browser.`;
+  }
+  return `${tool} could not start on the host (${e.code ?? e.message}).`;
+}
 
 /** ffmpeg image2pipe has no framing. JPEG entropy escapes FF, so FF D9 is unambiguous. */
 export class JpegFrames {
@@ -223,7 +237,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     input = child;
     const timeout = setTimeout(() => child.kill("SIGKILL"), 2000);
     timeout.unref();
-    child.on("error", () => send({ type: "notice", message: "Desktop input failed. Check that xdotool is installed." }));
+    child.on("error", (e) => send({ type: "notice", message: spawnFailure("xdotool", e) }));
     child.on("close", (code, signal) => {
       clearTimeout(timeout);
       if (input !== child) return;
@@ -362,6 +376,10 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
       }
     } catch { send({ type: "error", message: "Desktop capture failed. Reopen Full browser to try again." }); ws.close(1008); }
   });
-  capture.on("error", () => { send({ type: "error", message: "Desktop capture requires ffmpeg on the host." }); ws.close(1008); });
+  capture.on("error", (e) => {
+    log.warn("desktop capture could not start", { browserId: id, error: (e as NodeJS.ErrnoException).code ?? e.message });
+    send({ type: "error", message: spawnFailure("ffmpeg", e) });
+    ws.close(1008);
+  });
   capture.on("exit", () => { if (!closed) { send({ type: "error", message: "Desktop capture stopped. Check ffmpeg and Xvfb, then reopen Full browser." }); ws.close(1008); } });
 }

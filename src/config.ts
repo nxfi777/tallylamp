@@ -164,6 +164,8 @@ export const config = {
   /** Creation-time policy only, like agentDesktopDefault. Needs fullBrowser to mean anything. */
   get extensionsDefault() { return bool("TALLYLAMP_EXTENSIONS_DEFAULT", true) && this.fullBrowser; },
   get fakeChrome() { return bool("TALLYLAMP_FAKE_CHROME", false); },
+  /** Where the cgroup pids controller is read (see host-limits.ts). Overridden by tests. */
+  get cgroupDir() { return process.env.TALLYLAMP_CGROUP_DIR || "/sys/fs/cgroup"; },
   get sessionTtlMs() { return int("TALLYLAMP_SESSION_TTL_SEC", 86400) * 1000; },
   get viewerTicketTtlMs() { return int("TALLYLAMP_VIEWER_TICKET_TTL_SEC", 60) * 1000; },
   /**

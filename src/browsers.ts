@@ -7,6 +7,7 @@ import { getDb, nowIso } from "./db.js";
 import { Err } from "./errors.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
+import { PIDS_PER_BROWSER, readPidLimit } from "./host-limits.js";
 import { activity, audit, type AuditActor } from "./audit.js";
 import { isValidName, slugify } from "./names.js";
 import { sanitizeMetadata, type BrowserMetadata } from "./metadata.js";
@@ -114,6 +115,18 @@ export class BrowserManager {
         }
       }, 1000).unref?.();
     });
+    // The start check cannot stop a running browser from growing, and from Chrome's side a
+    // refused process is silent: a tab just crashes and goes blank. The kernel counts every
+    // refusal, so say when that count moves.
+    let refused = readPidLimit()?.refused ?? 0;
+    setInterval(() => {
+      const pids = readPidLimit();
+      if (!pids || pids.refused <= refused) return;
+      log.warn("host process limit reached; Chrome tabs may crash", {
+        max: pids.max, current: pids.current, refused: pids.refused - refused, running: this.runtimes.size,
+      });
+      refused = pids.refused;
+    }, 15_000).unref?.();
   }
 
   /**
@@ -556,6 +569,19 @@ export class BrowserManager {
     const cap = config.maxBrowsers;
     if (cap !== null && !linked && occupied.size >= cap && !occupied.has(id)) {
       throw Err.fleetFull(`fleet is full (max ${cap})`);
+    }
+    // The ceiling that actually bites on a container is processes, not memory. Past it Chrome
+    // cannot start renderers, and the tabs that crash are the other browsers' as much as this
+    // one's. Starts still in flight have not spawned anything yet, so they are counted here.
+    const pids = linked || occupied.has(id) ? null : readPidLimit();
+    if (pids) {
+      const pending = [...this.starting.keys()].filter((b) => b !== id && kindOf(b) !== "linked").length;
+      if (pids.max - pids.current - pending * PIDS_PER_BROWSER < PIDS_PER_BROWSER) {
+        throw Err.fleetFull(
+          `This host is near its process limit: ${pids.current} of ${pids.max} processes and threads are in use, ` +
+            `and a browser needs about ${PIDS_PER_BROWSER}. Stop a browser you are not using, then start this one.`,
+        );
+      }
     }
     const p = this.start(id);
     this.starting.set(id, p);

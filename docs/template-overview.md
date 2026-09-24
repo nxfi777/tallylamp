@@ -178,9 +178,8 @@ profiles contain every login, so share them only with agents you trust.
 
 Site badges show detected or reported sign-ins, not every saved login.
 
-Chrome needs memory. There is no browser cap by default, so budget roughly
-1–2 GB per active browser, plus the server. Set `TALLYLAMP_MAX_BROWSERS` if
-you want a limit.
+Railway limits a container to 1,000 processes and threads, and each Chrome uses
+230–420, so two or three browsers run at once. Tallylamp refuses a start past that.
 
 A volume-backed deployment uses one replica. Redeploys interrupt active browsers;
 their profiles remain, and Chrome starts again on the next use. Railway provides
