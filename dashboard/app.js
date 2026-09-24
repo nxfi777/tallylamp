@@ -396,6 +396,21 @@ function browserMenu(b) {
       { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name, true) },
     ];
   }
+  // A stopped browser has nothing to watch and nothing to take. A lease can outlive a stop,
+  // so handing it back still makes sense.
+  if (!running && ["stopped", "crashed"].includes(b.status)) {
+    return [
+      { label: "Start", onSelect: () => call(`/api/v1/browsers/${b.id}/start`) },
+      { label: "Open", onSelect: () => go(`/browsers/${b.id}`) },
+      human && { label: "Return to agent", onSelect: () => returnControl(b.id) },
+      "-",
+      { label: "Edit browser details…", onSelect: () => editBrowser(b) },
+      { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
+      b.savedProfileId && { label: "Save as new profile…", onSelect: () => saveProfileTemplate(b, null, true) },
+      { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
+      { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name) },
+    ];
+  }
   return [
     { label: "Watch", onSelect: () => go(`/browsers/${b.id}`) },
     human
@@ -782,7 +797,8 @@ function card(b) {
       // reported source moved to the detail page; what stays is what tells you whether to click.
       h("div", { class: "meta" },
         md.purpose ? h("div", { class: "purpose" }, md.purpose) : null,
-        h("div", { class: "mono url" }, b.url || "—"),
+        // A stopped browser has no page, and a lone dash in its place read as data.
+        b.url ? h("div", { class: "mono url" }, b.url) : null,
       ),
       sitePills(b),
       h("div", { class: "who" },
@@ -791,8 +807,18 @@ function card(b) {
           : "No controller",
       ),
       h("div", { class: "actions" },
-        h("button", { class: "btn secondary", onClick: () => go(`/browsers/${b.id}`) }, "Watch"),
-        h("button", { class: "btn", onClick: () => takeControl(b.id) }, "Take control"),
+        // A stopped browser has nothing to watch or take, so its card offers Start instead. A
+        // linked browser's status says nothing about its shared tabs, so it keeps Watch.
+        // Same slots as a running card: the quiet button first, the main one second.
+        b.kind !== "linked" && ["stopped", "crashed"].includes(b.status)
+          ? [
+              h("button", { class: "btn secondary", onClick: () => go(`/browsers/${b.id}`) }, "Open"),
+              h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${b.id}/start`, e.currentTarget) }, "Start"),
+            ]
+          : [
+              h("button", { class: "btn secondary", onClick: () => go(`/browsers/${b.id}`) }, "Watch"),
+              h("button", { class: "btn", onClick: () => takeControl(b.id) }, "Take control"),
+            ],
         // Touch has no right-click, and a mouse user has no way to guess the card has a menu.
         // Same items, anchored to the button instead of the pointer.
         h("button", {
@@ -1580,17 +1606,23 @@ async function browserView(id, seq) {
         h("div", { class: "sub" }, `created by ${principal(b.provenance.createdByType, b.owner.id)} via ${b.provenance.createdVia}`),
       ),
       h("div", { class: "row" },
+        // Stopped, Start is the one thing to do and takes the filled style; Take control has
+        // nothing to take. A lease can outlive a stop, so Return to agent stays when it applies.
         human
           ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
-          : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
-        // One of Start and Stop, never both with one greyed out, and only the takeover button
-        // filled: Save profile used to be filled white beside it and the two fought for the eye.
+          : ["stopped", "crashed"].includes(b.status)
+            ? null
+            : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
+        // One of Start and Stop, never both with one greyed out, and only one button filled:
+        // Save profile used to be filled white beside the takeover button and the two fought
+        // for the eye.
         ["stopped", "crashed"].includes(b.status)
-          ? h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/start`) }, "Start")
-          : h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/stop`) }, "Stop browser"),
+          ? h("button", { class: human ? "btn" : "btn human", onClick: (e) => call(`/api/v1/browsers/${id}/start`, e.currentTarget) }, "Start")
+          : h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/stop`, e.currentTarget) }, "Stop browser"),
         h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
         b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
-        h("button", { class: "btn", onClick: () => call(`/api/v1/browsers/${id}/restart`) }, "Restart"),
+        // Restarting a stopped browser is starting it, and Start is already here.
+        b.status === "running" ? h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/restart`, e.currentTarget) }, "Restart") : null,
         h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name, b.kind === "linked") }, "Delete"),
       ),
     ),
@@ -1674,8 +1706,15 @@ async function browserView(id, seq) {
     ),
   ]);
   if (b.status !== "running") {
+    // It said "stopped" over a browser that was starting. No Start button of its own: the
+    // filled one in the header sits directly above this at every width, and a second copy of
+    // the same choice split the eye between them.
     stagewrap.replaceChildren(h("div", { class: "banner", role: "status" },
-      b.persistent ? "Browser stopped. Its data and metadata are kept. Start to reopen it, or Save profile to reuse its logins in another browser." : "Browser stopped. This temporary profile may be deleted when idle. Save profile to make a reusable copy."));
+      b.status === "starting" ? "Chrome is starting…"
+        : b.status === "stopping" ? "Chrome is stopping…"
+        : b.status === "crashed" ? "Chrome crashed. Its logins and data are kept."
+        : b.persistent ? "Browser stopped. Its logins and data are kept."
+        : "Browser stopped. This temporary profile may be deleted when idle. Save profile to make a reusable copy."));
     return;
   }
   void connectViewer(id, human ? "control" : "watch", img, b.control?.leaseToken, status, {
@@ -2881,12 +2920,31 @@ async function returnControl(id) {
   });
 }
 
-async function call(path) {
-  await act(async () => {
-    await api(path, { method: "POST" });
-    await refresh();
-    void render();
-  });
+const PENDING = { start: "Starting…", stop: "Stopping…", restart: "Restarting…" };
+
+/**
+ * Starting Chrome takes seconds, and nothing on the page moved until it had finished, so a
+ * pressed Start looked ignored and got pressed again. The button that was pressed says what
+ * is happening, at once. A successful call repaints; a failed one gets its button back.
+ */
+async function call(path, button) {
+  const label = button?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = PENDING[path.split("/").pop()] || label;
+  }
+  try {
+    await act(async () => {
+      await api(path, { method: "POST" });
+      await refresh();
+      void render();
+    });
+  } finally {
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
 }
 
 async function destroyBrowser(id, name, linked = false) {
