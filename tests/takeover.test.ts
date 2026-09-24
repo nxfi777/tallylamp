@@ -364,6 +364,32 @@ describe("viewer tab strip and 1:1 window", () => {
     }
   });
 
+  it("keeps resizing after the first resize restarts the screencast", async () => {
+    // Chrome 153 refuses Page.startScreencast on a session that is already casting. The resize
+    // path restarted the cast without stopping it, the refusal switched resizing off for the
+    // rest of the socket, and the stage stayed letterboxed at whatever size it first had.
+    const lease = own.browsers.acquireControl(id, "human", "admin", { force: true });
+    const { ws } = await openSocket("control");
+    try {
+      ws.send(JSON.stringify({ type: "heartbeat", leaseToken: lease.leaseToken }));
+      await new Promise((r) => setTimeout(r, 100));
+      resetFakeCdp();
+      ws.send(JSON.stringify({ type: "viewport", width: 900, height: 700 }));
+      await settle();
+      ws.send(JSON.stringify({ type: "viewport", width: 1000, height: 650 }));
+      await settle();
+      const calls = sized();
+      assert.equal(calls.length, 2, "the second request must still reach Chrome");
+      assert.equal(calls[1]!.params.width, 1000);
+      const starts = fakeCdpCalls.filter((c) => c.method === "Page.startScreencast");
+      const stops = fakeCdpCalls.filter((c) => c.method === "Page.stopScreencast");
+      assert.equal(stops.length, starts.length, "every restart must stop the running cast first");
+    } finally {
+      ws.close();
+      own.browsers.releaseControl(id);
+    }
+  });
+
   it("clamps every hostile dimension instead of passing it to Chrome", async () => {
     const lease = own.browsers.acquireControl(id, "human", "admin", { force: true });
     const { ws } = await openSocket("control");

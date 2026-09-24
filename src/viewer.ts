@@ -405,6 +405,9 @@ async function runViewer(
   // that one — and a tab in a second window would otherwise strand the first one resized.
   let resizedWindowId: number | undefined;
   let contentsSizeOk = true;
+  // The session a screencast is running on, and the queue restarts wait in (see startCast).
+  let castSession: string | undefined;
+  let castQueue: Promise<void> = Promise.resolve();
   // Bumped on every attach. A frame or a deferred send carrying a stale epoch is dropped, so
   // the tab you switched away from cannot paint over the one you switched to.
   let epoch = 0;
@@ -898,26 +901,38 @@ async function runViewer(
      * `geometryChanged` is informational: Chrome re-creates the capture surface either way, but
      * only a size change is visible as a blank beat, and knowing which is which is what makes
      * the quality-only rungs worth having.
+     *
+     * A restart is a stop and a start. Chrome 153 refuses Page.startScreencast on a session
+     * that is already casting, and that refusal used to switch resizing off for the rest of the
+     * socket and freeze the quality ladder on its first rung. Restarts run one at a time, so a
+     * rung change and a resize landing together cannot both find the cast running.
      */
-    const startCast = async (sid: string, geometryChanged = true): Promise<void> => {
-      const r = mode === "control" ? RUNGS[rung]! : { scale: 1, quality: baseQuality };
-      void geometryChanged;
-      // A hard ceiling as well as the rung, so a very large stage does not start out at a
-      // bitrate no link would carry and only find its level after several step-downs.
-      const ceiling = Math.min(content.width, config.viewerMaxEncodedWidth);
-      const width = Math.max(320, Math.round(Math.min(content.width * r.scale, ceiling)));
-      const height = Math.max(240, Math.round(content.height * (width / content.width)));
-      await cdp!.send(
-        "Page.startScreencast",
-        {
-          format: "jpeg",
-          quality: mode === "control" ? r.quality : baseQuality,
-          everyNthFrame: everyNth,
-          maxWidth: width,
-          maxHeight: height,
-        },
-        sid,
-      );
+    const startCast = (sid: string, geometryChanged = true): Promise<void> => {
+      const run = castQueue.then(async () => {
+        const r = mode === "control" ? RUNGS[rung]! : { scale: 1, quality: baseQuality };
+        void geometryChanged;
+        // A hard ceiling as well as the rung, so a very large stage does not start out at a
+        // bitrate no link would carry and only find its level after several step-downs.
+        const ceiling = Math.min(content.width, config.viewerMaxEncodedWidth);
+        const width = Math.max(320, Math.round(Math.min(content.width * r.scale, ceiling)));
+        const height = Math.max(240, Math.round(content.height * (width / content.width)));
+        if (castSession === sid) await cdp!.send("Page.stopScreencast", {}, sid).catch(noop);
+        castSession = undefined;
+        await cdp!.send(
+          "Page.startScreencast",
+          {
+            format: "jpeg",
+            quality: mode === "control" ? r.quality : baseQuality,
+            everyNthFrame: everyNth,
+            maxWidth: width,
+            maxHeight: height,
+          },
+          sid,
+        );
+        castSession = sid;
+      });
+      castQueue = run.catch(noop);
+      return run;
     };
 
     /**
@@ -1065,6 +1080,7 @@ async function runViewer(
         await hideStartPage(previous, previousTargetId);
         await cdp!.send("Page.stopScreencast", {}, previous).catch(noop);
         await cdp!.send("Target.detachFromTarget", { sessionId: previous }).catch(noop);
+        if (castSession === previous) castSession = undefined;
       }
       pageSession = undefined;
       activeTargetId = undefined;

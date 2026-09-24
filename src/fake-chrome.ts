@@ -164,6 +164,13 @@ function attachCdp(ws: WebSocket) {
       ok({ sessionId: `sess-${String(msg.params?.targetId ?? "t1")}` });
       return;
     }
+    if (msg.method === "Target.detachFromTarget") {
+      // Detaching ends that session's screencast, as in Chrome. Session ids are reused per
+      // target here, so a cast left behind would refuse the next attach's start.
+      for (const c of [...casts]) if (c.ws === ws && c.envelope === msg.params?.sessionId) casts.delete(c);
+      ok({});
+      return;
+    }
     if (msg.method === "Browser.getWindowForTarget") {
       ok({ windowId: 1, bounds: { left: 0, top: 0, width: 1280, height: 800, windowState: "normal" } });
       return;
@@ -187,6 +194,13 @@ function attachCdp(ws: WebSocket) {
       return;
     }
     if (msg.method === "Page.startScreencast") {
+      // Chrome 153 refuses a second start on a session that is already casting; changing the
+      // parameters takes a stop first. The fake used to accept it, so nothing noticed the
+      // viewer's resize and quality changes failing against real Chrome.
+      if ([...casts].some((c) => c.ws === ws && c.envelope === msg.sessionId)) {
+        ws.send(JSON.stringify({ id: msg.id, error: { code: -32000, message: "Screencast is already active" } }));
+        return;
+      }
       ok({});
       const cast = { ws, envelope: msg.sessionId, params: msg.params ?? {} };
       casts.add(cast);
@@ -212,7 +226,7 @@ function attachCdp(ws: WebSocket) {
       return;
     }
     if (msg.method === "Page.stopScreencast") {
-      for (const c of [...casts]) if (c.ws === ws) casts.delete(c);
+      for (const c of [...casts]) if (c.ws === ws && c.envelope === msg.sessionId) casts.delete(c);
       ok({});
       return;
     }
