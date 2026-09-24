@@ -31,3 +31,14 @@ No schema change and no configuration change. The snapshot fix is on the
 server and works with any Tallylamp Link. The other two changes are in the
 extension: replace its folder with the new zip's contents, then press the
 reload arrow on its card at `chrome://extensions`.
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/35946405119)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.8.4` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:6ef9ba9c927c6ece3575569b37985ff57ee55a602c3fbe756e34aaf0623a7df7
+```
