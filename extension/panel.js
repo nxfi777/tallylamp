@@ -11,6 +11,7 @@
 
 import { onServer, siteOf } from "./guard.js";
 
+const PRIVACY = "https://tallylamp.dev/privacy";
 const app = document.getElementById("app");
 const query = new URLSearchParams(location.search);
 const demo = query.get("demo");
@@ -140,6 +141,10 @@ function unpaired() {
         : h("p", { class: "small muted", id: "server-hint", style: "margin-top:6px" }, "Next you approve this browser in your dashboard. There is nothing to copy or paste."),
     ),
     h("button", { class: "primary", type: "submit", disabled: busy }, busy ? "Contacting your server…" : "Connect"),
+    // Said here, before anything is sent, and not only in the policy: the Web Store asks for
+    // disclosure in the product itself, and this is the moment somebody decides.
+    h("p", { class: "small muted" }, "This extension talks only to the server you enter here. It sends a tab's contents only after you share that tab. ",
+      h("a", { href: PRIVACY, target: "_blank", rel: "noopener" }, "Privacy policy")),
     h("p", { class: "small muted" }, "Works in Chrome, Edge, Brave, Vivaldi, Opera and Arc. Firefox and Safari don't give extensions this kind of access, so they can't be linked."),
   );
 }
@@ -153,7 +158,7 @@ function pairingScreen() {
     ),
     h("div", { class: "code", "aria-label": `Pairing code ${state.pairing.userCode.split("").join(" ")}` }, state.pairing.userCode),
     h("div", { class: "row" },
-      h("button", { class: "grow", onclick: () => ask("reopenApproval") }, "Open the approval page again"),
+      h("button", { class: "grow", onclick: () => ask("reopenApproval") }, "Reopen the approval page"),
       h("button", { class: "quiet", onclick: () => ask("cancelPairing") }, "Cancel"),
     ),
     h("p", { class: "small muted" }, "The code works for 10 minutes and only once. On its own it opens nothing: somebody signed in to your dashboard has to approve it."),
@@ -202,7 +207,7 @@ function shareCard() {
         render();
       },
     }, busy ? "Sharing…" : state.link === "connecting" ? "Connecting to your server…" : waiting ? "Can't share while offline" : "Share this tab"),
-    h("p", { class: "small muted" }, "Your agent will see and control this tab, signed in as you. Chrome shows a debugging bar while anything is shared, and Cancel on that bar stops sharing too."),
+    h("p", { class: "small muted" }, `Your agent will see and control this tab through ${state.host}, signed in as you. Chrome shows a debugging bar while anything is shared, and Cancel on that bar stops sharing too.`),
   );
 }
 
@@ -246,7 +251,8 @@ const DEMO_TAB = { id: 1, title: "Inbox (3) · Example Mail", url: "https://mail
 const base = { link: "online", host: "tallylamp.example.com", browserName: "Chrome on macOS", pairing: null, shared: [], error: null, notice: null, extensions: null, releaseAt: null };
 const also = [
   { tabId: 2, title: "Q3 forecast · Sheets", url: "https://sheets.example.com/d/1", sites: ["sheets.example.com"], byAgent: false },
-  { tabId: 3, title: "Pricing · Linear", url: "https://linear.app/pricing", sites: null, byAgent: true },
+  // Made-up sites only: these fixtures are what the Web Store screenshots show.
+  { tabId: 3, title: "Flights to Lisbon · Example Travel", url: "https://travel.example.com/flights", sites: null, byAgent: true },
 ];
 const DEMOS = {
   unpaired: { ...base, link: "unpaired", host: null, browserName: null },
@@ -269,9 +275,12 @@ const DEMOS = {
 
 if (demo) {
   state = DEMOS[demo] ?? DEMOS.ready;
+  // &tab=2 puts one of the other fixture tabs in front, as the store screenshots need.
+  const front = also.find((t) => t.tabId === Number(query.get("tab")));
   activeTab = demo === "unshareable"
     ? { id: 9, title: "Extensions", url: "chrome://extensions" }
-    : demo === "dashboard" ? { id: 8, title: "Browsers · Tallylamp", url: "https://tallylamp.example.com/browsers" } : DEMO_TAB;
+    : demo === "dashboard" ? { id: 8, title: "Browsers · Tallylamp", url: "https://tallylamp.example.com/browsers" }
+      : front ? { id: front.tabId, title: front.title, url: front.url } : DEMO_TAB;
   justShared = demo === "shared-here";
   if (demo === "unpaired-error") typed = "tallylamp.example.com";
   render();

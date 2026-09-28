@@ -87,7 +87,7 @@ Set `TALLYLAMP_LINK_TRACE=1` to log every CDP method crossing the shim. When a c
 
 Load the `extension` folder of this repo instead of the release zip, and press the reload arrow on its card at `chrome://extensions` after each change. If your checkout is on an external drive, run `make extension` and load the copy it puts in `~/Desktop/tallylamp-link` instead. Chrome drops an unpacked extension whose folder is missing when it starts. Run `make extension` again after pulling changes.
 
-`extension/manifest.json` carries the same version as `package.json`, and a test fails when they differ. The release workflow zips the folder and attaches it to each GitHub release as `tallylamp-link.zip`, after the image has passed its checks.
+`extension/manifest.json` carries the same version as `package.json`, and a test fails when they differ. The side panel says what it sends before anything is shared, and the privacy page at tallylamp.dev/privacy says it in full. Change both if the extension starts sending something new. The release workflow zips the folder and attaches it to each GitHub release as `tallylamp-link.zip`, after the image has passed its checks.
 
 ## Testing it
 
@@ -107,6 +107,6 @@ Load the `extension` folder of this repo instead of the release zip, and press t
 
 ## Not done yet
 
-The extension is not in the Chrome Web Store. The `debugger` permission gets a manual review there. How long that takes, and whether the listing is accepted as it stands, is an open question. Microsoft's Playwright extension and Anthropic's Claude in Chrome both ship with the same permission, so it is possible.
+The extension is not in the Chrome Web Store yet. Everything a submission needs is ready: `make store` builds the zip, and [chrome-web-store.md](chrome-web-store.md) has the listing, the images, the privacy answers and the reviewer instructions. What it still needs is a server for the reviewers to pair with. The `debugger` permission may get a longer manual review, and whether the listing is accepted as it stands is an open question. Microsoft's Playwright extension and Anthropic's Claude in Chrome both ship with the same permission, so it is possible.
 
 There are no per-action approvals. Claude in Chrome can ask before each action on a new site. Here the controls are which tabs you share, the site limit and Stop. For an agent you do not fully trust, in a browser signed in to things that matter, that may not be enough. A container browser with a fresh profile is the safer tool.
