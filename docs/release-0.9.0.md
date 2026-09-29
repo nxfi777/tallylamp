@@ -65,3 +65,14 @@ second Railway service, which gets its own 1,000. See
 
 Tallylamp Link is unchanged apart from its version number, so a linked browser
 does not need the extension reinstalled.
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/36596129419)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.9.0` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:76e5b9434b5e141abbfe633edc7c538e5681c0f53662c0dae971e3072d1de8e8
+```
