@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   browserUsage,
   classify,
+  parseCmdline,
   growthTarget,
   launchEstimate,
   parseCpuList,
@@ -48,7 +49,10 @@ function proc(procDir: string, pid: number, ppid: number, pgid: number, threads:
   // Fields 3..20: state ppid pgrp session tty tpgid flags minflt cminflt majflt cmajflt utime
   // stime cutime cstime priority nice num_threads.
   writeFileSync(path.join(d, "stat"), `${pid} (${comm}) S ${ppid} ${pgid} ${sid} 0 -1 0 0 0 0 0 0 0 0 0 20 0 ${threads} 0 0\n`);
-  writeFileSync(path.join(d, "cmdline"), argv.join("\0") + "\0");
+  // Chrome retitles its children: a renderer's or zygote's arguments read back as one string
+  // joined by spaces, padded with NULs, which is how they appear in production.
+  const retitled = argv.some((a) => a.startsWith("--type="));
+  writeFileSync(path.join(d, "cmdline"), retitled ? argv.join(" ") + "\0".repeat(8) : argv.join("\0") + "\0");
 }
 
 const CHROME = "/opt/google/chrome/chrome";
@@ -85,6 +89,13 @@ describe("per-browser process accounting", () => {
     assert.deepEqual({ ppid: odd.ppid, pgid: odd.pgid, sid: odd.sid, threads: odd.threads }, { ppid: 1, pgid: 300, sid: 300, threads: 7 });
     rmSync(path.join(procDir, "300"), { recursive: true });
     assert.equal(scanProcesses(path.join(procDir, "nope")), null);
+  });
+
+  it("reads a retitled Chrome child's flags, and leaves ordinary command lines alone", () => {
+    assert.deepEqual(parseCmdline(`${CHROME} --type=zygote --no-zygote-sandbox\0\0\0`), [CHROME, "--type=zygote", "--no-zygote-sandbox"]);
+    assert.deepEqual(parseCmdline("node\0/app/dist/index.js\0"), ["node", "/app/dist/index.js"]);
+    assert.deepEqual(parseCmdline("Xvfb\0"), ["Xvfb"]);
+    assert.deepEqual(parseCmdline("/opt/My Tool/bin\0"), ["/opt/My Tool/bin"]);
   });
 
   it("names each Chrome process by the flags it was started with", () => {

@@ -201,6 +201,9 @@ export class Capacity {
     const deadline = me.since + config.admissionWaitMs;
     let queued = false;
     for (;;) {
+      // Re-read every pass. A browser pinned while its start is waiting must be admitted as
+      // pinned: in 0.9.0 a pin made mid-wait changed nothing until the next start.
+      me.pinned = this.fleet.row(id).pinned === 1;
       const pids = readPidLimit();
       if (!pids) return;
       const held = this.holds(me).total;

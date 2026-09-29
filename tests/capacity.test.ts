@@ -62,6 +62,10 @@ describe("host capacity", () => {
   beforeEach(() => {
     measured = new Map();
     process.env.TALLYLAMP_ADMISSION_WAIT_SEC = "0";
+    // One Capacity serves every test here, and stopping a busy browser starts a 10-second
+    // cooldown before the next one may be. Without this, whichever test followed one that
+    // stopped a busy browser would wait on a stop that the cooldown holds back.
+    (ctx.browsers.capacity as unknown as { lastActiveShedAt: number }).lastActiveShedAt = 0;
   });
   afterEach(stopAll);
 
@@ -161,6 +165,34 @@ describe("host capacity", () => {
     assert.match(note, /using 400 of the host's processes/);
     const audited = getDb().prepare(`SELECT 1 FROM audit_events WHERE action = 'browser.shed' AND target_id = ?`).get(test.id);
     assert.ok(audited);
+  });
+
+  it("admits as pinned a start that was pinned while it waited", async () => {
+    // 29 September, 17:09: the reader's start was already queued, unpinned, when it was
+    // pinned, and in 0.9.0 it went on waiting as unpinned until it failed.
+    process.env.TALLYLAMP_ADMISSION_WAIT_SEC = "10";
+    const busy = browser("dray-ai-pages");
+    pids(100);
+    await ctx.browsers.ensureRunning(busy.id);
+    measured.set(busy.id, usage(707));
+    await ctx.browsers.capacity.sampleNow();
+    const reader = browser("kraken reader");
+    ctx.browsers.recordThreads(reader.id, 235, 243); // needs 319
+    pids(800);
+    const drop = (ev: TallyEvent) => { if (ev.type === "browser.stopped" && ev.browserId === busy.id) pids(100); };
+    hub.on("event", drop);
+    try {
+      const started = ctx.browsers.ensureRunning(reader.id);
+      await sleep(300);
+      assert.equal(ctx.browsers.row(reader.id).status, "queued");
+      assert.ok(ctx.browsers.runtime(busy.id), "an unpinned start does not stop a busy browser");
+      ctx.browsers.setPinned(reader.id, true, admin);
+      await started;
+    } finally {
+      hub.off("event", drop);
+    }
+    assert.ok(ctx.browsers.runtime(reader.id), "pinned mid-wait, it started");
+    assert.equal(ctx.browsers.runtime(busy.id), undefined, "and stopped the busy browser to do it");
   });
 
   it("never stops a browser that is in use to start an unpinned one", async () => {

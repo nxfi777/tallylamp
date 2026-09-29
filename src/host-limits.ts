@@ -61,7 +61,7 @@ export function scanProcesses(procDir = config.procDir): ProcInfo[] | null {
       // the fixed fields are the ones after the last ")". Field 4 is ppid, 5 pgrp, 6 session,
       // 20 threads.
       const rest = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-      const cmdline = readFileSync(path.join(procDir, name, "cmdline"), "utf8").split("\0").filter(Boolean);
+      const cmdline = parseCmdline(readFileSync(path.join(procDir, name, "cmdline"), "utf8"));
       out.push({
         pid: Number(name),
         ppid: Number(rest[1]),
@@ -75,6 +75,19 @@ export function scanProcesses(procDir = config.procDir): ProcInfo[] | null {
     }
   }
   return out;
+}
+
+/**
+ * A process's arguments from /proc/PID/cmdline, which separates them with NULs.
+ *
+ * Chrome on Linux retitles its child processes: it writes a new title over its own arguments,
+ * so a renderer or zygote reads back as one string, "/opt/google/chrome/chrome --type=zygote
+ * ...", with its flags joined by spaces. Read that way unsplit, no child had a --type, and in
+ * production 0.9.0 counted every browser's renderer zygotes as zero.
+ */
+export function parseCmdline(raw: string): string[] {
+  const args = raw.split("\0").filter(Boolean);
+  return args.length === 1 && / --/.test(args[0]!) ? args[0]!.split(" ").filter(Boolean) : args;
 }
 
 export type ProcessKind =
