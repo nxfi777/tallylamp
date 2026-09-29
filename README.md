@@ -88,9 +88,11 @@ Tallylamp infers its public URL from Railway's domain. Leave
 `TALLYLAMP_DATA_DIR` unset in Railway variables and keep `.env.example` for local
 use. There is no browser cap by default; set `TALLYLAMP_MAX_BROWSERS` to add one.
 Budget roughly 1–2 GB per active Chrome, plus the server, and measure your workload.
-Railway also limits a container to 1,000 processes and threads, and each Chrome uses
-230–420, so two or three browsers run there at once. Tallylamp refuses a start that
-would cross the limit.
+Railway also limits a container to 1,000 processes and threads, shared by every
+browser: a quiet Chrome uses about 200, and a busy one 600 or more. Tallylamp counts
+each browser's share, queues a start until it fits, stops idle browsers to make room,
+and restarts a browser the limit has broken. Pin a browser that must stay up, or run
+it on its own service ([isolating production browsers](docs/railway.md#isolating-production-browsers)).
 
 [Railway setup, variables, and deployment limits](docs/railway.md).
 

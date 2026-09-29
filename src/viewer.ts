@@ -5,7 +5,7 @@ import { sha256 } from "./auth.js";
 import { config, trustedOrigins } from "./config.js";
 import { getDb, nowIso } from "./db.js";
 import { CdpClient } from "./cdp.js";
-import { PIDS_PER_BROWSER, readPidLimit } from "./host-limits.js";
+import { readPidLimit } from "./host-limits.js";
 import type { BrowserManager } from "./browsers.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
@@ -1172,12 +1172,13 @@ async function runViewer(
       }
       if (method === "Target.targetCrashed" && params.targetId === activeTargetId) {
         // A crashed tab keeps its target and shows nothing, which looked like every page
-        // turning into about:blank. The usual cause on a container is the process limit.
+        // turning into about:blank. The usual cause on a container is the process limit, and
+        // the kernel's own refusal count says whether that is what just happened.
         const pids = readPidLimit();
         send({
           type: "notice",
-          message: pids && pids.max - pids.current < PIDS_PER_BROWSER / 4
-            ? `This tab crashed because the host is out of processes (${pids.current} of ${pids.max} in use). Stop a browser you are not using, then reload this tab.`
+          message: pids && browsers.capacity.refusedWithin(60_000)
+            ? `This tab crashed because the host ran out of processes (${pids.current} of ${pids.max} in use). Stop a browser you are not using, then reload this tab.`
             : "This tab crashed. Reload it to try again.",
         });
         return;

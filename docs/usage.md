@@ -371,8 +371,13 @@ page in that browser can reach its bound address. Read the
 
 There is no fleet cap by default; `TALLYLAMP_MAX_BROWSERS` sets one, and
 `/api/v1/status` reports it (`null` when uncapped). An agent's cap of `0` means
-no per-agent cap. On a host with a process limit, such as Railway's 1,000, Tallylamp
-also refuses a start that would leave too few processes for another Chrome. Idle
+no per-agent cap. On a host with a process limit, such as Railway's 1,000, a start
+waits until the browser's measured launch peak fits, then fails with `fleet_full`.
+An administrator can pin a browser so room is held for it and other browsers are
+stopped before it runs short. A browser that loses its renderer zygote, or whose
+navigations all fail with `net::ERR_ABORTED`, shows `unhealthy` and is restarted.
+An agent hears of any of these from a `[tallylamp]` note on its next tool call. See
+[isolating production browsers](railway.md#isolating-production-browsers). Idle
 Chrome processes stop while persistent profiles remain; the fleet
 and idle limits are configured in the [Railway settings](railway.md#browser-and-session-settings).
 

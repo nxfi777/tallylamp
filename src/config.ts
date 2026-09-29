@@ -166,6 +166,38 @@ export const config = {
   get fakeChrome() { return bool("TALLYLAMP_FAKE_CHROME", false); },
   /** Where the cgroup pids controller is read (see host-limits.ts). Overridden by tests. */
   get cgroupDir() { return process.env.TALLYLAMP_CGROUP_DIR || "/sys/fs/cgroup"; },
+  /** Where each browser's processes are counted (see host-limits.ts). Overridden by tests. */
+  get procDir() { return process.env.TALLYLAMP_PROC_DIR || "/proc"; },
+  /**
+   * Host process accounting (capacity.ts). Only meaningful where the host sets a pids ceiling.
+   *
+   * browserThreads: what a start is assumed to need before this browser has ever been measured.
+   * processHeadroom: kept free at all times, so ffmpeg, xdotool and a bridge can still start.
+   * admissionWaitMs: how long a start waits for room before it is refused with fleet_full.
+   * shedIdleMs: how long a browser has to go unused before it may be stopped to make room.
+   *   0 turns shedding off. Pinned browsers are never shed.
+   * unhealthyRestarts: automatic restarts of a broken browser allowed in 30 minutes.
+   */
+  get browserThreads() { return Math.max(1, int("TALLYLAMP_BROWSER_THREADS", 300)); },
+  get processHeadroom() { return Math.max(0, int("TALLYLAMP_PROCESS_HEADROOM", 50)); },
+  get admissionWaitMs() { return Math.max(0, int("TALLYLAMP_ADMISSION_WAIT_SEC", 30)) * 1000; },
+  get shedIdleMs() { return Math.max(0, int("TALLYLAMP_SHED_IDLE_SEC", 300)) * 1000; },
+  get unhealthyRestarts() { return Math.max(0, int("TALLYLAMP_UNHEALTHY_RESTARTS", 3)); },
+  /**
+   * Chrome thread reductions. All off by default: none has yet been soak-tested for its thread
+   * saving and its stability cost (scripts/thread-soak.mjs), and each has a known downside.
+   *
+   * chromeCpus: run each Chrome under taskset on this many CPUs, rotating which ones, so its
+   *   CPU-scaled thread pools size themselves to that rather than the 48 a Railway container
+   *   reports. Only helps if Chrome sizes its pools from sched_getaffinity.
+   * rendererProcessLimit: --renderer-process-limit. A soft cap that site isolation can exceed,
+   *   and measured worse for memory here before (see chrome.ts).
+   * inProcessGpu: --in-process-gpu. Saves the ~28-thread GPU process, but a GPU crash then
+   *   takes the whole browser down.
+   */
+  get chromeCpus() { return Math.max(0, int("TALLYLAMP_CHROME_CPUS", 0)); },
+  get rendererProcessLimit() { return Math.max(0, int("TALLYLAMP_RENDERER_PROCESS_LIMIT", 0)); },
+  get inProcessGpu() { return bool("TALLYLAMP_IN_PROCESS_GPU", false); },
   get sessionTtlMs() { return int("TALLYLAMP_SESSION_TTL_SEC", 86400) * 1000; },
   get viewerTicketTtlMs() { return int("TALLYLAMP_VIEWER_TICKET_TTL_SEC", 60) * 1000; },
   /**

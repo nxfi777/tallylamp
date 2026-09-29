@@ -627,6 +627,7 @@ function badge(b) {
   if (b.control?.controllerType === "human") return h("span", { class: "badge human" }, guestHolds(b) ? "Guest" : "Human");
   if (b.kind === "linked" && b.status !== "running") return h("span", { class: "badge idle" }, linkStatus(b));
   if (b.status === "running") return h("span", { class: "badge live" }, "Live");
+  if (b.status === "unhealthy") return h("span", { class: "badge warn", title: b.health?.reason || false }, "Unhealthy");
   return h("span", { class: "badge idle" }, b.status || "stopped");
 }
 
@@ -767,6 +768,8 @@ function card(b) {
   // starting, and over one that had simply never produced a frame.
   const thumb = h("div", { class: "thumb" }, badge(b),
     b.status === "starting" ? "starting…" : b.status === "stopping" ? "stopping…"
+      : b.status === "queued" ? "waiting for room on the host…"
+      : b.status === "unhealthy" ? "Chrome is up but cannot load pages"
       // Nothing on this side can wake somebody's laptop, so say who can.
       : b.kind === "linked" ? linkedCaption(b)
       : "no live view");
@@ -792,13 +795,18 @@ function card(b) {
       // DOM is the detail page, and a fleet card that cannot tell you whose project it is makes
       // you open it to find out. Full value in the title, because the line is clamped.
       project ? h("div", { class: "card-project", title: project }, project) : null,
-      h("h3", {}, b.name, b.kind === "linked" ? h("span", { class: "kind-tag", title: "A person's own browser, linked through the Tallylamp extension" }, "linked") : null),
+      h("h3", {}, b.name,
+        b.kind === "linked" ? h("span", { class: "kind-tag", title: "A person's own browser, linked through the Tallylamp extension" }, "linked") : null,
+        b.pinned ? h("span", { class: "kind-tag", title: "Room is held for it on this host, and it is never stopped to make room for another browser" }, "pinned") : null),
       // Six identical grey lines was most of what made this card hard to scan. Owner and
       // reported source moved to the detail page; what stays is what tells you whether to click.
       h("div", { class: "meta" },
         md.purpose ? h("div", { class: "purpose" }, md.purpose) : null,
         // A stopped browser has no page, and a lone dash in its place read as data.
         b.url ? h("div", { class: "mono url" }, b.url) : null,
+        // Its share of the host's process ceiling, which is what decides whether the next
+        // browser can start. Only where the host has a ceiling to share.
+        b.threads != null && state.status?.host?.pids ? h("div", { class: "mono" }, `${b.threads} processes and threads`) : null,
       ),
       sitePills(b),
       h("div", { class: "who" },
@@ -810,7 +818,7 @@ function card(b) {
         // A stopped browser has nothing to watch or take, so its card offers Start instead. A
         // linked browser's status says nothing about its shared tabs, so it keeps Watch.
         // Same slots as a running card: the quiet button first, the main one second.
-        b.kind !== "linked" && ["stopped", "crashed"].includes(b.status)
+        b.kind !== "linked" && ["stopped", "crashed", "queued"].includes(b.status)
           ? [
               h("button", { class: "btn secondary", onClick: () => go(`/browsers/${b.id}`) }, "Open"),
               h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${b.id}/start`, e.currentTarget) }, "Start"),
@@ -843,7 +851,7 @@ function card(b) {
  * unrecognised value has to land somewhere deterministic: a bare lookup miss returns undefined,
  * and subtracting undefined returns NaN, which leaves the whole grid silently half-sorted.
  */
-const STATUS_RANK = { running: 0, starting: 1, stopping: 2, crashed: 3, stopped: 4 };
+const STATUS_RANK = { running: 0, unhealthy: 1, starting: 2, queued: 3, stopping: 4, crashed: 5, stopped: 6 };
 
 /**
  * Rank only, no tiebreak. The API hands us created_at DESC and Array#sort is stable, so
@@ -863,7 +871,7 @@ let fleetCountEl = null;
  * runtimes.size hits it — so that is what the meter measures. Stopped browsers hold no slot.
  */
 function fleetMeter() {
-  const running = state.browsers.filter((b) => b.status === "running").length;
+  const running = state.browsers.filter((b) => ["running", "unhealthy"].includes(b.status)).length;
   const limit = state.status?.maxBrowsers;
   const stopped = state.browsers.length - running;
   const label = limit
@@ -883,13 +891,35 @@ function fleetMeter() {
     wrap.append(slots);
   }
   wrap.append(h("span", { class: "meter-label" }, label));
+  // The ceiling that actually decides whether another browser fits on a container host.
+  const host = state.status?.host;
+  if (host?.pids) {
+    const { max, current } = host.pids;
+    const tight = max - current < (host.headroom || 0) + (host.held || 0) + 100;
+    wrap.append(h("span", {
+      class: "meter-label" + (tight ? " warn" : ""),
+      title: "Processes and threads in use on this host, of the most it allows. Every browser shares this ceiling.",
+    }, `${current} of ${max} processes${host.held ? ` · ${host.held} held` : ""}`));
+  }
   return wrap;
+}
+
+/**
+ * The kernel refused a process or thread in the last half hour. From Chrome's side that is
+ * silent, a tab just stops loading, so this is the one place an operator hears of it.
+ */
+function hostRefusalBanner() {
+  const r = state.status?.host?.lastRefusal;
+  if (!r || Date.now() - Date.parse(r.at) > 30 * 60_000) return null;
+  return h("div", { class: "banner host", role: "status" },
+    h("p", {}, `At ${r.at.slice(11, 16)} UTC the host refused ${r.count} new processes and threads (${r.current} of ${r.max} in use).`),
+    h("p", {}, "Tabs in any running browser may have crashed. Tallylamp restarts a browser it finds broken. Pin the browsers that must stay up, or run them on their own service."));
 }
 
 function freeSlots() {
   const limit = state.status?.maxBrowsers;
   if (!limit) return 0;
-  const running = state.browsers.filter((b) => b.status === "running").length;
+  const running = state.browsers.filter((b) => ["running", "unhealthy"].includes(b.status)).length;
   return Math.max(0, limit - running);
 }
 
@@ -1021,7 +1051,7 @@ function askRow(r) {
 function paintBrowsers() {
   // Repainted on the same tick as the fleet, so an SSE event lands a new request in front of
   // the operator within a second or two rather than on the next full navigation.
-  if (requestsHost) requestsHost.replaceChildren(...[requestsPanel()].filter(Boolean));
+  if (requestsHost) requestsHost.replaceChildren(...[hostRefusalBanner(), requestsPanel()].filter(Boolean));
   if (!browsersHost) return;
   // These cards are about to be replaced; a menu anchored to one of them would outlive it.
   closeMenu();
@@ -1247,6 +1277,17 @@ function settingsSection(b) {
             if (viewer) { viewer.cancel(true); viewer = null; }
             await refresh(); void render();
           }) }), true) : null,
+      b.kind !== "linked" ? settingRow("Pinned",
+        b.pinned
+          ? `On. Room is held for it on this host, and other browsers are stopped before it runs short.${b.peakThreads ? ` It has reached ${b.peakThreads} processes and threads.` : ""}`
+          : "Off. It shares the host's processes with every other browser, and may be stopped when idle to make room.",
+        switchButton("Pinned", b.pinned, {
+          onToggle: (on) => act(async () => {
+            if (on && !confirm("When this host runs short of processes, Tallylamp will stop other browsers to keep this one running, including browsers an agent is using. Their profiles and tabs are kept.\n\nPin this browser?")) return;
+            await api(`/api/v1/browsers/${id}/pinned`, { method: "PUT", body: { pinned: on } });
+            flash(on ? `${b.name} is pinned.` : `${b.name} is no longer pinned.`);
+            await refresh(); void render();
+          }) })) : null,
       settingRow("Lend when idle",
         b.lendable ? "On. A waiting agent can borrow it after a couple of idle minutes, logins included." : "Off. It is lent only when you say so.",
         switchButton("Lend when idle", b.lendable, {
@@ -1610,7 +1651,7 @@ async function browserView(id, seq) {
         // nothing to take. A lease can outlive a stop, so Return to agent stays when it applies.
         human
           ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
-          : ["stopped", "crashed"].includes(b.status)
+          : ["stopped", "crashed", "queued"].includes(b.status)
             ? null
             : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
         // One of Start and Stop, never both with one greyed out, and only one button filled:
@@ -1622,7 +1663,7 @@ async function browserView(id, seq) {
         h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
         b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
         // Restarting a stopped browser is starting it, and Start is already here.
-        b.status === "running" ? h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/restart`, e.currentTarget) }, "Restart") : null,
+        ["running", "unhealthy"].includes(b.status) ? h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/restart`, e.currentTarget) }, "Restart") : null,
         h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name, b.kind === "linked") }, "Delete"),
       ),
     ),
@@ -1713,6 +1754,8 @@ async function browserView(id, seq) {
       b.status === "starting" ? "Chrome is starting…"
         : b.status === "stopping" ? "Chrome is stopping…"
         : b.status === "crashed" ? "Chrome crashed. Its logins and data are kept."
+        : b.status === "queued" ? "Waiting for room on the host to start. It starts on its own when another browser stops."
+        : b.status === "unhealthy" ? `Chrome is up but broken: ${b.health?.reason || "it cannot load pages"}. It has been restarted too often to try again by itself; Restart it once something else has stopped.`
         : b.persistent ? "Browser stopped. Its logins and data are kept."
         : "Browser stopped. This temporary profile may be deleted when idle. Save profile to make a reusable copy."));
     return;
@@ -3190,6 +3233,14 @@ let eventsStarted = false;
 function startEvents() {
   if (eventsStarted || !window.EventSource) return;
   eventsStarted = true;
+  // The host's process count moves with no event to say so. Status only, not the fleet: a full
+  // refresh also re-requests every running browser's thumbnail.
+  setInterval(async () => {
+    if (route().name !== "home" || document.hidden) return;
+    try { state.status = await api("/api/v1/status"); } catch { return; }
+    if (fleetCountEl) fleetCountEl.replaceChildren(fleetMeter());
+    if (requestsHost) requestsHost.replaceChildren(...[hostRefusalBanner(), requestsPanel()].filter(Boolean));
+  }, 15_000);
   let timer = 0;
   let backoff = 1000;
   const listen = () => {

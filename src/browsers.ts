@@ -7,7 +7,7 @@ import { getDb, nowIso } from "./db.js";
 import { Err } from "./errors.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
-import { PIDS_PER_BROWSER, readPidLimit } from "./host-limits.js";
+import { Capacity } from "./capacity.js";
 import { activity, audit, type AuditActor } from "./audit.js";
 import { isValidName, slugify } from "./names.js";
 import { sanitizeMetadata, type BrowserMetadata } from "./metadata.js";
@@ -65,7 +65,18 @@ export type BrowserRow = {
   agent_desktop_enabled: number;
   /** 'managed': a Chrome this process launched. 'linked': a person's own browser, via the extension. */
   kind: string;
+  /** Room is held for it on a host with a process ceiling, and it is never stopped to make room. */
+  pinned: number;
+  /** Threads its process tree reached in the first minute of its last start, and over its last run. */
+  launch_threads: number | null;
+  peak_threads: number | null;
 };
+
+/** Notes for whichever agent next makes a call on the browser. Kept for half an hour. */
+type Notice = { seq: number; at: number; text: string };
+const NOTICE_TTL_MS = 30 * 60_000;
+/** Navigations that must fail with net::ERR_ABORTED in a row, across two or more hosts. */
+const ABORTED_STREAK = 3;
 
 export type ControlState = {
   controllerType: "agent" | "human" | "none";
@@ -100,9 +111,16 @@ export class BrowserManager {
    * statement the proxy can actually enforce. Chrome already took the port per launch.
    */
   private proxies = new Map<string, EgressProxy>();
+  /** Browsers found broken while their Chrome is still up. publicView reports them "unhealthy". */
+  private unhealthy = new Map<string, { reason: string; since: string }>();
+  private abortedNavs = new Map<string, { count: number; hosts: Set<string> }>();
+  private notices = new Map<string, Notice[]>();
+  private noticeSeq = 0;
   shuttingDown = false;
+  readonly capacity: Capacity;
 
   constructor() {
+    this.capacity = new Capacity(this);
     // A control viewer restores the window itself when it is still connected. This covers the
     // path where it is not: the operator closes the dashboard tab and the 90-second lease
     // simply lapses, which would otherwise leave the agent on a window the human had resized.
@@ -115,18 +133,6 @@ export class BrowserManager {
         }
       }, 1000).unref?.();
     });
-    // The start check cannot stop a running browser from growing, and from Chrome's side a
-    // refused process is silent: a tab just crashes and goes blank. The kernel counts every
-    // refusal, so say when that count moves.
-    let refused = readPidLimit()?.refused ?? 0;
-    setInterval(() => {
-      const pids = readPidLimit();
-      if (!pids || pids.refused <= refused) return;
-      log.warn("host process limit reached; Chrome tabs may crash", {
-        max: pids.max, current: pids.current, refused: pids.refused - refused, running: this.runtimes.size,
-      });
-      refused = pids.refused;
-    }, 15_000).unref?.();
   }
 
   /**
@@ -254,6 +260,165 @@ export class BrowserManager {
 
   runtime(id: string): ChromeRuntime | undefined {
     return this.runtimes.get(id);
+  }
+
+  /** Running browsers whose Chrome is on this host: everything but linked browsers. */
+  managedIds(): string[] {
+    return [...this.runtimes.keys()].filter((id) => !this.shimClosers.has(id) || !this.isLinked(id));
+  }
+
+  private isLinked(id: string): boolean {
+    try {
+      return this.row(id).kind === "linked";
+    } catch {
+      return false;
+    }
+  }
+
+  /** A listener in this process standing in for Chrome (the test fake, a linked browser's shim). */
+  isShim(id: string): boolean {
+    return this.shimClosers.has(id);
+  }
+
+  /** Mid-start, mid-save or mid-restart: not something to stop underneath. */
+  busy(id: string): boolean {
+    return this.starting.has(id) || this.profileSaves.has(id) || this.unhealthy.has(id);
+  }
+
+  /**
+   * How long nobody has used this browser, for deciding what may be stopped to make room. A
+   * person watching or holding control is using it, whatever the clock says.
+   */
+  idleFor(id: string): number {
+    if (this.viewerCount(id) > 0 || this.isHumanControlled(id)) return 0;
+    const row = this.row(id);
+    return Date.now() - Date.parse(row.last_activity_at ?? row.created_at);
+  }
+
+  pinnedRows(): BrowserRow[] {
+    return getDb().prepare(`SELECT * FROM browsers WHERE pinned = 1 AND kind = 'managed'`).all() as BrowserRow[];
+  }
+
+  recordThreads(id: string, launch: number | null, peak: number | null): void {
+    getDb()
+      .prepare(`UPDATE browsers SET launch_threads = COALESCE(?, launch_threads), peak_threads = COALESCE(?, peak_threads) WHERE id = ?`)
+      .run(launch, peak, id);
+  }
+
+  /**
+   * Hold room for this browser on a host with a process ceiling, and never stop it to make room
+   * for another. The administrator's call alone: pinning one browser is what lets Tallylamp
+   * stop somebody else's, so an agent must not be able to pin its own.
+   */
+  setPinned(id: string, pinned: boolean, principal: Principal): BrowserRow {
+    if (principal.type !== "admin") throw Err.unauthorized("only the administrator can pin a browser");
+    if (pinned) this.assertManaged(id, "pinning");
+    getDb().prepare(`UPDATE browsers SET pinned = ? WHERE id = ?`).run(pinned ? 1 : 0, id);
+    audit({ actorType: principal.type, actorId: principal.id, action: pinned ? "browser.pinned" : "browser.unpinned",
+      targetType: "browser", targetId: id });
+    hub.emitEvent("browser.updated", {}, id);
+    return this.row(id);
+  }
+
+  /**
+   * Leave a note for whoever next makes a tool call on this browser. An agent cannot be
+   * woken, so this is how it learns that its browser was stopped, restarted, or caught in the
+   * host running out of processes: on the back of its next call (see McpGateway).
+   */
+  notice(id: string, text: string): void {
+    const now = Date.now();
+    const list = (this.notices.get(id) ?? []).filter((n) => now - n.at < NOTICE_TTL_MS).slice(-9);
+    list.push({ seq: ++this.noticeSeq, at: now, text });
+    this.notices.set(id, list);
+  }
+
+  noticesSince(id: string, seq: number): Notice[] {
+    const now = Date.now();
+    return (this.notices.get(id) ?? []).filter((n) => n.seq > seq && now - n.at < NOTICE_TTL_MS);
+  }
+
+  /**
+   * Stop a browser to give its processes to another, and say so everywhere its owner or the
+   * operator might look. Its profile and its tabs are kept: --restore-last-session brings the
+   * tabs back on the next start, which is why this stops rather than closing tabs.
+   */
+  async shedStop(id: string, threads: number, idle: boolean, why: string): Promise<void> {
+    const row = this.row(id);
+    const clock = new Date().toISOString().slice(11, 19);
+    const what = idle ? `after ${Math.round(this.idleFor(id) / 60_000)} idle minutes` : "while it was in use";
+    log.warn("stopping a browser to free host processes", { id, name: row.name, threads, idle, why });
+    activity(id, "shed", `stopped ${what} ${why}`);
+    audit({ actorType: "system", actorId: "capacity", action: "browser.shed", targetType: "browser", targetId: id,
+      detail: { threads, idle, why } });
+    this.notice(
+      id,
+      `Tallylamp stopped this browser at ${clock} UTC, ${what}, ${why}. It was using ${threads} of the host's processes and threads. ` +
+        `Its profile and tabs are kept, and your next call starts it again once there is room.`,
+    );
+    hub.emitEvent("browser.shed", { threads, idle, why }, id);
+    await this.stop(id);
+  }
+
+  /**
+   * What a navigation through the bridge came back with. A browser that has lost the ability
+   * to start renderers fails every navigation with net::ERR_ABORTED after a few seconds, which
+   * one site can also do on its own, so it takes a streak across more than one host.
+   */
+  noteNavigation(id: string, outcome: "ok" | "aborted" | "other", url?: string): void {
+    if (outcome === "ok") {
+      this.abortedNavs.delete(id);
+      return;
+    }
+    if (outcome !== "aborted") return;
+    const streak = this.abortedNavs.get(id) ?? { count: 0, hosts: new Set<string>() };
+    streak.count++;
+    try {
+      if (url) streak.hosts.add(new URL(url).host);
+    } catch {
+      /* not a URL; still counts */
+    }
+    this.abortedNavs.set(id, streak);
+    if (streak.count >= ABORTED_STREAK && streak.hosts.size >= 2) {
+      this.abortedNavs.delete(id);
+      void this.markUnhealthy(id, `every navigation fails with net::ERR_ABORTED (${streak.count} in a row, on ${[...streak.hosts].join(", ")})`)
+        .catch((e) => log.warn("unhealthy browser handling failed", { id, error: (e as Error).message }));
+    }
+  }
+
+  /**
+   * A browser whose Chrome is up but cannot do its job. It is reported as unhealthy, not
+   * running, and restarted, up to TALLYLAMP_UNHEALTHY_RESTARTS times in half an hour; past
+   * that it is left for a person to look at, rather than restarted in a loop.
+   */
+  async markUnhealthy(id: string, reason: string): Promise<void> {
+    const rt = this.runtimes.get(id);
+    if (!rt || rt.chrome.exitCode !== null || this.shuttingDown || this.busy(id)) return;
+    const row = this.row(id);
+    if (row.kind === "linked" || row.status !== "running") return;
+    const clock = new Date().toISOString().slice(11, 19);
+    this.unhealthy.set(id, { reason, since: nowIso() });
+    this.setStatus(id, "unhealthy");
+    log.warn("browser unhealthy", { id, name: row.name, reason });
+    activity(id, "unhealthy", reason);
+    hub.emitEvent("browser.unhealthy", { reason }, id);
+    if (!this.capacity.takeRestart(id)) {
+      this.notice(id, `This browser is broken (${reason}). Tallylamp has restarted it ${config.unhealthyRestarts} times in the last 30 minutes, ` +
+        `so it has left it running for a person to look at. Tell the user, or stop another browser and restart this one.`);
+      return;
+    }
+    this.notice(id, `This browser broke at ${clock} UTC (${reason}), so Tallylamp restarted it. ` +
+      `Its tabs from before are restored; check the page you were on before carrying on.`);
+    audit({ actorType: "system", actorId: "health", action: "browser.restarted", targetType: "browser", targetId: id, detail: { reason } });
+    try {
+      await this.stopInternal(id);
+      await this.ensureRunningInternal(id);
+      hub.emitEvent("browser.restarted", { reason }, id);
+    } catch (e) {
+      log.warn("restarting an unhealthy browser failed", { id, error: (e as Error).message });
+      this.notice(id, `Tallylamp could not restart this browser: ${(e as Error).message}`);
+    } finally {
+      this.unhealthy.delete(id);
+    }
   }
 
   attachMcp(id: string): void {
@@ -572,23 +737,28 @@ export class BrowserManager {
     }
     // The ceiling that actually bites on a container is processes, not memory. Past it Chrome
     // cannot start renderers, and the tabs that crash are the other browsers' as much as this
-    // one's. Starts still in flight have not spawned anything yet, so they are counted here.
-    const pids = linked || occupied.has(id) ? null : readPidLimit();
-    if (pids) {
-      const pending = [...this.starting.keys()].filter((b) => b !== id && kindOf(b) !== "linked").length;
-      if (pids.max - pids.current - pending * PIDS_PER_BROWSER < PIDS_PER_BROWSER) {
-        throw Err.fleetFull(
-          `This host is near its process limit: ${pids.current} of ${pids.max} processes and threads are in use, ` +
-            `and a browser needs about ${PIDS_PER_BROWSER}. Stop a browser you are not using, then start this one.`,
-        );
+    // one's. So a start waits for room, on this browser's own measured launch peak, and is
+    // registered in `starting` before it waits: a second call for the same browser joins this
+    // one instead of launching a second Chrome on the same profile.
+    const before = this.row(id).status;
+    const p = (async () => {
+      if (!linked) {
+        await this.capacity.admit(id, (need, free) => {
+          this.setStatus(id, "queued");
+          hub.emitEvent("browser.queued", { need, free }, id);
+        });
       }
-    }
-    const p = this.start(id);
+      return this.start(id);
+    })();
     this.starting.set(id, p);
     try {
       return await p;
+    } catch (e) {
+      if (this.row(id).status === "queued") this.setStatus(id, before === "queued" ? "stopped" : before);
+      throw e;
     } finally {
       this.starting.delete(id);
+      this.capacity.release(id);
     }
   }
 
@@ -643,6 +813,7 @@ export class BrowserManager {
             }
           })();
       this.runtimes.set(id, rt);
+      if (row.kind !== "linked") this.capacity.launched(id);
       let version: string | null = null;
       try {
         // chromeVersion() reads the binary on this host, which says nothing about a browser
@@ -707,7 +878,10 @@ export class BrowserManager {
       }
       this.runtimes.delete(id);
       this.windowContents.delete(id);
+      this.capacity.stopped(id);
     }
+    this.unhealthy.delete(id);
+    this.abortedNavs.delete(id);
     await this.closeProxy(id);
     this.setStatus(id, "stopped");
     hub.emitEvent("browser.stopped", {}, id);
@@ -1026,11 +1200,19 @@ export class BrowserManager {
     const control = this.controlState(row.id);
     const rt = this.runtimes.get(row.id);
     const metadata = JSON.parse(row.metadata_json || "{}") as BrowserMetadata;
+    const sick = this.unhealthy.get(row.id);
     return {
       id: row.id,
       name: row.name,
       slug: row.slug,
-      status: rt ? "running" : row.status === "running" ? "stopped" : row.status,
+      // "running" said only that Chrome's own process was up. A Chrome that has lost its
+      // renderer zygote is up and can load nothing, and it used to be listed as running.
+      status: rt ? (sick ? "unhealthy" : "running") : row.status === "running" ? "stopped" : row.status,
+      health: sick ? { state: "unhealthy", reason: sick.reason, since: sick.since } : null,
+      pinned: row.pinned === 1,
+      // Processes and threads this browser's whole tree holds against the host's ceiling. Null
+      // when it is not running or the host cannot be measured.
+      ...this.threadView(row),
       persistent: row.persistent === 1,
       owner: { type: row.owner_type, id: row.owner_id },
       provenance: {
@@ -1076,8 +1258,14 @@ export class BrowserManager {
     };
   }
 
+  private threadView(row: BrowserRow): { threads: number | null; peakThreads: number | null; launchThreads: number | null } {
+    if (row.kind === "linked") return { threads: null, peakThreads: null, launchThreads: null };
+    const { threads, peakThreads, launchThreads } = this.capacity.view(row.id);
+    return { threads, peakThreads, launchThreads };
+  }
+
   async recoverOnBoot(): Promise<void> {
-    getDb().prepare(`UPDATE browsers SET status = 'stopped' WHERE status IN ('running', 'starting', 'stopping')`).run();
+    getDb().prepare(`UPDATE browsers SET status = 'stopped' WHERE status IN ('running', 'starting', 'stopping', 'queued', 'unhealthy')`).run();
     const rows = this.list();
     for (const r of rows) {
       if (existsSync(r.profile_path)) clearSingletonLocks(r.profile_path);
@@ -1096,6 +1284,9 @@ export class BrowserManager {
       if (rt.chrome.exitCode !== null) {
         this.runtimes.delete(id);
         this.windowContents.delete(id);
+        this.capacity.stopped(id);
+        this.unhealthy.delete(id);
+        this.abortedNavs.delete(id);
         await this.closeProxy(id);
         if (this.row(id).kind === "linked") {
           // linkDropped() normally gets here first. This is the backstop, and a laptop that
@@ -1110,6 +1301,9 @@ export class BrowserManager {
         continue;
       }
       const row = this.row(id);
+      // A pinned browser is one the operator wants kept up, like a dashboard an agent reads
+      // now and then. Idleness is not a reason to stop it.
+      if (row.pinned === 1) continue;
       const last = row.last_activity_at ? Date.parse(row.last_activity_at) : Date.parse(row.created_at);
       const attached =
         this.mcpCount(id) > 0 || this.viewerCount(id) > 0 || this.controlState(id).controllerType === "human";
@@ -1344,6 +1538,7 @@ export class BrowserManager {
 
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
+    this.capacity.stopSampling();
     await Promise.allSettled([...this.profileSaves.values()]);
     const ids = [...this.runtimes.keys()];
     for (const id of ids) {

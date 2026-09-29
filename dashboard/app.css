@@ -56,6 +56,7 @@
   --chip-muted: #a1a1aa;
   --chip-live: #f47174;
   --chip-human: #e8935f;
+  --chip-warn: #d0a24a;    /* 8.5 on --chip */
 
   --radius: 8px;
   --radius-sm: 6px;
@@ -244,6 +245,7 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.5rem; letter-spac
 }
 .meter .slot.on { background: var(--text); }
 .meter-label { color: var(--muted); font-size: 0.875rem; }
+.meter-label.warn { color: var(--warn); }
 
 /* Remaining capacity as empty tiles, matching the height of a real card's frame. */
 .ghost {
@@ -350,6 +352,7 @@ input::placeholder { color: var(--muted); }
 .badge.live { color: var(--chip-live); }
 .badge.human { color: var(--chip-human); }
 .badge.idle { color: var(--chip-muted); }
+.badge.warn { color: var(--chip-warn); }
 .body { padding: 0.8rem 0.9rem 0.95rem; flex: 1; display: flex; flex-direction: column; }
 .body h3 { margin: 0 0 0.3rem; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.011em; }
 /* The project, back on the card now that it is not a section heading. Clamped to one line on
@@ -690,6 +693,8 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
    attention state, not a failure and not a person holding the keyboard. Reusing --human here
    would have given two different meanings the same stripe. */
 .banner.asks { border-left: 3px solid var(--warn); }
+/* The host ran out of processes: the same attention state, about the machine rather than a person. */
+.banner.host { border-left: 3px solid var(--warn); }
 .asks-h { font-size: 0.95rem; margin: 0 0 0.15rem; }
 /* One row per request, and the rule between them rather than a card each: three nested cards
    inside a panel is three borders saying the same thing. */

@@ -52,6 +52,8 @@ COPY --from=build /app/dist ./dist
 COPY dashboard ./dashboard
 COPY guest ./guest
 COPY bin ./bin
+# Measures Chrome's thread count under a launch configuration, on the host that has the limit.
+COPY scripts/thread-soak.mjs ./scripts/thread-soak.mjs
 COPY --chmod=0755 docker/entrypoint.sh /entrypoint.sh
 RUN chown -R tallylamp:tallylamp /app
 

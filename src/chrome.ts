@@ -7,6 +7,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 import { config } from "./config.js";
+import { allowedCpus } from "./host-limits.js";
 import { log } from "./log.js";
 
 export type SandboxStatus = "sandboxed" | "disabled" | "fell-back" | "unknown";
@@ -106,6 +107,44 @@ export function gpuArgs(mode = config.gpu): { args: string[]; status: GpuStatus 
   // leaving Chrome with no working WebGL backend at all.
   if (!hasGpuDevice()) return { args: SWIFTSHADER, status: "software" };
   return { args: [], status: "unknown" };
+}
+
+/**
+ * Flags that cut Chrome's thread count on a host with a process ceiling. Each is off unless its
+ * variable is set, because none has been soak-tested here yet (scripts/thread-soak.mjs):
+ *
+ * - --renderer-process-limit is a soft cap that site isolation exceeds, and measured worse for
+ *   memory here before (see the flag list in launchChrome).
+ * - --in-process-gpu saves the GPU process, 27-30 threads with SwiftShader, and a GPU crash then
+ *   takes the whole browser down with it.
+ *
+ * Turning site isolation off would cut the most, one process per site, and is deliberately not
+ * offered: these browsers hold signed-in sessions, and it is the boundary between them.
+ */
+export function threadReductionArgs(): string[] {
+  const args: string[] = [];
+  if (config.rendererProcessLimit > 0) args.push(`--renderer-process-limit=${config.rendererProcessLimit}`);
+  if (config.inProcessGpu) args.push("--in-process-gpu");
+  return args;
+}
+
+let cpuRotation = 0;
+
+/**
+ * The CPUs the next Chrome is pinned to, as a taskset list, or null to leave it unpinned.
+ *
+ * Chrome sizes its thread pools from the CPU count it sees, and a Railway container sees 48
+ * CPUs while its quota is 32. Pinning each Chrome to a few CPUs lowers that count, if Chrome
+ * reads it from sched_getaffinity (check navigator.hardwareConcurrency under taskset; that is
+ * the same number). Windows rotate across the allowed CPUs so two browsers do not share one.
+ */
+export function chromeCpuList(): string | null {
+  const n = config.chromeCpus;
+  if (n <= 0 || process.platform !== "linux") return null;
+  const cpus = allowedCpus();
+  if (!cpus || n >= cpus.length) return null;
+  const start = (cpuRotation++ * n) % cpus.length;
+  return Array.from({ length: n }, (_, i) => cpus[(start + i) % cpus.length]).join(",");
 }
 
 function waitPort(port: number, host = "127.0.0.1", timeoutMs = 20_000): Promise<void> {
@@ -233,6 +272,7 @@ export async function launchChrome(opts: {
     "--hide-crash-restore-bubble",
     ...sandbox.args,
     ...gpu.args,
+    ...threadReductionArgs(),
   ];
   if (opts.proxyPort) {
     args.push(`--proxy-server=http://127.0.0.1:${opts.proxyPort}`);
@@ -251,7 +291,10 @@ export async function launchChrome(opts: {
     ...(display ? { DISPLAY: display } : {}),
   });
 
-  const chrome = spawn(config.chromeBin, args, {
+  // taskset sets the affinity and then execs Chrome in place, so the pid, and the process group
+  // that stopRuntime kills, are still Chrome's own.
+  const cpus = chromeCpuList();
+  const chrome = spawn(cpus ? "taskset" : config.chromeBin, cpus ? ["-c", cpus, config.chromeBin, ...args] : args, {
     env,
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,

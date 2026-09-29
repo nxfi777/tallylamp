@@ -56,6 +56,45 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 | `TALLYLAMP_ATTACHED_IDLE_TTL_SEC` | no | default 14400. Applies while an MCP session, a watcher or a human controller is attached. |
 | `TALLYLAMP_MCP_SESSION_IDLE_SEC` | no | default 600. Closes an MCP session whose client vanished without `DELETE /mcp`. |
 
+## Process limit settings
+
+These apply only where the host sets a process ceiling, as Railway does. See
+[Isolating production browsers](#isolating-production-browsers).
+
+| Name | Required | Notes |
+| --- | --- | --- |
+| `TALLYLAMP_ADMISSION_WAIT_SEC` | no | default 30. How long a start waits for room before it fails with `fleet_full`. `0` refuses at once. |
+| `TALLYLAMP_BROWSER_THREADS` | no | default 300. What a start is assumed to need before that browser has been measured. After its first start, its own launch peak plus a quarter and 25 is used. |
+| `TALLYLAMP_PROCESS_HEADROOM` | no | default 50. Kept free at all times, so ffmpeg, xdotool and MCP bridges can still start. |
+| `TALLYLAMP_SHED_IDLE_SEC` | no | default 300. A browser unused this long, with nobody watching, may be stopped to make room. `0` never stops an idle browser for room. |
+| `TALLYLAMP_UNHEALTHY_RESTARTS` | no | default 3. Automatic restarts of a broken browser allowed in 30 minutes. Past that it is left running and reported `unhealthy`. |
+| `TALLYLAMP_CHROME_CPUS` | no | default off. Not yet measured; see below. Runs each Chrome under `taskset` on this many CPUs. |
+| `TALLYLAMP_RENDERER_PROCESS_LIMIT` | no | default off. Not yet measured. Passes `--renderer-process-limit`, a soft cap that site isolation exceeds. |
+| `TALLYLAMP_IN_PROCESS_GPU` | no | default off. Not yet measured. Saves the GPU process (27–30 threads), but a GPU crash then takes the whole browser down. |
+
+The last three cut Chrome's thread count and stay off until each has been
+measured for threads and stability. Measure on a service that holds no
+production browser, because the test Chrome shares that service's limit.
+`railway ssh` connects as root, and Chrome will not run as root with its
+sandbox on, so drop to the service's user as the entrypoint does:
+
+```sh
+railway ssh -- setpriv --reuid=1100 --regid=1100 --init-groups \
+  node /app/scripts/thread-soak.mjs --variant baseline --minutes 10 \
+  --url https://chatgpt.com/ --out /tmp/soak-baseline.jsonl
+railway ssh -- setpriv --reuid=1100 --regid=1100 --init-groups \
+  node /app/scripts/thread-soak.mjs --variant cpus=4 --minutes 10 \
+  --url https://chatgpt.com/ --out /tmp/soak-cpus4.jsonl
+```
+
+Run a baseline and the variant back to back, on the same URLs. The summary
+gives threads per process kind, crashed tabs, failed reloads and whether the
+renderer zygote was lost. For `cpus=N`, `hardwareConcurrency` shows whether
+Chrome sizes its thread pools from its CPU affinity; if it still reports 48,
+`taskset` cannot help. Tallylamp does not offer turning site isolation off. It
+would cut the most processes, but these browsers hold signed-in sessions, and
+site isolation is the boundary between them.
+
 ## Viewer settings
 
 | Name | Required | Notes |
@@ -100,11 +139,52 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 - One replica. Redeploy stops every browser process; **profiles survive** on
   the volume and are lazy-started on the next use.
 - Memory: budget roughly 1–2 GB per headed Chrome plus the Node process.
-- Processes: Railway limits a container to 1,000 processes and threads, and
-  each Chrome uses 230–420, so two or three browsers run at once. Past the
-  limit Chrome cannot start renderers and tabs crash in every browser, so
-  Tallylamp refuses a start that would cross it, and logs `host process limit
-  reached` if a running browser grows past it.
+- Processes: Railway limits a container to 1,000 processes and threads,
+  shared by every browser. A Chrome on one quiet tab uses about 200; one
+  loading heavy pages can pass 600. Past the limit Chrome cannot start
+  renderers, tabs crash in every browser, and a browser can lose the zygote it
+  starts renderers from, after which every navigation fails while Chrome
+  itself keeps running. See [Isolating production browsers](#isolating-production-browsers).
+
+## Isolating production browsers
+
+The 1,000 limit is per container, and cannot be raised on a normal plan:
+Railway staff said in April 2026 that higher pids limits are for Enterprise
+customers only. `/sys/fs/cgroup` is read-only inside the container, even for
+root, so Tallylamp cannot give each browser a limit of its own either. What it
+does instead:
+
+- It counts each browser's processes and threads by process tree. The
+  dashboard and `GET /api/v1/browsers` show each browser's share
+  (`threads`), and `/api/v1/status` shows the host's (`host`).
+- It admits a start on the peak that browser reached in the first minute of
+  its last start. When there is no room yet, the start waits for up to
+  `TALLYLAMP_ADMISSION_WAIT_SEC`.
+- When room runs short it stops idle, unpinned browsers, largest first.
+  Profiles and tabs are kept, and the browser starts again on its next use.
+- It finds a browser that lost its renderer zygote, or whose navigations all
+  fail with `net::ERR_ABORTED`, reports it `unhealthy` and restarts it.
+- When the kernel refuses a process, the dashboard shows it, and every
+  running browser's agent gets a note on its next tool call.
+
+To keep a browser from ever being starved by another, either pin it or give
+it a service of its own.
+
+**Pin it.** On the browser's page, turn on **Pinned**, or call
+`PUT /api/v1/browsers/{id}/pinned` with `{"pinned": true}`. Only the
+administrator can pin. Tallylamp holds room for a pinned browser, so an
+unpinned one cannot start into it. It stops idle unpinned browsers to start
+it, and it stops an unpinned browser that is in use only when a running pinned
+browser is about to run short. It never stops a browser a person has taken
+control of, and pinned browsers are never stopped for idleness. Pinning works
+within one service, but everything still shares that service's 1,000.
+
+**Give it its own service.** Add a second service to the project from the
+same image, with its own `/data` volume, `ADMIN_SECRET` and domain, and keep
+production browsers on it. It gets its own 1,000. Connect the agents that
+need those browsers to its `/mcp` as a separate connector. The services share
+nothing, so browsers, profiles and agents do not move between them; sign in to
+a production browser again on the new service.
 
 ## Publishing the template
 

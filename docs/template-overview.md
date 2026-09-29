@@ -178,8 +178,9 @@ profiles contain every login, so share them only with agents you trust.
 
 Site badges show detected or reported sign-ins, not every saved login.
 
-Railway limits a container to 1,000 processes and threads, and each Chrome uses
-230–420, so two or three browsers run at once. Tallylamp refuses a start past that.
+Railway limits a container to 1,000 processes and threads, shared by all browsers.
+Tallylamp queues starts until they fit, holds room for pinned browsers and restarts
+broken ones.
 
 A volume-backed deployment uses one replica. Redeploys interrupt active browsers;
 their profiles remain, and Chrome starts again on the next use. Railway provides

@@ -86,6 +86,11 @@ export const openApiSpec = {
         requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } } } } },
         responses: { "200": { description: "updated" }, "400": { description: "invalid input or unsupported host" }, "403": { description: "administrator required" }, "409": { description: "stop the browser first" } } },
     },
+    "/browsers/{id}/pinned": {
+      put: { summary: "Pin or unpin a managed browser (administrator only). On a host with a process ceiling, room is held for a pinned browser, it is never stopped to make room for another, and it may stop unpinned browsers to start or to keep running. Pinned browsers are also exempt from the idle reaper.",
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["pinned"], properties: { pinned: { type: "boolean" } } } } } },
+        responses: { "200": { description: "updated" }, "400": { description: "invalid input or a linked browser" }, "403": { description: "administrator required" } } },
+    },
     "/browsers/{id}/agent-desktop": {
       put: { summary: "Grant or revoke the owning agent's full native browser access (administrator only). Not inherited by borrowed or copied browsers.",
         requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } } } } },

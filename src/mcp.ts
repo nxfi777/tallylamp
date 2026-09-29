@@ -119,6 +119,8 @@ For extension toolbar popups, side panels and native dialogs, use tallylamp_desk
 
 A browser whose kind is "linked" is a person's own browser, reached through the Tallylamp Link extension. You can only use tabs that person has shared, and link.sharedTabs lists them. If link.online is false, or no tab is shared, you cannot fix that yourself: ask the user to open that browser and press Share this tab in the extension, then continue. A tab may be shared for one site only, and navigating away from it is then refused; ask the user to share it for any site if the task needs that. On a linked browser you cannot upload local files, read the browser-wide cookie jar, resize or close the window, close tabs you did not open, save the profile, use a proxy or tunnel, or lend or borrow it. Only the agents the user ticked for it in the dashboard can use it; if one you need is not in your browser list, ask the user to add you on its page in the dashboard. The person can stop sharing at any moment, so expect a tab to disappear mid-task and say so plainly when it does. tallylamp_stop_browser hands every shared tab back to them.
 
+The host may cap processes and threads for all browsers together. A browser with pinned: true is one the operator keeps room for; do not stop, delete or repurpose it unless asked. If a start fails with fleet_full, the host is out of room: stop a browser you no longer need rather than retrying in a loop. A browser whose status is "unhealthy" was found broken and is being restarted; wait a few seconds and call tallylamp_use_browser again. Notes starting with [tallylamp] on a tool result say what happened to your browser; tell the user when one says a browser was stopped or restarted.
+
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
 const PROXY_INPUT = {
@@ -601,7 +603,25 @@ type Session = {
   access?: GrantAccess;
   child?: { client: Client; transport: StdioClientTransport };
   clientInfo?: { name?: string; version?: string };
+  /** The last browser notice this session was shown, per browser (BrowserManager.notice). */
+  noticesSeen?: Map<string, number>;
+  /** Why the last automatic re-bind failed, so "no browser is bound" can say. */
+  lostBinding?: { browserId: string; error: string };
 };
+
+/**
+ * Whether a navigation through the bridge worked. navigate_page reports a failed load as text,
+ * not as a tool error ("Unable to navigate in the selected page: net::ERR_ABORTED at URL."),
+ * and new_page throws the same message, so both are read off the text.
+ */
+export function navigationOutcome(result: unknown): { outcome: "ok" | "aborted" | "other"; url?: string } {
+  const r = result as { isError?: boolean; content?: Array<{ type: string; text?: string }> };
+  const text = (r?.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("\n");
+  const aborted = /net::ERR_ABORTED(?: at (\S+?))?\.?(?:\s|$)/.exec(text);
+  if (aborted) return { outcome: "aborted", url: aborted[1] };
+  if (/Successfully (navigated|reloaded)/.test(text) || (!r?.isError && !/Unable to /.test(text))) return { outcome: "ok" };
+  return { outcome: "other" };
+}
 
 export class McpGateway {
   private sessions = new Map<string, Session>();
@@ -783,20 +803,33 @@ export class McpGateway {
       return McpGateway.UNBOUND_OK.has(name) ? lifecycle : this.withPendingRequests(session, lifecycle);
     }
     if (!session.browserId || !session.child) {
+      // A browser that was stopped to make room, or broke and could not be restarted, used to
+      // surface here as a bare "nothing is bound". Say what happened to it instead.
+      const lost = session.lostBinding;
+      session.lostBinding = undefined;
+      const why = lost
+        ? [`Your last browser (${lost.browserId}) could not be started again: ${lost.error}`,
+          ...this.browsers.noticesSince(lost.browserId, session.noticesSeen?.get(lost.browserId) ?? 0).map((n) => n.text)]
+        : [];
       return {
         isError: true,
         content: [
           {
             type: "text",
-            text: "No browser is bound to this session. Call tallylamp_create_browser or tallylamp_use_browser first.",
+            text: [...why, "No browser is bound to this session. Call tallylamp_create_browser or tallylamp_use_browser first."].join("\n"),
           },
         ],
       };
     }
     this.browsers.touch(session.browserId);
     logToolActivity(session.browserId, name);
+    const bound = session.browserId;
     const result = await session.child.client.callTool({ name, arguments: args });
-    void this.browsers.refreshPageInfo(session.browserId);
+    void this.browsers.refreshPageInfo(bound);
+    if (name === "navigate_page" || name === "new_page") {
+      const { outcome, url } = navigationOutcome(result);
+      this.browsers.noteNavigation(bound, outcome, url ?? (typeof args.url === "string" ? args.url : undefined));
+    }
     return this.withPendingRequests(session, result);
   }
 
@@ -879,7 +912,8 @@ export class McpGateway {
   }
 
   /**
-   * Deliver the owner's inbox on the back of whatever it just called.
+   * Deliver the owner's inbox, and notes about the browser itself, on the back of whatever it
+   * just called.
    *
    * An agent cannot be woken: an MCP notification reaches a client, not a model, and an idle
    * agent is not running at all. The one moment an owner is reliably reachable is while it is
@@ -888,6 +922,31 @@ export class McpGateway {
    * the idle auto-grant as the backstop rather than the mechanism.
    */
   private withPendingRequests<T>(session: Session, result: T): T {
+    return this.withNotices(session, this.withLendingInbox(session, result));
+  }
+
+  /**
+   * What happened to the bound browser since this session last heard: stopped to make room,
+   * restarted because it broke, caught in the host running out of processes. Each note once per
+   * session. It rides on the result for the same reason the lending inbox does: a tool call is
+   * the only moment an agent is listening.
+   */
+  private withNotices<T>(session: Session, result: T): T {
+    const id = session.browserId;
+    if (!id) return result;
+    const seen = (session.noticesSeen ??= new Map());
+    const fresh = this.browsers.noticesSince(id, seen.get(id) ?? 0);
+    if (!fresh.length) return result;
+    const r = result as { content?: Array<{ type: string; text?: string }> };
+    if (!Array.isArray(r.content)) return result;
+    seen.set(id, fresh[fresh.length - 1]!.seq);
+    return {
+      ...r,
+      content: [...r.content, { type: "text", text: fresh.map((n) => `[tallylamp] ${n.text}`).join("\n") }],
+    } as T;
+  }
+
+  private withLendingInbox<T>(session: Session, result: T): T {
     const id = session.browserId;
     if (!id) return result;
     let waiting: RequestRow[];
@@ -1358,8 +1417,10 @@ export class McpGateway {
       await this.bind(session, row, level);
       log.info("mcp restored binding after a dropped session", { session: session.id, browser: id, access: level });
     } catch (e) {
-      // The browser may have been deleted, stopped, or handed to someone else. Fall through to
-      // the ordinary "nothing is bound" message, which tells the caller what to do.
+      // The browser may have been deleted, stopped, or handed to someone else, or the host may
+      // have no room to start it. Fall through to the "nothing is bound" message, which tells
+      // the caller what to do and, from lostBinding, why.
+      session.lostBinding = { browserId: id, error: (e as Error).message };
       this.lastBound.delete(session.principal.id);
       log.debug("mcp could not restore binding", { browser: id, error: (e as Error).message });
     }

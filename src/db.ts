@@ -415,6 +415,13 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   // through the extension. Everything that needs launch flags, a profile directory or an X
   // display keys off this, because none of those exist for a browser we did not start.
   ["browsers", "kind", "TEXT NOT NULL DEFAULT 'managed'"],
+  // Host process accounting. A pinned browser has room held for it on a host with a process
+  // ceiling, and other browsers are stopped before it is starved. The two counts are the
+  // threads its whole process tree reached: in the first minute of its last start, which is
+  // what the next start is admitted on, and over its last run.
+  ["browsers", "pinned", "INTEGER NOT NULL DEFAULT 0"],
+  ["browsers", "launch_threads", "INTEGER"],
+  ["browsers", "peak_threads", "INTEGER"],
   // Lending gained an access level. 'control' is the right default for both: it is what every
   // grant and request written before the column existed meant, so an upgrade changes nobody's
   // standing access.

@@ -244,6 +244,10 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
       // The dashboard tells the operator how long a takeover lasts. Serve the number so that
       // sentence cannot drift from TALLYLAMP_HUMAN_LEASE_TTL_SEC.
       humanLeaseTtlSec: Math.floor(config.humanLeaseTtlMs / 1000),
+      // The process ceiling every browser on this host shares, what is held for pinned browsers
+      // and starts in progress, and when the kernel last refused a process. pids is null where
+      // the host sets no ceiling.
+      host: browsers.capacity.hostView(),
       principal: req.principal,
     });
   });
@@ -483,6 +487,11 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
   api.put("/api/v1/browsers/:id/extensions", requireAdmin, (req, res) => {
     if (typeof req.body?.enabled !== "boolean") throw Err.invalid("enabled must be a boolean");
     res.json({ browser: browsers.publicView(browsers.updateExtensions(req.params.id, req.body.enabled, req.principal!)) });
+  });
+
+  api.put("/api/v1/browsers/:id/pinned", requireAdmin, (req, res) => {
+    if (typeof req.body?.pinned !== "boolean") throw Err.invalid("pinned must be a boolean");
+    res.json({ browser: browsers.publicView(browsers.setPinned(req.params.id, req.body.pinned, req.principal!)) });
   });
 
   api.put("/api/v1/browsers/:id/agent-desktop", requireAdmin, (req, res) => {
