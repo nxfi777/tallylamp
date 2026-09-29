@@ -24,3 +24,14 @@ maintainer's own Railway service within an hour of upgrading.
 No schema change and no new settings. Tallylamp Link is unchanged apart from
 its version number, so a linked browser does not need the extension
 reinstalled.
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/36604888308)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.9.1` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:7c45912424388950b9f12783f0dc7b7f2b02b49f670f14e362a4488b4a504244
+```
