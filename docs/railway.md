@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.10.1` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.11.0` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -259,37 +259,37 @@ release: a worker and the instance it joins must run the same release.
 
 ## Releasing and upgrading
 
-The current release is [0.10.1](https://github.com/nxfi777/tallylamp/releases/tag/v0.10.1)
+The current release is [0.11.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.11.0)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:84e7560a906fc3467a4befd493feeb1a39ec5b4db2ebd4ba47b7aedc7e676df5
+ghcr.io/nxfi777/tallylamp@sha256:24cd3892c2217ace46d9fcc23be951dc12a19e4a6df16a17138c4ca14e340de1
 ```
 
-The [0.10.1 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/36764518716)
+The [0.11.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/36785913335)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, the version and source-revision labels, and the zip's manifest version
 were verified afterward. The image's source revision is
-`eae6846820de181021baf598dba424f4be013f48`.
+`20b0ce377786750b2d0e7215628ce021d88faf9b`.
 
-The Railway template pins the `0.10.1` digest for new installations, and the
+The Railway template pins the `0.11.0` digest for new installations, and the
 [Tallylamp Worker](https://railway.com/deploy/tallylamp-worker) template pins
 the same one. Each template's published configuration was read back after the
 update, and only the image had changed. Existing deployments keep their
-selected image. Version 0.10.1 changes no tables and adds no settings.
+selected image. Version 0.11.0 changes no tables and adds no settings.
 
 Before the pin, the release's source was deployed to Railway as a main instance
-with one worker. A running browser with a 2.2 GB profile was moved to the
-worker from its menu. It stopped, crossed in about 17 seconds with its progress
-on the card, and started again there, and the message saying where it runs
-stayed on screen at phone width. The 0.10.0 checks were not repeated: driving
-a browser on a worker through `/mcp`, reading storage back after a move each
-way, and `upload_file` being refused on a worker. Railway redeploy
-persistence and unique passwords across two template installations were checked
-for `0.1.1`, not repeated since. These checks do not certify every
-external MCP client, proxy provider, or Chrome extension.
+with one worker. A running browser was moved to the worker and driven there
+through `/mcp`. Chrome on the worker read a file `upload_file` sent from the
+main instance's temp directory, loaded a page from a laptop through a tunnel,
+and took agent keystrokes that opened `chrome://extensions`. The agent's
+desktop screenshot came from the worker's display, and the dashboard's Full
+browser view streamed it. A file outside the temp directory was still refused.
+Railway redeploy persistence and unique passwords across two template
+installations were checked for `0.1.1`, not repeated since. These checks do not
+certify every external MCP client, proxy provider, or Chrome extension.
 
 Version 0.10.0 adds `workers` and `worker_join_tokens` tables and a
 `browsers.worker_id` column. Older images ignore them, but do not roll back
@@ -326,8 +326,9 @@ notes](release-0.8.1.md), [0.8.2 dashboard thumbnail notes](release-0.8.2.md),
 [0.8.3 profile-save live view notes](release-0.8.3.md), [0.8.4 linked-browser
 frame notes](release-0.8.4.md), [0.8.5 process-limit notes](release-0.8.5.md),
 [0.9.0 pinning and recovery notes](release-0.9.0.md), [0.9.1 zygote and
-pinning fixes](release-0.9.1.md), [0.10.0 worker notes](release-0.10.0.md), and
-[0.10.1 one-step move notes](release-0.10.1.md).
+pinning fixes](release-0.9.1.md), [0.10.0 worker notes](release-0.10.0.md), [0.10.1 one-step move
+notes](release-0.10.1.md), and [0.11.0 notes on everything working on a
+worker](release-0.11.0.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing
