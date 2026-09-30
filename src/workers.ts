@@ -453,7 +453,7 @@ export class Workers {
    * host, then delete the copy left behind. In that order, so a failure part-way leaves the
    * browser where it was, with its profile intact.
    */
-  async move(row: BrowserRow, to: string | null, principal: Principal): Promise<void> {
+  async move(row: BrowserRow, to: string | null, principal: Principal, onBytes: (copied: number) => void = () => undefined): Promise<void> {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can move a browser");
     const from = row.worker_id;
     if (from === to) return;
@@ -468,6 +468,16 @@ export class Workers {
     const signal = AbortSignal.timeout(TRANSFER_TIMEOUT_MS);
     const local = profileDir(row.id);
 
+    // Every copy passes through this, so the dashboard can say how much has crossed so far.
+    let copied = 0;
+    const counted = (body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> =>
+      body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, ctrl) {
+          copied += chunk.byteLength;
+          onBytes(copied);
+          ctrl.enqueue(chunk);
+        },
+      }));
     const pull = async (w: WorkerRow): Promise<ReadableStream<Uint8Array> | null> => {
       let res: Response;
       try {
@@ -498,11 +508,11 @@ export class Workers {
 
     if (src && dst) {
       const body = await pull(src);
-      if (body) await push(dst, body);
+      if (body) await push(dst, counted(body));
     } else if (src) {
       const body = await pull(src);
       mkdirSync(path.dirname(local), { recursive: true });
-      if (body) await receiveProfile(Readable.fromWeb(body as import("node:stream/web").ReadableStream), path.dirname(local), row.id);
+      if (body) await receiveProfile(Readable.fromWeb(counted(body) as import("node:stream/web").ReadableStream), path.dirname(local), row.id);
       else mkdirSync(local, { recursive: true });
     } else if (dst) {
       mkdirSync(local, { recursive: true });
@@ -512,7 +522,7 @@ export class Workers {
         tar.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`could not pack the profile: tar exited ${code}`))));
       });
       try {
-        await Promise.all([push(dst, Readable.toWeb(tar.stdout) as ReadableStream<Uint8Array>), packed]);
+        await Promise.all([push(dst, counted(Readable.toWeb(tar.stdout) as ReadableStream<Uint8Array>)), packed]);
       } finally {
         tar.kill();
       }

@@ -213,7 +213,8 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
   api.post("/api/v1/browsers/:id/move", requireAdmin, asyncRoute(async (req, res) => {
     const to = req.body?.workerId;
     if (to !== null && typeof to !== "string") throw Err.invalid("workerId must be a worker's id, or null for the main instance");
-    res.json({ browser: browsers.publicView(await browsers.moveTo(req.params.id, to, req.principal!)) });
+    const moved = await browsers.moveTo(req.params.id, to, req.principal!);
+    res.json({ browser: browsers.publicView(moved), restarted: moved.restarted });
   }));
 
   // The dashboard's half. Admin only: approving a link grants standing access to somebody's

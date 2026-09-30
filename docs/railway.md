@@ -204,9 +204,9 @@ within one service, but everything still shares that service's 1,000.
 
 **Put it on a worker.** A [worker](workers.md) is a second service running
 this image, which runs browsers for this instance within its own 1,000. Add
-one from **Workers** in the dashboard, then stop the browser and move it there
-with **Runs on** on its page. You keep one dashboard and one `/mcp` URL, and
-the browser keeps its logins. Nothing on the main instance can use up a
+one from **Workers** in the dashboard, then choose **Move to…** on the browser.
+It stops for the copy and starts again on the worker. You keep one dashboard
+and one `/mcp` URL, and the browser keeps its logins. Nothing on the main instance can use up a
 worker's processes, or the other way round.
 
 ## Publishing the template

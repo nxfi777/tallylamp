@@ -39,8 +39,9 @@ browser between hosts, logins included.
 It has to be the same project. Railway's private network does not cross
 projects, so a worker in another one cannot be reached.
 
-To put a browser you already have on the worker, stop it, open its page, and
-use **Runs on**.
+To put a browser you already have on the worker, choose **Move to…** from its
+menu. A running browser stops for the copy and starts again on the worker,
+logins and tabs included.
 
 ## Why Deploy Tallylamp Worker on Railway?
 

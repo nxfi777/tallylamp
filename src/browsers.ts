@@ -120,6 +120,8 @@ export class BrowserManager {
   private unhealthy = new Map<string, { reason: string; since: string }>();
   /** Browsers whose profile is being copied to another host (moveTo). */
   private moving = new Set<string>();
+  /** Where each of those is going and how far along it is, for the dashboard. */
+  private movingNow = new Map<string, { to: string; phase: string; copied: number }>();
   private abortedNavs = new Map<string, { count: number; hosts: Set<string> }>();
   private notices = new Map<string, Notice[]>();
   private noticeSeq = 0;
@@ -764,25 +766,89 @@ export class BrowserManager {
   }
 
   /**
-   * Move a stopped browser to another host, profile and all. Null is this instance. Only the
-   * administrator: it decides which container a signed-in profile sits in.
+   * Move a browser to another host, profile and all, in one step. Null is this instance.
+   *
+   * A running browser is stopped for the copy, since Chrome holds its profile open, and
+   * started again on the new host once the copy lands. If the copy fails it stays where it
+   * was, and is started again there, so a failed move never leaves a browser down that was up.
+   * Only the administrator: it decides which container a signed-in profile sits in.
    */
-  async moveTo(id: string, workerId: string | null, principal: Principal): Promise<BrowserRow> {
+  async moveTo(id: string, workerId: string | null, principal: Principal): Promise<BrowserRow & { restarted: boolean }> {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can move a browser");
     const row = this.row(id);
     this.assertManaged(id, "moving");
-    if (this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) || !["stopped", "crashed"].includes(row.status)) {
-      throw Err.browserUnavailable("stop the browser before moving it");
-    }
+    if (row.worker_id === workerId) return { ...row, restarted: false };
     if (this.moving.has(id)) throw Err.browserUnavailable("this browser is already being moved");
-    // Nothing may launch it on either host while its profile is in transit.
+    if (this.starting.has(id) || this.profileSaves.has(id)) {
+      throw Err.browserUnavailable("this browser is starting or saving its profile; move it when that finishes");
+    }
+    const hostName = (w: string | null) => {
+      if (!w) return "the main instance";
+      try {
+        return this.workers.row(w).name;
+      } catch {
+        return "a removed worker";
+      }
+    };
+    const from = hostName(row.worker_id);
+    const to = hostName(workerId);
+    // Checked before anything stops: a move that cannot happen must not cost a restart.
+    if (workerId) {
+      const problem = this.workers.unusable(this.workers.row(workerId));
+      if (problem) throw Err.browserUnavailable(problem);
+    }
+    const rt = this.runtimes.get(id);
+    const wasRunning = Boolean(rt && rt.chrome.exitCode === null);
     this.moving.add(id);
+    const progress = { to, phase: "stopping", copied: 0 };
+    this.movingNow.set(id, progress);
+    let lastEmit = 0;
+    const emit = (force = false) => {
+      if (!force && Date.now() - lastEmit < 1000) return;
+      lastEmit = Date.now();
+      hub.emitEvent("browser.moving", { ...progress }, id);
+    };
+    emit(true);
+    let restarted = false;
     try {
-      await this.workers.move(row, workerId, principal);
+      if (wasRunning) {
+        this.notice(id, `The administrator is moving this browser to ${to}. It stops for the copy and starts again there; a call made meanwhile is refused as retryable.`);
+        await this.stopInternal(id);
+        this.setStatus(id, "moving");
+      }
+      progress.phase = "copying";
+      emit(true);
+      try {
+        await this.workers.move(this.row(id), workerId, principal, (copied) => {
+          progress.copied = copied;
+          emit();
+        });
+      } catch (e) {
+        if (wasRunning) {
+          this.moving.delete(id);
+          await this.ensureRunningInternal(id).catch(() => undefined);
+        }
+        const back = wasRunning && this.runtimes.get(id) ? `, and running again` : "";
+        throw Err.browserUnavailable(`Could not move ${row.name} to ${to}: ${(e as Error).message}. It is still on ${from}${back}.`);
+      }
+      const onWorker = workerId
+        ? " On a worker it cannot use Full browser, agent control of Chrome's windows, tunnels or upload_file."
+        : "";
+      this.notice(id, `The administrator moved this browser from ${from} to ${to} at ${new Date().toISOString().slice(11, 19)} UTC. Its tabs and logins came with it.${onWorker}`);
+      if (wasRunning) {
+        progress.phase = "starting";
+        emit(true);
+        this.moving.delete(id);
+        await this.ensureRunningInternal(id);
+        restarted = true;
+      }
     } finally {
       this.moving.delete(id);
+      this.movingNow.delete(id);
+      if (this.row(id).status === "moving") this.setStatus(id, "stopped");
+      hub.emitEvent("browser.moved", { to, restarted }, id);
     }
-    return this.row(id);
+    return { ...this.row(id), restarted };
   }
 
   /**
@@ -1310,7 +1376,10 @@ export class BrowserManager {
       slug: row.slug,
       // "running" said only that Chrome's own process was up. A Chrome that has lost its
       // renderer zygote is up and can load nothing, and it used to be listed as running.
-      status: rt ? (sick ? "unhealthy" : "running") : row.status === "running" ? "stopped" : row.status,
+      status: this.movingNow.has(row.id) ? "moving" : rt ? (sick ? "unhealthy" : "running") : row.status === "running" ? "stopped" : row.status,
+      // Where a move is taking it, what it is doing ("stopping", "copying", "starting") and the
+      // bytes of profile copied so far. Null when it is not being moved.
+      moving: this.movingNow.get(row.id) ?? null,
       health: sick ? { state: "unhealthy", reason: sick.reason, since: sick.since } : null,
       pinned: row.pinned === 1,
       // Null when its Chrome runs on this instance. Otherwise the worker that has it.
@@ -1382,7 +1451,7 @@ export class BrowserManager {
   }
 
   async recoverOnBoot(): Promise<void> {
-    getDb().prepare(`UPDATE browsers SET status = 'stopped' WHERE status IN ('running', 'starting', 'stopping', 'queued', 'unhealthy')`).run();
+    getDb().prepare(`UPDATE browsers SET status = 'stopped' WHERE status IN ('running', 'starting', 'stopping', 'queued', 'unhealthy', 'moving')`).run();
     // A browser's thread counts are only as good as the Chrome settings they were taken under.
     // On 30 September CPU pinning went on, and a browser that would now launch at about 400
     // was still sized from its unpinned 606 and refused. So when a setting that changes

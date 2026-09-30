@@ -59,10 +59,14 @@ new browser on the main instance. A browser made from a saved profile always
 starts on the main instance, where saved profiles are kept.
 
 The administrator can choose the host when creating a browser in the dashboard,
-and can move one later: stop the browser, open its page, and use **Runs on**.
-A move copies the whole profile to the new host, logins included, then deletes
-it from the old one. Downloads are not moved. Agents cannot choose or change
-where a browser runs.
+and can move one later with **Move to…**, in the browser's ⋯ menu or on its
+page. A running browser is stopped for the copy and started again on the new
+host, and its card shows how much of the profile has been copied. A move copies
+the whole profile, logins and tabs included, then deletes it from the old host.
+If the copy fails, the browser stays where it was, and starts again there if it
+was running. Downloads are not moved. An agent using the browser gets a note on
+its next tool call saying where it went. Agents cannot choose or change where a
+browser runs.
 
 Each browser's card and page name its worker. The API reports it as `worker`
 on a browser, and `GET /api/v1/workers` lists the workers.

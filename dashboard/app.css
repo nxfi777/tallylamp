@@ -172,7 +172,14 @@ button { cursor: pointer; }
 /* Not display:none. This is an aria-live region, and a node removed from the rendered tree is
    a node the screen reader is not watching when the message finally arrives. */
 .flash:empty { visibility: hidden; height: 0; margin: 0; }
-.flash { margin-bottom: 0.8rem; }
+/* Held at the top while the page scrolls. A result arrives while the operator is looking at
+   the card it is about, which on a phone is often well below the top: a move's "now runs on
+   the worker" was rendered out of sight, at exactly the moment it answered the question. */
+.flash {
+  margin-bottom: 0.8rem;
+  position: sticky; top: 0; z-index: 5;
+  padding: 0.45rem 0; background: var(--bg);
+}
 
 .app { min-height: 100%; display: grid; grid-template-columns: 220px 1fr; }
 .nav {
@@ -776,6 +783,10 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
   .nav a, .nav button.link { width: auto; }
   .brand { padding: 0.2rem 0.6rem 0.2rem 0.4rem; }
   .detail { grid-template-columns: 1fr; }
+  /* Stacked, the page scrolls rather than .main, but overflow: auto still made .main the box
+     sticky elements stick to, so the flash scrolled away with it. clip trims sideways overflow
+     the same way without claiming the scrolling. */
+  .main { overflow: visible; overflow-x: clip; }
   .stage { height: clamp(240px, 56vh, 560px); }
   .site-list li { align-items: flex-start; flex-direction: column; }
 }

@@ -70,7 +70,7 @@ describe("profile site inventory", () => {
       browser, URL, document: {}, state: { status: {} },
       api: async () => ({ browser }),
       h: (_tag: string, attrs: object, ...children: unknown[]) => ({ attrs, children, append() {}, replaceChildren() {}, classList: { add() {} } }),
-      principal: () => "Test", layout() {}, icon() {}, settingsSection: () => [], tunnelSection() {}, guestSection() {}, guestHolds: () => false,
+      principal: () => "Test", layout() {}, icon() {}, settingsSection: () => [], tunnelSection() {}, guestSection() {}, guestHolds: () => false, canMove: () => false,
       ICON_BACK: [], ICON_FORWARD: [], ICON_RELOAD: [], ICON_FULLSCREEN: [], ICON_PLUS: [],
       connectViewer: (...args: unknown[]) => { active = args[5] as typeof active; },
       askFor: async (_title: string, values: typeof fields) => { fields = values; return null; },

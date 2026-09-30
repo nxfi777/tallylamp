@@ -10,6 +10,7 @@ import { allocatePort } from "../src/chrome.js";
 import { browserWsUrl, CdpClient, listPages } from "../src/cdp.js";
 import { createAgent, DEFAULT_AGENT_SCOPES } from "../src/auth.js";
 import { makeJoinToken, parseJoinToken, startWorker, WorkerFatal } from "../src/worker.js";
+import { hub, type TallyEvent } from "../src/events.js";
 import { forwardHttp } from "../src/relay.js";
 
 let ctx: TestCtx;
@@ -185,32 +186,62 @@ describe("workers", () => {
     );
   });
 
-  it("moves a stopped browser's profile to a worker and back, and refuses while it runs", async () => {
+  it("moves a running browser in one step: stops it, copies its profile, and starts it on the new host", async () => {
     const row = browserOn(null, "mover");
     mkdirSync(path.join(profileDir(row.id), "Default"), { recursive: true });
     writeFileSync(path.join(profileDir(row.id), "Default", "Cookies"), "signed-in");
     const there = path.join(worker.dataDir, "profiles", row.id, "Default", "Cookies");
-
     await ctx.browsers.ensureRunning(row.id);
-    await assert.rejects(ctx.browsers.moveTo(row.id, worker.identity.workerId, admin), /stop the browser before moving it/);
-    await ctx.browsers.stop(row.id);
 
-    const moved = await json(`${ctx.url}/api/v1/browsers/${row.id}/move`, {
-      method: "POST", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ workerId: worker.identity.workerId }),
-    });
+    const phases: string[] = [];
+    const listen = (ev: TallyEvent) => {
+      if (ev.browserId !== row.id) return;
+      if (ev.type === "browser.moving") phases.push(String(ev.payload.phase));
+      if (ev.type === "browser.moved") phases.push(`moved:${ev.payload.restarted}`);
+    };
+    hub.on("event", listen);
+    let moved;
+    try {
+      moved = await json(`${ctx.url}/api/v1/browsers/${row.id}/move`, {
+        method: "POST", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ workerId: worker.identity.workerId }),
+      });
+    } finally {
+      hub.off("event", listen);
+    }
     assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    const body = moved.body as { restarted: boolean; browser: { status: string; worker: { name: string } | null; moving: unknown } };
+    assert.equal(body.restarted, true);
+    assert.equal(body.browser.status, "running", "it is running again, on the worker");
+    assert.equal(body.browser.worker?.name, "worker-a");
+    assert.equal(body.browser.moving, null);
+    assert.deepEqual(phases, ["stopping", "copying", "starting", "moved:true"]);
     assert.equal(readFileSync(there, "utf8"), "signed-in");
     assert.equal(existsSync(profileDir(row.id)), false, "the copy left behind is deleted");
-    assert.equal(ctx.browsers.row(row.id).worker_id, worker.identity.workerId);
+    assert.match(ctx.browsers.noticesSince(row.id, 0).map((n) => n.text).join("\n"), /moved this browser from the main instance to worker-a .* Its tabs and logins came with it\. On a worker it cannot use Full browser/);
 
-    await ctx.browsers.ensureRunning(row.id); // and it runs there
+    // Stopped stays stopped.
     await ctx.browsers.stop(row.id);
-
-    await ctx.browsers.moveTo(row.id, null, admin);
+    const back = await ctx.browsers.moveTo(row.id, null, admin);
+    assert.equal(back.restarted, false);
+    assert.equal(ctx.browsers.publicView(ctx.browsers.row(row.id)).status, "stopped");
     assert.equal(readFileSync(path.join(profileDir(row.id), "Default", "Cookies"), "utf8"), "signed-in");
     assert.equal(existsSync(there), false);
     assert.equal(ctx.browsers.row(row.id).worker_id, null);
+  });
+
+  it("leaves a running browser running where it was when its move fails", async () => {
+    const dead = await addWorker("worker-dead");
+    const row = browserOn(null, "stayer");
+    await ctx.browsers.ensureRunning(row.id);
+    // Answering the poll a moment ago, gone by the time the copy starts.
+    await dead.close();
+    await assert.rejects(ctx.browsers.moveTo(row.id, dead.identity.workerId, admin),
+      /Could not move stayer to worker-dead: .*It is still on the main instance, and running again\./);
+    const view = ctx.browsers.publicView(ctx.browsers.row(row.id));
+    assert.deepEqual([view.status, view.worker, view.moving], ["running", null, null]);
+    await ctx.browsers.stop(row.id);
+    ctx.browsers.workers.remove(dead.identity.workerId, admin);
   });
 
   it("keeps a browser whose worker cannot confirm its profile is deleted", async () => {

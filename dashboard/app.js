@@ -111,7 +111,8 @@ function askFor(title, fields, submitLabel, submit) {
         });
         inputs.set(f.name, input);
         form.append(h("label", { for: id }, f.label), input);
-        if (f.hint) form.append(h("div", { class: "sub field-hint" }, f.hint));
+        // Several hints are several separate points, each its own line, not one paragraph.
+        for (const hint of [f.hint].flat().filter(Boolean)) form.append(h("div", { class: "sub field-hint" }, hint));
       }
       form.append(error, h("div", { class: "row modal-foot" },
         h("button", { class: "btn primary", type: "submit" }, submitLabel),
@@ -405,8 +406,9 @@ function browserMenu(b) {
       human && { label: "Return to agent", onSelect: () => returnControl(b.id) },
       "-",
       { label: "Edit browser details…", onSelect: () => editBrowser(b) },
-      { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
-      b.savedProfileId && { label: "Save as new profile…", onSelect: () => saveProfileTemplate(b, null, true) },
+      canMove(b) && { label: "Move to…", onSelect: () => moveBrowser(b) },
+      !b.worker && { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
+      !b.worker && b.savedProfileId && { label: "Save as new profile…", onSelect: () => saveProfileTemplate(b, null, true) },
       { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
       { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name) },
     ];
@@ -423,8 +425,9 @@ function browserMenu(b) {
     running && { label: "Restart", onSelect: () => call(`/api/v1/browsers/${b.id}/restart`) },
     "-",
     { label: "Edit browser details…", onSelect: () => editBrowser(b) },
-    { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
-    b.savedProfileId && { label: "Save as new profile…", onSelect: () => saveProfileTemplate(b, null, true) },
+    canMove(b) && { label: "Move to…", onSelect: () => moveBrowser(b) },
+    !b.worker && { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
+    !b.worker && b.savedProfileId && { label: "Save as new profile…", onSelect: () => saveProfileTemplate(b, null, true) },
     { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
     { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name) },
   ];
@@ -770,7 +773,8 @@ function card(b) {
   // The badge already says the status; this caption said "not running" over a browser that was
   // starting, and over one that had simply never produced a frame.
   const thumb = h("div", { class: "thumb" }, badge(b),
-    b.status === "starting" ? "starting…" : b.status === "stopping" ? "stopping…"
+    b.status === "moving" ? h("span", { "data-move-progress": b.id }, movingText(b))
+      : b.status === "starting" ? "starting…" : b.status === "stopping" ? "stopping…"
       : b.status === "queued" ? "waiting for room on the host…"
       : b.status === "unhealthy" ? "Chrome is up but cannot load pages"
       // Nothing on this side can wake somebody's laptop, so say who can.
@@ -822,7 +826,12 @@ function card(b) {
         // A stopped browser has nothing to watch or take, so its card offers Start instead. A
         // linked browser's status says nothing about its shared tabs, so it keeps Watch.
         // Same slots as a running card: the quiet button first, the main one second.
-        b.kind !== "linked" && ["stopped", "crashed", "queued"].includes(b.status)
+        b.status === "moving"
+          ? [
+              h("button", { class: "btn secondary", onClick: () => go(`/browsers/${b.id}`) }, "Open"),
+              h("button", { class: "btn", disabled: true }, "Moving…"),
+            ]
+          : b.kind !== "linked" && ["stopped", "crashed", "queued"].includes(b.status)
           ? [
               h("button", { class: "btn secondary", onClick: () => go(`/browsers/${b.id}`) }, "Open"),
               h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${b.id}/start`, e.currentTarget) }, "Start"),
@@ -855,7 +864,7 @@ function card(b) {
  * unrecognised value has to land somewhere deterministic: a bare lookup miss returns undefined,
  * and subtracting undefined returns NaN, which leaves the whole grid silently half-sorted.
  */
-const STATUS_RANK = { running: 0, unhealthy: 1, starting: 2, queued: 3, stopping: 4, crashed: 5, stopped: 6 };
+const STATUS_RANK = { running: 0, unhealthy: 1, moving: 2, starting: 2, queued: 3, stopping: 4, crashed: 5, stopped: 6 };
 
 /**
  * Rank only, no tiebreak. The API hands us created_at DESC and Array#sort is stable, so
@@ -1261,9 +1270,13 @@ function settingsSection(b) {
         b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? ", authenticated" : ""}` : "Direct, no upstream proxy",
         h("button", { class: "btn", "aria-label": "Configure proxy", disabled: locked, title: why, onClick: () => editProxy(b) }, "Configure")),
       settingRow("Extensions",
-        b.extensionsEnabled ? "On. Take control and open Full browser to install or manage them. A persistent profile keeps them."
+        b.worker
+          ? (b.extensionsEnabled
+            ? "On. Extensions already in its profile run on the worker. Installing or managing them needs Full browser, which works only on the main instance for now."
+            : "Off. Installing extensions needs Full browser, which works only on the main instance for now.")
+          : b.extensionsEnabled ? "On. Take control and open Full browser to install or manage them. A persistent profile keeps them."
           : full ? "Off" : "Off. This host cannot run Full browser, which extensions need.",
-        switchButton("Extensions", b.extensionsEnabled, { disabled: (!full && !b.extensionsEnabled) || locked, title: why,
+        switchButton("Extensions", b.extensionsEnabled, { disabled: ((!full || b.worker) && !b.extensionsEnabled) || locked, title: why,
           onToggle: (enabled) => act(async () => {
             if (enabled && !confirm("Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust.\n\nEnable extension support?")) return;
             await api(`/api/v1/browsers/${id}/extensions`, { method: "PUT", body: { enabled } });
@@ -1285,10 +1298,14 @@ function settingsSection(b) {
         b.worker
           ? `${b.worker.name}${b.worker.online ? "" : ", which is not answering"}. Its Chrome and profile are on that worker.`
           : "This instance.",
-        h("button", { class: "btn", "aria-label": "Move to another host", disabled: locked,
-          title: locked ? "Stop the browser to move it." : false, onClick: () => moveBrowser(b) }, "Move")) : null,
+        h("button", { class: "btn", "aria-label": "Move to another host", disabled: b.status === "moving" || b.savingProfile,
+          onClick: () => moveBrowser(b) }, "Move…")) : null,
       b.kind !== "linked" ? settingRow("Pinned",
-        b.pinned
+        b.worker
+          ? (b.pinned
+            ? "On. It skips the idle timeout. On a worker no room is held for it, and nothing is stopped to make room."
+            : "Off. It shares its worker's processes with the other browsers there.")
+          : b.pinned
           ? `On. Room is held for it on this host, and other browsers are stopped before it runs short.${b.peakThreads ? ` It has reached ${b.peakThreads} processes and threads.` : ""}`
           : "Off. It shares the host's processes with every other browser, and may be stopped when idle to make room.",
         switchButton("Pinned", b.pinned, {
@@ -1662,17 +1679,20 @@ async function browserView(id, seq) {
         // nothing to take. A lease can outlive a stop, so Return to agent stays when it applies.
         human
           ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
-          : ["stopped", "crashed", "queued"].includes(b.status)
+          : ["stopped", "crashed", "queued", "moving"].includes(b.status)
             ? null
             : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
         // One of Start and Stop, never both with one greyed out, and only one button filled:
         // Save profile used to be filled white beside the takeover button and the two fought
         // for the eye.
-        ["stopped", "crashed"].includes(b.status)
+        b.status === "moving"
+          ? h("button", { class: "btn", disabled: true }, "Moving…")
+          : ["stopped", "crashed"].includes(b.status)
           ? h("button", { class: human ? "btn" : "btn human", onClick: (e) => call(`/api/v1/browsers/${id}/start`, e.currentTarget) }, "Start")
           : h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/stop`, e.currentTarget) }, "Stop browser"),
-        h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
-        b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
+        canMove(b) ? h("button", { class: "btn", disabled: b.status === "moving" || b.savingProfile, onClick: () => moveBrowser(b) }, "Move to…") : null,
+        b.worker ? null : h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
+        !b.worker && b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
         // Restarting a stopped browser is starting it, and Start is already here.
         ["running", "unhealthy"].includes(b.status) ? h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/restart`, e.currentTarget) }, "Restart") : null,
         h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name, b.kind === "linked") }, "Delete"),
@@ -1764,6 +1784,7 @@ async function browserView(id, seq) {
     stagewrap.replaceChildren(h("div", { class: "banner", role: "status" },
       b.status === "starting" ? "Chrome is starting…"
         : b.status === "stopping" ? "Chrome is stopping…"
+        : b.status === "moving" ? h("span", { "data-move-progress": b.id }, movingText(b))
         : b.status === "crashed" ? "Chrome crashed. Its logins and data are kept."
         : b.status === "queued" ? "Waiting for room on the host to start. It starts on its own when another browser stops."
         : b.status === "unhealthy" ? `Chrome is up but broken: ${b.health?.reason || "it cannot load pages"}. It has been restarted too often to try again by itself; Restart it once something else has stopped.`
@@ -2782,7 +2803,7 @@ async function workersView() {
       : h("p", {}, "No workers yet. This instance runs every browser itself, within its host’s process limit. Add a worker when that limit is what stops another browser from starting."),
     h("h2", {}, "How a worker fits in"),
     h("p", {}, "A worker runs this same image with one setting, TALLYLAMP_JOIN. It has no dashboard and no agents of its own. This instance starts, drives and stops its browsers over your project’s private network, so both must be in the same Railway project and on the same release."),
-    h("p", {}, "A new browser stays on this instance while it has room, and goes to a worker when it has not. To move one, stop it and use Runs on, on its page. Full browser, agent control, tunnels and saved profiles work only on this instance for now."),
+    h("p", {}, "A new browser stays on this instance while it has room, and goes to a worker when it has not. To move one, choose Move to… from its ⋯ menu. A running browser stops for the copy and starts again on the new host. Full browser, agent control, tunnels and saved profiles work only on this instance for now."),
   ]);
 }
 
@@ -2801,22 +2822,74 @@ async function removeWorker(w) {
   void workersView();
 }
 
+/** Somewhere else to put it: a managed browser, and at least one host besides its own. */
+function canMove(b) {
+  return b.kind !== "linked" && (state.workers.length > 0 || Boolean(b.worker));
+}
+
+function megabytes(bytes) {
+  return bytes < 1e6 ? "Less than 1 MB" : `${Math.round(bytes / 1e6).toLocaleString()} MB`;
+}
+
+/** One line for a browser in the middle of a move, from its `moving` field or a progress event. */
+function movingText(b) {
+  const m = b.moving || {};
+  if (m.phase === "stopping") return `Stopping it to move it to ${m.to}…`;
+  if (m.phase === "starting") return `Starting it on ${m.to}…`;
+  return `Moving to ${m.to || "another host"}. ${m.copied ? `${megabytes(m.copied)} copied so far.` : "Copying its profile…"}`;
+}
+
+/**
+ * Move a browser to another host in one go. The dialog asks only where; the rest runs in the
+ * background, with progress on its card and page, so nobody sits in front of a frozen dialog
+ * while a profile crosses the network.
+ */
 async function moveBrowser(b) {
   const here = b.worker ? b.worker.id : "local";
-  const answers = await askFor(`Move ${b.name}`, [
-    { name: "host", label: "Move to", value: here,
-      options: [{ value: "local", label: "This instance" },
-        ...state.workers.map((w) => ({ value: w.id, label: w.online ? w.name : `${w.name} (not answering)` }))],
-      hint: "Its whole profile is copied across, logins included, then deleted from where it was. Downloads are not moved." },
-  ], "Move browser", async (values) => {
-    if (values.host === here) return;
-    await api(`/api/v1/browsers/${b.id}/move`, { method: "POST", body: { workerId: values.host === "local" ? null : values.host } });
-  });
-  if (answers) {
-    flash(`${b.name} moved.`, true);
-    await refresh();
-    void render();
+  const free = (pids) => (pids ? pids.max - pids.current : null);
+  const hosts = [
+    { id: "local", name: "the main instance", label: "Main instance", pids: state.status?.host?.pids || null, ok: true },
+    ...state.workers.map((w) => ({ id: w.id, name: w.name, label: w.name, pids: w.pids, ok: w.online && !w.problem })),
+  ].filter((x) => x.id !== here);
+  if (!hosts.length) {
+    flash("There is no other host to move it to. Add a worker first, from Workers.");
+    return;
   }
+  // The usable host with the most room, as the one most likely to be wanted.
+  const best = [...hosts].sort((x, y) => (y.ok - x.ok) || ((free(y.pids) ?? Infinity) - (free(x.pids) ?? Infinity)))[0];
+  const running = ["running", "unhealthy"].includes(b.status);
+  const answers = await askFor(`Move ${b.name}`, [
+    { name: "host", label: "Move to", value: best.id,
+      options: hosts.map((x) => ({ value: x.id, label: x.ok
+        ? `${x.label}${x.pids ? ` · ${free(x.pids).toLocaleString()} of ${x.pids.max.toLocaleString()} free` : ""}`
+        : `${x.label} (not answering)` })),
+      hint: [
+        running
+          ? "It stops, its profile is copied across with its logins and tabs, and it starts again there. An agent using it waits; anyone watching loses the live view until then."
+          : "Its profile is copied across with its logins and tabs. It stays stopped.",
+        "Full browser, agent control of Chrome's windows, tunnels and file uploads work only on the main instance for now.",
+      ] },
+  ], "Move browser");
+  if (!answers || answers.host === here) return;
+  const target = hosts.find((x) => x.id === answers.host);
+  const moving = api(`/api/v1/browsers/${b.id}/move`, { method: "POST", body: { workerId: answers.host === "local" ? null : answers.host } });
+  await refresh();
+  await render();
+  flash(`Moving ${b.name} to ${target.name}…`, true);
+  let message;
+  let ok = true;
+  try {
+    const result = await moving;
+    message = result.restarted
+      ? `${b.name} now runs on ${target.name}, and has started again there.`
+      : `${b.name} now lives on ${target.name}. It stays stopped until something starts it.`;
+  } catch (e) {
+    message = e.message;
+    ok = false;
+  }
+  await refresh();
+  await render();
+  flash(message, ok);
 }
 
 async function createBrowser(seedId = "") {
@@ -3360,10 +3433,18 @@ function startEvents() {
       return;
     }
     es.onopen = () => { backoff = 1000; };
-    es.onmessage = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        void refresh().then(() => {
+    // Refetch at most every 1.5 seconds, and never later than that. This was a debounce, and a
+    // debounce restarted by every event never fires while events keep coming: during a move,
+    // which reports every second, a card sat on its first "under 1 MB" until the move was over.
+    const repaint = () => {
+      timer = 0;
+      // A repaint replaces the cards, which closes any menu open on them. Hold it until the
+      // menu is gone, rather than pull a menu out from under the pointer.
+      if (openMenu) {
+        timer = setTimeout(repaint, 1500);
+        return;
+      }
+      void refresh().then(() => {
           // Repaint the cards, not the page. This used to call homeView(), which rebuilds the
           // whole layout — so an operator typing in the filter lost focus to <body> and had the
           // caret sent back to the start, roughly every time any agent touched any browser.
@@ -3374,8 +3455,18 @@ function startEvents() {
           const sitesPanel = document.getElementById("profile-sites");
           const current = sitesPanel && state.browsers.find(b => b.id === sitesPanel.dataset.browserId);
           if (current) sitesPanel.updateSites(current.signedInSites || []);
-        });
-      }, 1500);
+      });
+    };
+    es.onmessage = (msg) => {
+      // A move's progress goes straight into its card and its page, every second, with no
+      // refetch and no repaint in between.
+      try {
+        const ev = JSON.parse(msg.data);
+        if (ev.type === "browser.moving") {
+          for (const el of document.querySelectorAll(`[data-move-progress="${ev.browserId}"]`)) el.textContent = movingText({ moving: ev.payload });
+        }
+      } catch { /* not every message is an event */ }
+      if (!timer) timer = setTimeout(repaint, 1500);
     };
     es.onerror = () => {
       // EventSource retries by itself only while the connection is merely dropped. A closed
