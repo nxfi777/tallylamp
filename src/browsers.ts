@@ -8,6 +8,7 @@ import { Err } from "./errors.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
 import { Capacity } from "./capacity.js";
+import { PageCacheEvictor, type InUse } from "./page-cache.js";
 import { activity, audit, type AuditActor } from "./audit.js";
 import { isValidName, slugify } from "./names.js";
 import { sanitizeMetadata, type BrowserMetadata } from "./metadata.js";
@@ -102,6 +103,7 @@ export class BrowserManager {
   private viewers = new Map<string, number>();
   /** Runtimes that are a listener in this process rather than a Chrome to kill: the test fake, and a linked browser's CDP shim. */
   private shimClosers = new Map<string, () => Promise<void>>();
+  private pageCache = new PageCacheEvictor(() => this.chromeInUse());
   /** Notified when a browser stops or is destroyed, so the MCP bridge can be torn down. */
   private onGone?: (browserId: string) => Promise<void> | void;
   /**
@@ -461,6 +463,25 @@ export class BrowserManager {
 
   viewerCount(id: string): number {
     return this.viewers.get(id) ?? 0;
+  }
+
+  /** Profiles a real Chrome has open or is starting on. Shims hold no files, so they never count. */
+  private chromeInUse(): InUse {
+    const dirs: string[] = [];
+    for (const [id, rt] of this.runtimes) {
+      if (!this.shimClosers.has(id)) dirs.push(rt.profileDir);
+    }
+    let starting = 0;
+    for (const id of this.starting.keys()) {
+      if (this.runtimes.has(id)) continue;
+      const row = getDb().prepare(`SELECT kind, profile_path FROM browsers WHERE id = ?`).get(id) as
+        | Pick<BrowserRow, "kind" | "profile_path">
+        | undefined;
+      if (row?.kind === "linked") continue;
+      starting++;
+      if (row) dirs.push(row.profile_path);
+    }
+    return { dirs, idle: dirs.length === 0 && starting === 0 };
   }
 
   /**
@@ -879,6 +900,7 @@ export class BrowserManager {
       this.runtimes.delete(id);
       this.windowContents.delete(id);
       this.capacity.stopped(id);
+      if (!fake) this.pageCache.stopped(rt.profileDir);
     }
     this.unhealthy.delete(id);
     this.abortedNavs.delete(id);
@@ -1285,6 +1307,7 @@ export class BrowserManager {
         this.runtimes.delete(id);
         this.windowContents.delete(id);
         this.capacity.stopped(id);
+        if (!this.shimClosers.has(id)) this.pageCache.stopped(rt.profileDir);
         this.unhealthy.delete(id);
         this.abortedNavs.delete(id);
         await this.closeProxy(id);
@@ -1305,9 +1328,12 @@ export class BrowserManager {
       // now and then. Idleness is not a reason to stop it.
       if (row.pinned === 1) continue;
       const last = row.last_activity_at ? Date.parse(row.last_activity_at) : Date.parse(row.created_at);
-      const attached =
-        this.mcpCount(id) > 0 || this.viewerCount(id) > 0 || this.controlState(id).controllerType === "human";
-      const ttl = attached ? config.attachedIdleTtlMs : config.idleTtlMs;
+      const watched = this.viewerCount(id) > 0 || this.controlState(id).controllerType === "human";
+      const ttl = watched
+        ? config.attachedIdleTtlMs
+        : this.mcpCount(id) > 0
+          ? config.mcpAttachedIdleTtlMs
+          : config.idleTtlMs;
       if (ttl > 0 && now - last > ttl) {
         log.info("reaping idle browser", { id });
         await this.stop(id);

@@ -2171,6 +2171,8 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
       }
       if (msg.type === "hello") {
         if (msg.content && msg.content.width) frameSize = { w: msg.content.width, h: msg.content.height };
+        // Opened in a background tab: nobody is watching yet, so do not hold the browser up.
+        if (document.visibilityState !== "visible") sendJson({ type: "visibility", visible: false });
         return;
       }
       if (msg.type === "tabs") {
@@ -2374,9 +2376,14 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
   // could otherwise sit up to a minute short of the next beat with a 90-second lease running
   // down. Beat immediately on the way back in: if the lease is still alive this renews it, and
   // if it lapsed while you were away the server says so and the bar explains it.
+  //
+  // Watching or controlling, the server also hears which way it went: a hidden tab is not
+  // someone watching, so it stops counting as attachment and the browser gets the short idle TTL.
   const onVisible = () => {
-    if (stopped || mode !== "control") return;
-    if (document.visibilityState !== "visible") return;
+    if (stopped) return;
+    const visible = document.visibilityState === "visible";
+    sendJson({ type: "visibility", visible });
+    if (!visible || mode !== "control") return;
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "heartbeat", leaseToken }));
   };
   document.addEventListener("visibilitychange", onVisible);

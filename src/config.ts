@@ -85,6 +85,16 @@ export const config = {
   },
   get idleTtlMs() { return int("TALLYLAMP_IDLE_TTL_SEC", 900) * 1000; },
   get attachedIdleTtlMs() { return int("TALLYLAMP_ATTACHED_IDLE_TTL_SEC", 14400) * 1000; },
+  /**
+   * The idle TTL for a browser whose only attachment is an MCP session. Every tool call resets
+   * the idle clock, so this is how long a connected agent may go without calling one. A client
+   * left open keeps its session alive for as long as it stays open (any request refreshes it,
+   * reconnects included), so under attachedIdleTtlMs a browser last used at 01:55 ran to 05:55,
+   * measured at ~11 vCPU for nothing. Watchers and human controllers keep attachedIdleTtlMs.
+   */
+  get mcpAttachedIdleTtlMs() { return int("TALLYLAMP_MCP_ATTACHED_IDLE_TTL_SEC", 1800) * 1000; },
+  /** Drop the page cache a stopped Chrome leaves behind, which Railway bills as memory. See page-cache.ts. */
+  get evictPageCache() { return bool("TALLYLAMP_EVICT_PAGE_CACHE", process.platform === "linux"); },
   /** Deliberately shorter than idleTtlMs so an abandoned session cannot mask an idle browser. */
   get mcpSessionIdleMs() { return int("TALLYLAMP_MCP_SESSION_IDLE_SEC", 600) * 1000; },
   get mcpBridgeNodeOptions() { return str("TALLYLAMP_MCP_BRIDGE_NODE_OPTIONS", "--max-old-space-size=192 --max-semi-space-size=1"); },

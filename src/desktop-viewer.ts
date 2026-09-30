@@ -155,6 +155,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   if (size.width * size.height > 16_000_000) return reject("The desktop is too large to stream. Reduce TALLYLAMP_XVFB_SCREEN.");
   active.add(id);
   browsers.attachViewer(id);
+  let attached = true;
   audit({ actorType: "admin", actorId: "admin", action: "viewer.desktop.opened", targetType: "browser", targetId: id, detail: { mode } });
   // Do not forward service secrets to either child.
   const env = { PATH: process.env.PATH, DISPLAY: rt.display, LANG: "C.UTF-8" };
@@ -286,7 +287,8 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     closed = true;
     clearInterval(ping); clearInterval(leaseCheck); clearTimeout(firstFrame);
     hub.off(`browser:${id}`, onEvent);
-    releaseInputs(); capture.kill("SIGKILL"); active.delete(id); browsers.detachViewer(id);
+    releaseInputs(); capture.kill("SIGKILL"); active.delete(id);
+    if (attached) browsers.detachViewer(id);
     if ((code === 1000 || code === 1001) && validLease()) browsers.releaseControl(id);
   };
   ws.on("close", cleanup);
@@ -328,6 +330,16 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     let msg: Message;
     try { msg = JSON.parse(String(raw)); } catch { return; }
     if (!msg || typeof msg !== "object") return;
+    // A hidden tab is not someone watching; see the same message in viewer.ts.
+    if (msg.type === "visibility") {
+      const visible = msg.visible !== false;
+      if (visible !== attached) {
+        attached = visible;
+        if (visible) browsers.attachViewer(id);
+        else browsers.detachViewer(id);
+      }
+      return;
+    }
     if (mode !== "control") return;
     if (msg.type === "heartbeat" && typeof msg.leaseToken === "string") {
       try {

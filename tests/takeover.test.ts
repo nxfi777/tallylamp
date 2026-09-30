@@ -168,6 +168,74 @@ describe("watching keeps a browser alive", () => {
     }
   });
 
+  it("stops counting a hidden watch tab as attachment until it is shown again", async () => {
+    const created = await json(`${own.url}/api/v1/browsers`, {
+      method: "POST",
+      headers: { Cookie: own.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "backgrounded", start: true }),
+    });
+    const id = (created.body as { browser: { id: string } }).browser.id;
+    const t = await json(`${own.url}/api/v1/browsers/${id}/viewer-ticket`, {
+      method: "POST",
+      headers: { Cookie: own.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "watch" }),
+    });
+    const ticket = (t.body as { ticket: string }).ticket;
+    const WebSocket = (await import("ws")).default;
+    const ws = new WebSocket(`${own.url.replace("http", "ws")}/api/v1/browsers/${id}/view?ticket=${ticket}`);
+    await new Promise<void>((resolve, reject) => {
+      ws.on("open", () => resolve());
+      ws.on("error", reject);
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    const settle = () => new Promise((r) => setTimeout(r, 150));
+
+    try {
+      assert.equal(own.browsers.viewerCount(id), 1);
+      ws.send(JSON.stringify({ type: "visibility", visible: false }));
+      await settle();
+      assert.equal(own.browsers.viewerCount(id), 0, "a hidden tab must not hold the browser up");
+      ws.send(JSON.stringify({ type: "visibility", visible: false }));
+      await settle();
+      assert.equal(own.browsers.viewerCount(id), 0, "saying so twice must not count twice");
+      ws.send(JSON.stringify({ type: "visibility", visible: true }));
+      await settle();
+      assert.equal(own.browsers.viewerCount(id), 1, "showing it again must count again");
+      ws.send(JSON.stringify({ type: "visibility", visible: false }));
+      await settle();
+      ws.close();
+      await settle();
+      assert.equal(own.browsers.viewerCount(id), 0, "closing a hidden tab must not release a second time");
+    } finally {
+      try { ws.close(); } catch { /* ignore */ }
+    }
+  });
+
+  it("gives a browser held only by an MCP session the MCP TTL, not the watcher's", async () => {
+    const created = await json(`${own.url}/api/v1/browsers`, {
+      method: "POST",
+      headers: { Cookie: own.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "agent-left-open", start: true }),
+    });
+    const id = (created.body as { browser: { id: string } }).browser.id;
+    // A client left open keeps its session, and so its attachment, alive indefinitely. Tool
+    // calls are what reset the clock, so an hour-long attached TTL must not apply to it.
+    own.browsers.attachMcp(id);
+    process.env.TALLYLAMP_IDLE_TTL_SEC = "3600";
+    process.env.TALLYLAMP_ATTACHED_IDLE_TTL_SEC = "3600";
+    process.env.TALLYLAMP_MCP_ATTACHED_IDLE_TTL_SEC = "1";
+    try {
+      await new Promise((r) => setTimeout(r, 1200));
+      await own.browsers.reapIdle();
+      assert.notEqual(own.browsers.row(id).status, "running", "an idle MCP-only browser must be reaped");
+    } finally {
+      own.browsers.detachMcp(id);
+      delete process.env.TALLYLAMP_IDLE_TTL_SEC;
+      delete process.env.TALLYLAMP_ATTACHED_IDLE_TTL_SEC;
+      delete process.env.TALLYLAMP_MCP_ATTACHED_IDLE_TTL_SEC;
+    }
+  });
+
   it("reaps the same browser once nobody is watching", async () => {
     const created = await json(`${own.url}/api/v1/browsers`, {
       method: "POST",

@@ -1576,7 +1576,7 @@ export class McpGateway {
   /**
    * Close sessions whose client has gone away without sending DELETE /mcp — a crash, a
    * dropped network, or a client that simply does not send it. Left alone they pin the
-   * browser as "attached", which swaps the 15-minute idle TTL for the 4-hour one and never
+   * browser as "attached", which swaps the 15-minute idle TTL for the 30-minute one and never
    * releases the child chrome-devtools-mcp process.
    */
   async reapIdleSessions(): Promise<void> {

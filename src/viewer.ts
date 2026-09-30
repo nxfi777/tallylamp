@@ -1473,6 +1473,17 @@ async function runViewer(
       // registers as attachment, so the browser keeps the long TTL -- it just counts from the
       // last real activity rather than from now.
       if (mode === "control") browsers.touch(browserId);
+      // By the same reasoning a hidden tab is not someone watching, so it stops counting as
+      // attachment until it is shown again. A client that never says keeps counting, as before.
+      if (msg.type === "visibility") {
+        const visible = msg.visible !== false;
+        if (visible !== attachedViewer) {
+          attachedViewer = visible;
+          if (visible) browsers.attachViewer(browserId);
+          else browsers.detachViewer(browserId);
+        }
+        return;
+      }
       if (msg.type === "heartbeat" && mode === "control" && typeof msg.leaseToken === "string") {
         try {
           browsers.heartbeatControl(browserId, msg.leaseToken, guest ? { guestId: guest.id } : "admin");
