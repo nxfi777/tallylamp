@@ -185,9 +185,36 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     res.json(pollPairing(typeof req.body?.deviceCode === "string" ? req.body.deviceCode : ""));
   });
 
+  // A worker's two calls. No session and no agent token: a worker has neither. It proves
+  // itself with a one-time join token, then with the secret that join returned.
+  app.post("/api/v1/workers/join", (req, res) => {
+    rateLimit(`worker-join:${req.ip}`, 20, 10);
+    res.json(browsers.workers.join(req.body ?? {}));
+  });
+  app.post("/api/v1/workers/hello", (req, res) => {
+    rateLimit(`worker-hello:${req.ip}`, 60, 20);
+    res.json(browsers.workers.hello(req.body ?? {}));
+  });
+
   const api = app;
 
   api.use("/api/v1", requireAuth, csrf);
+
+  api.get("/api/v1/workers", requireAdmin, (_req, res) => {
+    res.json({ workers: browsers.workers.list(), release: config.release, placement: config.placement });
+  });
+  api.post("/api/v1/workers/join-tokens", requireAdmin, (req, res) => {
+    res.status(201).json(browsers.workers.createJoinToken(req.principal!));
+  });
+  api.delete("/api/v1/workers/:id", requireAdmin, (req, res) => {
+    browsers.workers.remove(req.params.id, req.principal!);
+    res.json({ removed: req.params.id });
+  });
+  api.post("/api/v1/browsers/:id/move", requireAdmin, asyncRoute(async (req, res) => {
+    const to = req.body?.workerId;
+    if (to !== null && typeof to !== "string") throw Err.invalid("workerId must be a worker's id, or null for the main instance");
+    res.json({ browser: browsers.publicView(await browsers.moveTo(req.params.id, to, req.principal!)) });
+  }));
 
   // The dashboard's half. Admin only: approving a link grants standing access to somebody's
   // signed-in browser, which no agent should be able to grant itself.
@@ -272,6 +299,8 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
         metadata: req.body?.metadata,
         seedId: req.body?.seedId,
         proxy: req.body?.proxy,
+        // Absent lets placement decide. Only the administrator may say; create() checks.
+        ...(req.body && Object.prototype.hasOwnProperty.call(req.body, "workerId") ? { workerId: req.body.workerId === null ? null : String(req.body.workerId) } : {}),
       });
       if (req.body?.start !== false) await browsers.ensureRunning(row.id);
       res.status(201).json({ browser: browsers.publicView(browsers.row(row.id)) });

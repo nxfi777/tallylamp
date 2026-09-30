@@ -91,8 +91,10 @@ Budget roughly 1–2 GB per active Chrome, plus the server, and measure your wor
 Railway also limits a container to 1,000 processes and threads, shared by every
 browser: a quiet Chrome uses about 200, and a busy one 600 or more. Tallylamp counts
 each browser's share, queues a start until it fits, stops idle browsers to make room,
-and restarts a browser the limit has broken. Pin a browser that must stay up, or run
-it on its own service ([isolating production browsers](docs/railway.md#isolating-production-browsers)).
+and restarts a browser the limit has broken. The template pins each Chrome to four
+CPUs, which cuts its threads by about 40%. Pin a browser that must stay up, or add a
+[worker](docs/workers.md): a second service that runs browsers for this one, within
+its own 1,000.
 
 [Railway setup, variables, and deployment limits](docs/railway.md).
 

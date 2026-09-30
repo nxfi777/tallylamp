@@ -70,15 +70,39 @@ These apply only where the host sets a process ceiling, as Railway does. See
 | `TALLYLAMP_PROCESS_HEADROOM` | no | default 50. Kept free at all times, so ffmpeg, xdotool and MCP bridges can still start. |
 | `TALLYLAMP_SHED_IDLE_SEC` | no | default 300. A browser unused this long, with nobody watching, may be stopped to make room. `0` never stops an idle browser for room. |
 | `TALLYLAMP_UNHEALTHY_RESTARTS` | no | default 3. Automatic restarts of a broken browser allowed in 30 minutes. Past that it is left running and reported `unhealthy`. |
-| `TALLYLAMP_CHROME_CPUS` | no | default off. Not yet measured; see below. Runs each Chrome under `taskset` on this many CPUs. |
-| `TALLYLAMP_RENDERER_PROCESS_LIMIT` | no | default off. Not yet measured. Passes `--renderer-process-limit`, a soft cap that site isolation exceeds. |
-| `TALLYLAMP_IN_PROCESS_GPU` | no | default off. Not yet measured. Saves the GPU process (27–30 threads), but a GPU crash then takes the whole browser down. |
+| `TALLYLAMP_CHROME_CPUS` | no | default off; the template sets `4`. Runs each Chrome under `taskset` on this many CPUs, a different set for each browser. Measured below. It caps one browser at that many cores. |
+| `TALLYLAMP_RENDERER_PROCESS_LIMIT` | no | default off. Not measured. Passes `--renderer-process-limit`, a soft cap that site isolation exceeds. |
+| `TALLYLAMP_PLACEMENT` | no | default `overflow`. With [workers](workers.md), a new browser stays on this instance while it has room, then goes to the worker with the most. `spread` always picks the host with the most room; `local` always picks this instance. |
 
-The last three cut Chrome's thread count and stay off until each has been
-measured for threads and stability. Measure on a service that holds no
-production browser, because the test Chrome shares that service's limit.
-`railway ssh` connects as root, and Chrome will not run as root with its
-sandbox on, so drop to the service's user as the entrypoint does:
+Chrome sizes its thread pools from the CPUs it sees, and a Railway container
+shows 48 while its quota is 32. `TALLYLAMP_CHROME_CPUS` pins each Chrome to a
+few of them. Measured on Railway with Chrome 154, for ten minutes each on
+ChatGPT, BBC News and Grok, reloading every minute:
+
+| Run | CPUs Chrome saw | Median threads | Max | Threads per renderer | Crashed tabs | Failed reloads |
+| --- | --- | --- | --- | --- | --- | --- |
+| Unpinned | 48 | 346 | 369 | 24.2 | 0 | 0 of 27 |
+| 4 CPUs | 4 | 203 | 232 | 11.1 | 0 | 0 of 27 |
+| 8 CPUs | 8 | 234 | 240 | 13.4 | 0 | 0 of 27 |
+| Unpinned again | 48 | 338 | 370 | 23.9 | 0 | 0 of 27 |
+
+Four CPUs cut a browser's threads by about 40%. Page speed was not measured.
+The GPU process stayed at about 30 threads in every run.
+
+When this setting or the renderer limit changes, Tallylamp forgets each
+browser's measured thread counts on its next boot, and measures again on the
+browser's next start. Counts taken under the old setting would size a start
+wrongly.
+
+`--in-process-gpu` was an option in 0.9.x and is gone. Chrome 154 dies at launch
+with it here, before its debugging port opens. Turning site isolation off is
+not offered either. It would cut the most processes, but these browsers hold
+signed-in sessions, and site isolation is the boundary between them.
+
+To measure another setting yourself, use a service that holds no production
+browser, because the test Chrome shares that service's limit. `railway ssh`
+connects as root, and Chrome will not run as root with its sandbox on, so drop
+to the service's user as the entrypoint does:
 
 ```sh
 railway ssh -- setpriv --reuid=1100 --regid=1100 --init-groups \
@@ -91,11 +115,8 @@ railway ssh -- setpriv --reuid=1100 --regid=1100 --init-groups \
 
 Run a baseline and the variant back to back, on the same URLs. The summary
 gives threads per process kind, crashed tabs, failed reloads and whether the
-renderer zygote was lost. For `cpus=N`, `hardwareConcurrency` shows whether
-Chrome sizes its thread pools from its CPU affinity; if it still reports 48,
-`taskset` cannot help. Tallylamp does not offer turning site isolation off. It
-would cut the most processes, but these browsers hold signed-in sessions, and
-site isolation is the boundary between them.
+renderer zygote was lost. `hardwareConcurrency` in the first line is the CPU
+count Chrome saw.
 
 ## Viewer settings
 
@@ -169,8 +190,8 @@ does instead:
 - When the kernel refuses a process, the dashboard shows it, and every
   running browser's agent gets a note on its next tool call.
 
-To keep a browser from ever being starved by another, either pin it or give
-it a service of its own.
+To keep a browser from ever being starved by another, either pin it or put it
+on a worker.
 
 **Pin it.** On the browser's page, turn on **Pinned**, or call
 `PUT /api/v1/browsers/{id}/pinned` with `{"pinned": true}`. Only the
@@ -181,12 +202,12 @@ browser is about to run short. It never stops a browser a person has taken
 control of, and pinned browsers are never stopped for idleness. Pinning works
 within one service, but everything still shares that service's 1,000.
 
-**Give it its own service.** Add a second service to the project from the
-same image, with its own `/data` volume, `ADMIN_SECRET` and domain, and keep
-production browsers on it. It gets its own 1,000. Connect the agents that
-need those browsers to its `/mcp` as a separate connector. The services share
-nothing, so browsers, profiles and agents do not move between them; sign in to
-a production browser again on the new service.
+**Put it on a worker.** A [worker](workers.md) is a second service running
+this image, which runs browsers for this instance within its own 1,000. Add
+one from **Workers** in the dashboard, then stop the browser and move it there
+with **Runs on** on its page. You keep one dashboard and one `/mcp` URL, and
+the browser keeps its logins. Nothing on the main instance can use up a
+worker's processes, or the other way round.
 
 ## Publishing the template
 
@@ -207,6 +228,7 @@ and a `/healthz` healthcheck with a 120-second timeout. Set these template varia
 | `ADMIN_SECRET` | `${{secret(64, "abcdef0123456789")}}` |
 | `TALLYLAMP_ALLOW_PRIVATE_NETWORK` | `0` |
 | `TALLYLAMP_SANDBOX` | `auto` |
+| `TALLYLAMP_CHROME_CPUS` | `4` |
 
 The secret expression creates a different dashboard password for each deployment.
 Users retrieve it from their own Railway variables after deployment. Leave the
@@ -224,6 +246,14 @@ use the dashboard. [CLI reference](https://docs.railway.com/cli/templates).
 Deploy an unpublished copy into a fresh project before publishing. Verify login,
 an agent connection, watch/takeover/return, and profile persistence after a redeploy.
 Then publish and add its real deploy URL to the README and website.
+
+The worker has a template of its own, Tallylamp Worker, with its listing copy in
+[worker-template-overview.md](worker-template-overview.md). It is one service
+from the same image digest, with a `/data` volume, a `/healthz` healthcheck and
+no public domain. Its variables are `TALLYLAMP_JOIN`, which the person
+deploying fills in, plus `TALLYLAMP_SANDBOX` as `auto` and
+`TALLYLAMP_CHROME_CPUS` as `4`. Pin both templates to the same digest at each
+release: a worker and the instance it joins must run the same release.
 
 ## Releasing and upgrading
 

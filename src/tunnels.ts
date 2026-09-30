@@ -150,6 +150,7 @@ export function createTunnel(
   // A tunnel is matched in the egress proxy Chrome was launched behind. A linked browser was
   // not launched by us and has no such proxy -- and it is already on its owner's network.
   browsers.assertManaged(input.browserId, "a tunnel");
+  browsers.assertLocal(input.browserId, "A tunnel");
   // Ownership at create time is not enough on its own: a grant issued afterwards would hand
   // the borrower a browser that can already reach the owner's machine. The two are mutually
   // exclusive in both orderings -- issueGrant drops tunnels, and this refuses while a

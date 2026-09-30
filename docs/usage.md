@@ -377,7 +377,9 @@ An administrator can pin a browser so room is held for it and other browsers are
 stopped before it runs short. A browser that loses its renderer zygote, or whose
 navigations all fail with `net::ERR_ABORTED`, shows `unhealthy` and is restarted.
 An agent hears of any of these from a `[tallylamp]` note on its next tool call. See
-[isolating production browsers](railway.md#isolating-production-browsers). Idle
+[isolating production browsers](railway.md#isolating-production-browsers). For more
+room than one host has, add a [worker](workers.md): its browsers show in the same
+dashboard, named by the worker they run on. Idle
 Chrome processes stop while persistent profiles remain; the fleet
 and idle limits are configured in the [Railway settings](railway.md#browser-and-session-settings).
 

@@ -29,6 +29,8 @@ export default defineRailway(() => {
       TALLYLAMP_SANDBOX: "auto",
       TALLYLAMP_MAX_BROWSERS: "4",
       TALLYLAMP_GPU: "auto",
+      // Four CPUs per Chrome: about 40% fewer threads against Railway's limit of 1,000.
+      TALLYLAMP_CHROME_CPUS: "4",
       TALLYLAMP_ALLOW_PRIVATE_NETWORK: "0",
     },
   });

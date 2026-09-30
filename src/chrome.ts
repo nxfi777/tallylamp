@@ -110,22 +110,18 @@ export function gpuArgs(mode = config.gpu): { args: string[]; status: GpuStatus 
 }
 
 /**
- * Flags that cut Chrome's thread count on a host with a process ceiling. Each is off unless its
- * variable is set, because none has been soak-tested here yet (scripts/thread-soak.mjs):
+ * Flags that cut Chrome's thread count on a host with a process ceiling, off unless set.
  *
- * - --renderer-process-limit is a soft cap that site isolation exceeds, and measured worse for
- *   memory here before (see the flag list in launchChrome).
- * - --in-process-gpu saves the GPU process, 27-30 threads with SwiftShader, and a GPU crash then
- *   takes the whole browser down with it.
+ * --renderer-process-limit is a soft cap that site isolation exceeds, and measured worse for
+ * memory here before (see the flag list in launchChrome). It has not been soak-tested.
  *
- * Turning site isolation off would cut the most, one process per site, and is deliberately not
- * offered: these browsers hold signed-in sessions, and it is the boundary between them.
+ * Two others are deliberately not offered. --in-process-gpu would save the GPU process, about
+ * 30 threads with SwiftShader, but Chrome 154 dies at launch with it here. Turning site
+ * isolation off would cut the most, one process per site, and it is the boundary between the
+ * signed-in sessions these browsers hold.
  */
 export function threadReductionArgs(): string[] {
-  const args: string[] = [];
-  if (config.rendererProcessLimit > 0) args.push(`--renderer-process-limit=${config.rendererProcessLimit}`);
-  if (config.inProcessGpu) args.push("--in-process-gpu");
-  return args;
+  return config.rendererProcessLimit > 0 ? [`--renderer-process-limit=${config.rendererProcessLimit}`] : [];
 }
 
 let cpuRotation = 0;

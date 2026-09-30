@@ -293,6 +293,29 @@ CREATE TABLE IF NOT EXISTS linked_access (
   PRIMARY KEY (browser_id, agent_id)
 );
 
+-- Workers: other services running this image with TALLYLAMP_JOIN, which run Chrome for this
+-- instance. The secret is what this instance sends to a worker and a worker sends back, so
+-- it is stored in clear, like proxy credentials: protect /data and its backups.
+CREATE TABLE IF NOT EXISTS workers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  secret TEXT NOT NULL,
+  version TEXT,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT
+);
+
+-- One use each. Only the hash is kept: the token is shown once, when it is made.
+CREATE TABLE IF NOT EXISTS worker_join_tokens (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  worker_id TEXT
+);
+
 -- A pairing in flight. The extension holds the device secret and shows the short user code;
 -- a signed-in admin approves the code. Nothing here is a credential: the user code only
 -- names a request, and the device secret can only collect a token somebody else approved.
@@ -422,6 +445,8 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   ["browsers", "pinned", "INTEGER NOT NULL DEFAULT 0"],
   ["browsers", "launch_threads", "INTEGER"],
   ["browsers", "peak_threads", "INTEGER"],
+  // Null: its Chrome and its profile are on this instance. Otherwise the worker that has them.
+  ["browsers", "worker_id", "TEXT"],
   // Lending gained an access level. 'control' is the right default for both: it is what every
   // grant and request written before the column existed meant, so an upgrade changes nobody's
   // standing access.

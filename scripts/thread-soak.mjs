@@ -2,11 +2,11 @@
 // Measure one Chrome launch configuration's thread count and stability over time.
 //
 //   node scripts/thread-soak.mjs --variant baseline --minutes 10 --url https://chatgpt.com/
-//   node scripts/thread-soak.mjs --variant cpus=4,in-process-gpu --minutes 10 --url https://chatgpt.com/
+//   node scripts/thread-soak.mjs --variant cpus=4 --minutes 10 --url https://chatgpt.com/
 //
 // Each variant sets the variable the service itself reads, so what is measured is what would
-// ship: cpus=N (TALLYLAMP_CHROME_CPUS), renderer-limit=N (TALLYLAMP_RENDERER_PROCESS_LIMIT),
-// in-process-gpu (TALLYLAMP_IN_PROCESS_GPU). Combine them with commas.
+// ship: cpus=N (TALLYLAMP_CHROME_CPUS), renderer-limit=N (TALLYLAMP_RENDERER_PROCESS_LIMIT).
+// Combine them with commas.
 //
 // Run it inside a Tallylamp container on a service that holds no production browser. It
 // launches a real Chrome against the same process ceiling as every browser beside it, which
@@ -45,7 +45,6 @@ for (const part of variant.split(",")) {
   if (k === "baseline") continue;
   else if (k === "cpus") process.env.TALLYLAMP_CHROME_CPUS = v;
   else if (k === "renderer-limit") process.env.TALLYLAMP_RENDERER_PROCESS_LIMIT = v;
-  else if (k === "in-process-gpu") process.env.TALLYLAMP_IN_PROCESS_GPU = "1";
   else throw new Error(`unknown variant part ${part}`);
 }
 

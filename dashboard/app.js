@@ -472,6 +472,7 @@ const state = {
   flash: "",
   events: [],
   requests: [],
+  workers: [],
 };
 
 async function api(path, opts = {}) {
@@ -562,6 +563,7 @@ function route() {
   if (p.startsWith("/browsers/") && p.split("/").length >= 3) return { name: "browser", id: p.split("/")[2] };
   if (p.startsWith("/agents")) return { name: "agents" };
   if (p.startsWith("/seeds")) return { name: "seeds" };
+  if (p.startsWith("/workers")) return { name: "workers" };
   if (p.startsWith("/security")) return { name: "security" };
   if (p.startsWith("/login")) return { name: "login" };
   // Where the extension sends the operator. The code rides in the query so a logged-out visit
@@ -642,6 +644,7 @@ function layout(main) {
           ["/", "home", "Browsers"],
           ["/agents", "agents", "Agents"],
           ["/seeds", "seeds", "Saved profiles"],
+          ["/workers", "workers", "Workers"],
           ["/security", "security", "Security"],
         ].map(([href, name, label]) => {
           const active = route().name === name;
@@ -797,7 +800,8 @@ function card(b) {
       project ? h("div", { class: "card-project", title: project }, project) : null,
       h("h3", {}, b.name,
         b.kind === "linked" ? h("span", { class: "kind-tag", title: "A person's own browser, linked through the Tallylamp extension" }, "linked") : null,
-        b.pinned ? h("span", { class: "kind-tag", title: "Room is held for it on this host, and it is never stopped to make room for another browser" }, "pinned") : null),
+        b.pinned ? h("span", { class: "kind-tag", title: "Room is held for it on this host, and it is never stopped to make room for another browser" }, "pinned") : null,
+        b.worker ? h("span", { class: "kind-tag" + (b.worker.online ? "" : " warn"), title: b.worker.online ? `Its Chrome runs on the worker ${b.worker.name}` : `Its worker, ${b.worker.name}, is not answering` }, b.worker.name) : null),
       // Six identical grey lines was most of what made this card hard to scan. Owner and
       // reported source moved to the detail page; what stays is what tells you whether to click.
       h("div", { class: "meta" },
@@ -1277,6 +1281,12 @@ function settingsSection(b) {
             if (viewer) { viewer.cancel(true); viewer = null; }
             await refresh(); void render();
           }) }), true) : null,
+      b.kind !== "linked" && (state.workers.length || b.worker) ? settingRow("Runs on",
+        b.worker
+          ? `${b.worker.name}${b.worker.online ? "" : ", which is not answering"}. Its Chrome and profile are on that worker.`
+          : "This instance.",
+        h("button", { class: "btn", "aria-label": "Move to another host", disabled: locked,
+          title: locked ? "Stop the browser to move it." : false, onClick: () => moveBrowser(b) }, "Move")) : null,
       b.kind !== "linked" ? settingRow("Pinned",
         b.pinned
           ? `On. Room is held for it on this host, and other browsers are stopped before it runs short.${b.peakThreads ? ` It has reached ${b.peakThreads} processes and threads.` : ""}`
@@ -1610,8 +1620,9 @@ async function browserView(id, seq) {
   const stagewrap = h("div", { class: "stagewrap" },
     h("div", { class: "row viewer-surfaces", role: "group", "aria-label": "Browser view" },
       h("button", { class: "btn tiny", "aria-pressed": String(surface === "tab"), onClick: () => switchSurface("tab") }, "Tab"),
-      h("button", { class: "btn tiny", "aria-pressed": String(surface === "desktop"), disabled: !state.status?.fullBrowser,
-        title: state.status?.fullBrowser ? "Show Chrome’s toolbar, popups and dialogs" : "Full browser needs a dedicated Xvfb display on the host",
+      h("button", { class: "btn tiny", "aria-pressed": String(surface === "desktop"), disabled: !state.status?.fullBrowser || Boolean(b.worker),
+        title: b.worker ? `Full browser is not available yet on a worker. Move this browser to the main instance to use it.`
+          : state.status?.fullBrowser ? "Show Chrome’s toolbar, popups and dialogs" : "Full browser needs a dedicated Xvfb display on the host",
         onClick: () => switchSurface("desktop") }, "Full browser"),
       surface === "desktop" && human ? h("button", { class: "btn tiny", onClick: () => viewer?.openExtensions() }, "Manage extensions") : null,
       surface === "desktop" && human ? h("button", { class: "btn tiny",
@@ -2727,6 +2738,87 @@ async function securityView() {
   ]);
 }
 
+/**
+ * Workers: other services running this image, which run browsers for this instance.
+ *
+ * One page, because there is one thing to decide here and it is rare: whether this instance
+ * needs another host. The day-to-day question, which host a browser is on, is answered on
+ * the browser itself.
+ */
+async function workersView() {
+  const workers = state.workers || [];
+  const status = (w) => w.problem
+    ? h("td", {}, h("span", { class: "warn" }, w.online ? "Wrong release" : "Not answering"), h("div", { class: "sub" }, w.problem))
+    : h("td", {}, "Online");
+  const row = (w) => h("tr", {},
+    h("td", {}, w.name, h("div", { class: "sub" }, `release ${w.version || "unknown"} · ${w.url}`)),
+    status(w),
+    h("td", {}, w.pids ? `${w.pids.current} of ${w.pids.max}` : h("span", { class: "sub" }, "No limit")),
+    h("td", {}, String(w.browsers), h("div", { class: "sub" }, `${w.running} running`)),
+    h("td", {},
+      h("button", { class: "btn danger", disabled: w.browsers > 0,
+        title: w.browsers > 0 ? "Move or delete its browsers first." : false,
+        onClick: () => act(() => removeWorker(w)) }, "Remove")),
+  );
+  layout([
+    h("div", { class: "top" },
+      h("div", {},
+        h("h1", {}, "Workers"),
+        h("div", { class: "sub" }, "Each worker is another service that runs browsers for this instance, within its own process limit."),
+      ),
+      h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => act(addWorker) }, "Add worker")),
+    ),
+    workers.length
+      ? h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": "Workers" },
+          h("table", { class: "table" },
+            h("thead", {}, h("tr", {},
+              h("th", { scope: "col" }, "Name"),
+              h("th", { scope: "col" }, "Status"),
+              h("th", { scope: "col" }, "Processes"),
+              h("th", { scope: "col" }, "Browsers"),
+              h("th", { scope: "col" }, "Actions"),
+            )),
+            h("tbody", {}, ...workers.map(row))))
+      : h("p", {}, "No workers yet. This instance runs every browser itself, within its host’s process limit. Add a worker when that limit is what stops another browser from starting."),
+    h("h2", {}, "How a worker fits in"),
+    h("p", {}, "A worker runs this same image with one setting, TALLYLAMP_JOIN. It has no dashboard and no agents of its own. This instance starts, drives and stops its browsers over your project’s private network, so both must be in the same Railway project and on the same release."),
+    h("p", {}, "A new browser stays on this instance while it has room, and goes to a worker when it has not. To move one, stop it and use Runs on, on its page. Full browser, agent control, tunnels and saved profiles work only on this instance for now."),
+  ]);
+}
+
+async function addWorker() {
+  const made = await api("/api/v1/workers/join-tokens", { method: "POST" });
+  revealToken("Add a worker", made.token, {
+    note: "In this same Railway project, choose New, then Template, and pick Tallylamp Worker. Paste this token as TALLYLAMP_JOIN. The worker shows here once it has joined. The token adds one worker and expires in an hour.",
+  });
+}
+
+async function removeWorker(w) {
+  if (!confirm(`Remove ${w.name}? It stops answering to this instance. Delete its Railway service as well, or it will keep running and keep failing to start.`)) return;
+  await api(`/api/v1/workers/${w.id}`, { method: "DELETE" });
+  flash(`${w.name} removed.`, true);
+  await refresh();
+  void workersView();
+}
+
+async function moveBrowser(b) {
+  const here = b.worker ? b.worker.id : "local";
+  const answers = await askFor(`Move ${b.name}`, [
+    { name: "host", label: "Move to", value: here,
+      options: [{ value: "local", label: "This instance" },
+        ...state.workers.map((w) => ({ value: w.id, label: w.online ? w.name : `${w.name} (not answering)` }))],
+      hint: "Its whole profile is copied across, logins included, then deleted from where it was. Downloads are not moved." },
+  ], "Move browser", async (values) => {
+    if (values.host === here) return;
+    await api(`/api/v1/browsers/${b.id}/move`, { method: "POST", body: { workerId: values.host === "local" ? null : values.host } });
+  });
+  if (answers) {
+    flash(`${b.name} moved.`, true);
+    await refresh();
+    void render();
+  }
+}
+
 async function createBrowser(seedId = "") {
   if (typeof seedId !== "string") seedId = "";
   let created;
@@ -2736,6 +2828,10 @@ async function createBrowser(seedId = "") {
       hint: "Copies every saved login and its metadata into an independent browser. Sites may ask you to sign in again." },
     { name: "project", label: "Project", kind: "project", emptyLabel: "Same as the saved profile, if any", placeholder: "Use saved profile's project, if any", hint: "Leave it and the saved profile's project is kept." },
     { name: "purpose", label: "What is it for?", placeholder: "Use saved profile's purpose, if any", maxLength: 200 },
+    ...(state.workers.length ? [{ name: "host", label: "Runs on", value: "",
+      options: [{ value: "", label: "Automatic: here while there is room" }, { value: "local", label: "This instance" },
+        ...state.workers.map((w) => ({ value: w.id, label: w.online ? w.name : `${w.name} (not answering)` }))],
+      hint: "A browser made from a saved profile starts on this instance. Full browser, tunnels and saved profiles work on this instance only for now." }] : []),
     ...proxyFields(),
   ], "Create browser", async (values) => {
     const { name, project, purpose } = values;
@@ -2746,6 +2842,8 @@ async function createBrowser(seedId = "") {
         persistent: true,
         seedId: values.seedId || undefined,
         proxy: proxyFromFields(values),
+        // Left out, the server decides: here while there is room, a worker when there is not.
+        ...(values.host ? { workerId: values.host === "local" ? null : values.host } : {}),
         metadata: {
           source: "dashboard",
           ...(project ? { project } : {}),
@@ -3042,13 +3140,16 @@ async function refresh() {
     return true;
   }
   // These are independent: one failing view must not blank the others or force a logout.
-  const [status, browsers, agents, seeds, requests] = await Promise.allSettled([
+  const [status, browsers, agents, seeds, requests, workers] = await Promise.allSettled([
     api("/api/v1/status"),
     api("/api/v1/browsers"),
     state.me?.type === "admin" ? api("/api/v1/agents") : Promise.resolve({ agents: [] }),
     state.me?.type === "admin" ? api("/api/v1/seeds") : Promise.resolve({ seeds: [] }),
     api("/api/v1/requests"),
+    state.me?.type === "admin" ? api("/api/v1/workers") : Promise.resolve({ workers: [] }),
   ]);
+  // Not in the failure list below: a missing worker list leaves every other page whole.
+  if (workers.status === "fulfilled") state.workers = workers.value.workers;
   if (status.status === "fulfilled") state.status = status.value;
   if (browsers.status === "fulfilled") state.browsers = browsers.value.browsers;
   if (agents.status === "fulfilled") state.agents = agents.value.agents;
@@ -3196,7 +3297,7 @@ async function pairView(code) {
   );
 }
 
-const TITLES = { pair: "Link a browser", home: "Browsers", agents: "Agents", seeds: "Saved profiles", security: "Security state", login: "Sign in" };
+const TITLES = { pair: "Link a browser", home: "Browsers", agents: "Agents", seeds: "Saved profiles", workers: "Workers", security: "Security state", login: "Sign in" };
 
 let renderSeq = 0;
 
@@ -3226,6 +3327,7 @@ async function render() {
   if (r.name === "pair") return pairView(r.code);
   if (r.name === "agents") return agentsView();
   if (r.name === "seeds") return seedsView();
+  if (r.name === "workers") return workersView();
   if (r.name === "security") return securityView();
   return homeView();
 }
@@ -3266,6 +3368,9 @@ function startEvents() {
           // whole layout — so an operator typing in the filter lost focus to <body> and had the
           // caret sent back to the start, roughly every time any agent touched any browser.
           if (route().name === "home") paintBrowsers();
+          // A worker joining or dropping off is an event too. Not while a dialog is open: the
+          // join token is shown once, and the page behind it can wait.
+          if (route().name === "workers" && !document.querySelector(".modal")) void workersView();
           const sitesPanel = document.getElementById("profile-sites");
           const current = sitesPanel && state.browsers.find(b => b.id === sitesPanel.dataset.browserId);
           if (current) sitesPanel.updateSites(current.signedInSites || []);

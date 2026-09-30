@@ -1,6 +1,24 @@
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir, hostname } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+let cachedRelease: string | undefined;
+/**
+ * The release this process was built from, read from package.json beside src/ or dist/. It is
+ * what a worker and the instance it joins compare: they call each other's internal API, so
+ * they must be the same release.
+ */
+function releaseVersion(): string {
+  if (cachedRelease !== undefined) return cachedRelease;
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    cachedRelease = String((JSON.parse(readFileSync(path.resolve(here, "../package.json"), "utf8")) as { version?: string }).version ?? "unknown");
+  } catch {
+    cachedRelease = "unknown";
+  }
+  return cachedRelease;
+}
 
 function int(name: string, def: number): number {
   const raw = process.env[name];
@@ -194,20 +212,47 @@ export const config = {
   get shedIdleMs() { return Math.max(0, int("TALLYLAMP_SHED_IDLE_SEC", 300)) * 1000; },
   get unhealthyRestarts() { return Math.max(0, int("TALLYLAMP_UNHEALTHY_RESTARTS", 3)); },
   /**
-   * Chrome thread reductions. All off by default: none has yet been soak-tested for its thread
-   * saving and its stability cost (scripts/thread-soak.mjs), and each has a known downside.
+   * Chrome thread reductions, off unless set.
    *
    * chromeCpus: run each Chrome under taskset on this many CPUs, rotating which ones, so its
    *   CPU-scaled thread pools size themselves to that rather than the 48 a Railway container
-   *   reports. Only helps if Chrome sizes its pools from sched_getaffinity.
+   *   reports. Measured on Railway with Chrome 154 over ten minutes on three heavy pages: a
+   *   median of 346 threads unpinned, 234 on 8 CPUs and 203 on 4, with no crashed tab or
+   *   failed reload in any run. It caps one browser at that many cores of CPU.
    * rendererProcessLimit: --renderer-process-limit. A soft cap that site isolation can exceed,
-   *   and measured worse for memory here before (see chrome.ts).
-   * inProcessGpu: --in-process-gpu. Saves the ~28-thread GPU process, but a GPU crash then
-   *   takes the whole browser down.
+   *   and measured worse for memory here before (see chrome.ts). Not soak-tested.
+   *
+   * --in-process-gpu was an option in 0.9.x. Chrome 154 dies at launch with it here (SIGTRAP
+   * before the debugging port opens), so it was removed rather than left to be tried.
    */
   get chromeCpus() { return Math.max(0, int("TALLYLAMP_CHROME_CPUS", 0)); },
   get rendererProcessLimit() { return Math.max(0, int("TALLYLAMP_RENDERER_PROCESS_LIMIT", 0)); },
-  get inProcessGpu() { return bool("TALLYLAMP_IN_PROCESS_GPU", false); },
+  /**
+   * Workers (worker.ts, workers.ts). A worker is this same image started with TALLYLAMP_JOIN:
+   * it runs Chrome for another Tallylamp instance and serves nothing else.
+   *
+   * join: the token from Add worker on the main instance's dashboard. Setting it is what
+   *   makes this process a worker.
+   * workerUrl: where the main instance reaches this worker. Inferred on Railway from the
+   *   service's private domain; required anywhere else.
+   * workerName: shown in the dashboard. Defaults to the Railway service name.
+   * placement: where a new browser goes when nobody says. "overflow" keeps it on the main
+   *   instance while that has room for one, and otherwise puts it on the worker with the most
+   *   room: a worker's browser cannot yet use Full browser, tunnels or uploads, so it should
+   *   not land there without a reason. "spread" always picks the host with the most room, the
+   *   main instance included. "local" always keeps it on the main instance.
+   */
+  get join() { return (process.env.TALLYLAMP_JOIN ?? "").trim(); },
+  get workerUrl() {
+    const raw = (process.env.TALLYLAMP_WORKER_URL ?? "").trim().replace(/\/$/, "");
+    if (raw) return raw;
+    const domain = process.env.RAILWAY_PRIVATE_DOMAIN;
+    return domain ? `http://${domain}:${int("PORT", 8080)}` : "";
+  },
+  get workerName() { return (process.env.TALLYLAMP_WORKER_NAME || process.env.RAILWAY_SERVICE_NAME || hostname()).slice(0, 80); },
+  get placement() { return enumVal("TALLYLAMP_PLACEMENT", ["overflow", "spread", "local"] as const, "overflow"); },
+  /** package.json's version. `version` below is the API's, and has never tracked releases. */
+  get release() { return releaseVersion(); },
   get sessionTtlMs() { return int("TALLYLAMP_SESSION_TTL_SEC", 86400) * 1000; },
   get viewerTicketTtlMs() { return int("TALLYLAMP_VIEWER_TICKET_TTL_SEC", 60) * 1000; },
   /**

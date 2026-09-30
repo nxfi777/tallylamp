@@ -119,7 +119,7 @@ For extension toolbar popups, side panels and native dialogs, use tallylamp_desk
 
 A browser whose kind is "linked" is a person's own browser, reached through the Tallylamp Link extension. You can only use tabs that person has shared, and link.sharedTabs lists them. If link.online is false, or no tab is shared, you cannot fix that yourself: ask the user to open that browser and press Share this tab in the extension, then continue. A tab may be shared for one site only, and navigating away from it is then refused; ask the user to share it for any site if the task needs that. On a linked browser you cannot upload local files, read the browser-wide cookie jar, resize or close the window, close tabs you did not open, save the profile, use a proxy or tunnel, or lend or borrow it. Only the agents the user ticked for it in the dashboard can use it; if one you need is not in your browser list, ask the user to add you on its page in the dashboard. The person can stop sharing at any moment, so expect a tab to disappear mid-task and say so plainly when it does. tallylamp_stop_browser hands every shared tab back to them.
 
-The host may cap processes and threads for all browsers together. A browser with pinned: true is one the operator keeps room for; do not stop, delete or repurpose it unless asked. If a start fails with fleet_full, the host is out of room: stop a browser you no longer need rather than retrying in a loop. A browser whose status is "unhealthy" was found broken and is being restarted; wait a few seconds and call tallylamp_use_browser again. Notes starting with [tallylamp] on a tool result say what happened to your browser; tell the user when one says a browser was stopped or restarted.
+The host may cap processes and threads for all browsers together. A browser with pinned: true is one the operator keeps room for; do not stop, delete or repurpose it unless asked. If a start fails with fleet_full, the host is out of room: stop a browser you no longer need rather than retrying in a loop. A browser whose status is "unhealthy" was found broken and is being restarted; wait a few seconds and call tallylamp_use_browser again. Notes starting with [tallylamp] on a tool result say what happened to your browser; tell the user when one says a browser was stopped or restarted. A browser whose worker field is set runs on another host. Drive it the same way, but upload_file, tunnels, saved profiles and the desktop tools are refused there with a message saying so; do not retry them, and ask the user to move the browser to the main instance if the task needs one.
 
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
@@ -820,6 +820,15 @@ export class McpGateway {
           },
         ],
       };
+    }
+    // The bridge hands Chrome a path on this host. Chrome on a worker would look for that
+    // path on its own disk and fail with an error about the page, not about where it runs.
+    if (name === "upload_file") {
+      try {
+        this.browsers.assertLocal(session.browserId, "Uploading a file");
+      } catch (e) {
+        return this.toolError(e);
+      }
     }
     this.browsers.touch(session.browserId);
     logToolActivity(session.browserId, name);

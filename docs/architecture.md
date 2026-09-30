@@ -122,6 +122,23 @@ is `linked` for these rows. They take no fleet slot, have an empty profile
 directory, and refuse everything that needs launch flags or an X display.
 Details are in [linked-browsers.md](linked-browsers.md).
 
+## Workers
+
+A worker is this image started with `TALLYLAMP_JOIN` (`src/worker.ts`). It has
+no database, dashboard or MCP endpoint. It launches Chrome on its own volume
+and answers one caller, the instance it joined, which sends a shared secret
+with every request.
+
+On the main instance `src/workers.ts` keeps the list of workers and polls each
+one's state. A browser whose `browsers.worker_id` is set starts on that worker.
+What comes back is the fourth `ChromeRuntime` factory: a loopback listener that
+relays HTTP and WebSocket traffic to the worker's `/worker/v1/browsers/ID/cdp`
+(`src/relay.ts`), and rewrites the addresses in Chrome's `/json` answers to its
+own. So the MCP child and the viewer reach a worker's browser as they reach any
+other. Process accounting stays per host: `src/capacity.ts` counts only this
+host's browsers, and a worker checks a start against its own ceiling. Details
+are in [workers.md](workers.md).
+
 ## Lending and granting access to a browser
 
 An agent requesting another agent's browser gets `unauthorized` (403) by default.

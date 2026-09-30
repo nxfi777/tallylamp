@@ -8,6 +8,7 @@ import { Err } from "./errors.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
 import { Capacity } from "./capacity.js";
+import { Workers } from "./workers.js";
 import { PageCacheEvictor, type InUse } from "./page-cache.js";
 import { activity, audit, type AuditActor } from "./audit.js";
 import { isValidName, slugify } from "./names.js";
@@ -71,6 +72,8 @@ export type BrowserRow = {
   /** Threads its process tree reached in the first minute of its last start, and over its last run. */
   launch_threads: number | null;
   peak_threads: number | null;
+  /** Null: its Chrome and profile are on this instance. Otherwise the worker that has them (workers.ts). */
+  worker_id: string | null;
 };
 
 /** Notes for whichever agent next makes a call on the browser. Kept for half an hour. */
@@ -115,14 +118,18 @@ export class BrowserManager {
   private proxies = new Map<string, EgressProxy>();
   /** Browsers found broken while their Chrome is still up. publicView reports them "unhealthy". */
   private unhealthy = new Map<string, { reason: string; since: string }>();
+  /** Browsers whose profile is being copied to another host (moveTo). */
+  private moving = new Set<string>();
   private abortedNavs = new Map<string, { count: number; hosts: Set<string> }>();
   private notices = new Map<string, Notice[]>();
   private noticeSeq = 0;
   shuttingDown = false;
   readonly capacity: Capacity;
+  readonly workers: Workers;
 
   constructor() {
     this.capacity = new Capacity(this);
+    this.workers = new Workers(this);
     // A control viewer restores the window itself when it is still connected. This covers the
     // path where it is not: the operator closes the dashboard tab and the 90-second lease
     // simply lapses, which would otherwise leave the agent on a window the human had resized.
@@ -264,17 +271,15 @@ export class BrowserManager {
     return this.runtimes.get(id);
   }
 
-  /** Running browsers whose Chrome is on this host: everything but linked browsers. */
+  /** Running browsers whose Chrome is on this host: not linked browsers, and not a worker's. */
   managedIds(): string[] {
-    return [...this.runtimes.keys()].filter((id) => !this.shimClosers.has(id) || !this.isLinked(id));
+    return [...this.runtimes.keys()].filter((id) => !this.shimClosers.has(id) || !this.offHost(id));
   }
 
-  private isLinked(id: string): boolean {
-    try {
-      return this.row(id).kind === "linked";
-    } catch {
-      return false;
-    }
+  /** Its Chrome runs somewhere else: on a person's machine (linked), or on a worker. */
+  private offHost(id: string): boolean {
+    const r = getDb().prepare(`SELECT kind, worker_id FROM browsers WHERE id = ?`).get(id) as Pick<BrowserRow, "kind" | "worker_id"> | undefined;
+    return Boolean(r && (r.kind === "linked" || r.worker_id));
   }
 
   /** A listener in this process standing in for Chrome (the test fake, a linked browser's shim). */
@@ -284,7 +289,7 @@ export class BrowserManager {
 
   /** Mid-start, mid-save or mid-restart: not something to stop underneath. */
   busy(id: string): boolean {
-    return this.starting.has(id) || this.profileSaves.has(id) || this.unhealthy.has(id);
+    return this.starting.has(id) || this.profileSaves.has(id) || this.unhealthy.has(id) || this.moving.has(id);
   }
 
   /**
@@ -298,7 +303,8 @@ export class BrowserManager {
   }
 
   pinnedRows(): BrowserRow[] {
-    return getDb().prepare(`SELECT * FROM browsers WHERE pinned = 1 AND kind = 'managed'`).all() as BrowserRow[];
+    // This host's pinned browsers. One on a worker draws on that worker's ceiling, not this one.
+    return getDb().prepare(`SELECT * FROM browsers WHERE pinned = 1 AND kind = 'managed' AND worker_id IS NULL`).all() as BrowserRow[];
   }
 
   recordThreads(id: string, launch: number | null, peak: number | null): void {
@@ -583,9 +589,25 @@ export class BrowserManager {
     seedId?: string;
     clientName?: string;
     clientVersion?: string;
+    /** Where it runs: a worker's id, null for this instance, undefined to let placement decide. */
+    workerId?: string | null;
   }): BrowserRow {
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     const proxy = parseBrowserProxy(input.proxy);
+    let workerId: string | null;
+    if (input.workerId !== undefined) {
+      // Which container a profile sits in is the operator's call, like pinning.
+      if (input.principal.type !== "admin") throw Err.unauthorized("only the administrator can choose where a browser runs");
+      workerId = input.workerId;
+      if (workerId) {
+        const problem = this.workers.unusable(this.workers.row(workerId));
+        if (problem) throw Err.browserUnavailable(problem);
+        if (input.seedId) throw Err.invalid("a browser made from a saved profile starts on the main instance, where saved profiles are kept; move it to a worker afterwards");
+      }
+    } else {
+      // A saved profile is copied from this instance's disk, so its browser starts here.
+      workerId = input.seedId ? null : this.workers.pick();
+    }
     if (input.principal.type === "agent") {
       const own = this.list({ ownerType: "agent", ownerId: input.principal.id }).length;
       // 0 is no per-agent cap.
@@ -609,8 +631,11 @@ export class BrowserManager {
     if (!isValidName(slug)) slug = `b-${id.slice(0, 8)}`;
     const persistent = input.persistent !== false;
     const profile = profileDir(id);
-    mkdirSync(profile, { recursive: true });
-    mkdirSync(downloadDir(id), { recursive: true });
+    // On a worker the profile is made there, at its first start. Nothing is kept here.
+    if (!workerId) {
+      mkdirSync(profile, { recursive: true });
+      mkdirSync(downloadDir(id), { recursive: true });
+    }
     if (input.seedId) {
       // A seed is a whole authenticated profile, so cloning one is a credential transfer and
       // is gated separately from browser:create. Checked before the copy so a refusal cannot
@@ -630,8 +655,8 @@ export class BrowserManager {
       .prepare(
         `INSERT INTO browsers(
           id, name, slug, owner_type, owner_id, created_by_type, created_by_principal_id, created_via,
-          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json, agent_desktop_enabled, extensions_enabled
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json, agent_desktop_enabled, extensions_enabled, worker_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -651,8 +676,10 @@ export class BrowserManager {
         JSON.stringify(metadata),
         JSON.stringify(metadata.labels ?? {}),
         proxy ? JSON.stringify(proxy) : null,
-        input.principal.type === "agent" && config.agentDesktopDefault ? 1 : 0,
-        config.extensionsDefault ? 1 : 0,
+        // Native desktop access and extensions both need this host's X display.
+        input.principal.type === "agent" && config.agentDesktopDefault && !workerId ? 1 : 0,
+        config.extensionsDefault && !workerId ? 1 : 0,
+        workerId,
       );
     if (input.seedId) restoreSiteAccess(input.seedId, id);
     audit({
@@ -661,8 +688,8 @@ export class BrowserManager {
       action: "browser.created",
       targetType: "browser",
       targetId: id,
-      detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault,
-        extensionsEnabled: config.extensionsDefault },
+      detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault && !workerId,
+        extensionsEnabled: config.extensionsDefault && !workerId, worker: workerId },
     });
     hub.emitEvent("browser.created", { name, slug, owner: input.principal.id }, id);
     return this.row(id);
@@ -721,6 +748,44 @@ export class BrowserManager {
   }
 
   /**
+   * Things that need this host's X display or this host's disk, which a browser on a worker
+   * does not have here. They are refused by name until they cross to workers too.
+   */
+  assertLocal(id: string, what: string): void {
+    const row = this.row(id);
+    if (!row.worker_id) return;
+    let name = "a worker";
+    try {
+      name = this.workers.row(row.worker_id).name;
+    } catch {
+      /* the worker was removed; the sentence still holds */
+    }
+    throw Err.invalid(`${what} is not available yet for a browser on a worker, and ${row.name} is on ${name}. Stop it and move it to the main instance first.`);
+  }
+
+  /**
+   * Move a stopped browser to another host, profile and all. Null is this instance. Only the
+   * administrator: it decides which container a signed-in profile sits in.
+   */
+  async moveTo(id: string, workerId: string | null, principal: Principal): Promise<BrowserRow> {
+    if (principal.type !== "admin") throw Err.unauthorized("only the administrator can move a browser");
+    const row = this.row(id);
+    this.assertManaged(id, "moving");
+    if (this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) || !["stopped", "crashed"].includes(row.status)) {
+      throw Err.browserUnavailable("stop the browser before moving it");
+    }
+    if (this.moving.has(id)) throw Err.browserUnavailable("this browser is already being moved");
+    // Nothing may launch it on either host while its profile is in transit.
+    this.moving.add(id);
+    try {
+      await this.workers.move(row, workerId, principal);
+    } finally {
+      this.moving.delete(id);
+    }
+    return this.row(id);
+  }
+
+  /**
    * The extension's socket went away: the laptop slept, the browser quit, the link was
    * revoked. Not a crash, and nothing to clean up on the far side, which is already gone.
    */
@@ -736,6 +801,7 @@ export class BrowserManager {
 
   private async ensureRunningInternal(id: string): Promise<ChromeRuntime> {
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
+    if (this.moving.has(id)) throw Err.browserUnavailable("this browser is being moved to another host; retry when that finishes");
     const existing = this.runtimes.get(id);
     if (existing && existing.chrome.exitCode === null) return existing;
     const inflight = this.starting.get(id);
@@ -748,10 +814,10 @@ export class BrowserManager {
     // briefly one stricter than asked -- the safe direction to be wrong in.
     const occupied = new Set([...this.runtimes.keys(), ...this.starting.keys(), ...this.resumeReservations]);
     // The cap is a memory budget for Chromes on this host. A linked browser runs on somebody
-    // else's machine and costs a listener, so it neither counts nor is refused.
-    const kindOf = (b: string) => (getDb().prepare(`SELECT kind FROM browsers WHERE id = ?`).get(b) as { kind: string } | undefined)?.kind;
-    const linked = kindOf(id) === "linked";
-    for (const other of occupied) if (other !== id && kindOf(other) === "linked") occupied.delete(other);
+    // else's machine, and a worker's on the worker: each costs a listener here, so it neither
+    // counts nor is refused.
+    const linked = this.offHost(id);
+    for (const other of occupied) if (other !== id && this.offHost(other)) occupied.delete(other);
     const cap = config.maxBrowsers;
     if (cap !== null && !linked && occupied.size >= cap && !occupied.has(id)) {
       throw Err.fleetFull(`fleet is full (max ${cap})`);
@@ -787,6 +853,7 @@ export class BrowserManager {
     const row = this.row(id);
     this.setStatus(id, "starting");
     hub.emitEvent("browser.starting", {}, id);
+    let remoteVersion: string | null = null;
     try {
       const rt = row.kind === "linked"
         ? await (async () => {
@@ -801,6 +868,15 @@ export class BrowserManager {
             const shim = await startLinkedRuntime(peer);
             this.shimClosers.set(id, shim.close);
             return shim.runtime;
+          })()
+        : row.worker_id
+        ? await (async () => {
+            // Its Chrome starts on the worker, which checks its own ceiling. What comes back
+            // is a local endpoint relaying to it, so from here on it is a runtime like any.
+            const remote = await this.workers.startRuntime(row);
+            this.shimClosers.set(id, remote.close);
+            remoteVersion = remote.chromeVersion;
+            return remote.runtime;
           })()
         : config.fakeChrome
         ? await (async () => {
@@ -834,12 +910,12 @@ export class BrowserManager {
             }
           })();
       this.runtimes.set(id, rt);
-      if (row.kind !== "linked") this.capacity.launched(id);
+      if (row.kind !== "linked" && !row.worker_id) this.capacity.launched(id);
       let version: string | null = null;
       try {
         // chromeVersion() reads the binary on this host, which says nothing about a browser
-        // on somebody's laptop. The extension reported its own.
-        version = row.kind === "linked" ? liveLink(id)?.product ?? null : await chromeVersion();
+        // on somebody's laptop or on a worker. Each of those reported its own.
+        version = row.kind === "linked" ? liveLink(id)?.product ?? null : row.worker_id ? remoteVersion : await chromeVersion();
       } catch {
         /* ignore */
       }
@@ -918,6 +994,9 @@ export class BrowserManager {
     const row = this.row(id);
     this.assertAccess(principal, row, "delete");
     await this.stop(id);
+    // Before anything here is deleted: a profile left on a worker still holds every login,
+    // so the worker has to confirm it is gone, or the browser stays.
+    if (row.worker_id) await this.workers.deleteBrowser(row);
     // Bindings survive a stop/start -- a restart is routine and the tunnel is to a machine,
     // not to Chrome -- but they must not outlive the browser they were scoped to.
     dropTunnelsFor(id);
@@ -992,6 +1071,7 @@ export class BrowserManager {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can enable extensions");
     const row = this.row(id);
     if (enabled) this.assertManaged(id, "installing extensions");
+    if (enabled) this.assertLocal(id, "Installing extensions");
     if (enabled && !config.fullBrowser) throw Err.invalid("extension support requires a real browser on a dedicated Xvfb display");
     // No human-control check: only the admin gets this far, the admin is who holds that lease,
     // and the flag is read on the next start. A lease outlives a stop, so checking it locked the
@@ -1011,6 +1091,7 @@ export class BrowserManager {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can grant native browser access");
     const row = this.row(id);
     if (enabled) this.assertManaged(id, "native desktop access");
+    if (enabled) this.assertLocal(id, "Native desktop access");
     if (enabled && !config.fullBrowser) throw Err.invalid("native browser access requires a dedicated Xvfb display");
     if (enabled && row.owner_type !== "agent") throw Err.invalid("native agent access can only be granted to an agent-owned browser");
     getDb().prepare("UPDATE browsers SET agent_desktop_enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
@@ -1232,6 +1313,8 @@ export class BrowserManager {
       status: rt ? (sick ? "unhealthy" : "running") : row.status === "running" ? "stopped" : row.status,
       health: sick ? { state: "unhealthy", reason: sick.reason, since: sick.since } : null,
       pinned: row.pinned === 1,
+      // Null when its Chrome runs on this instance. Otherwise the worker that has it.
+      worker: this.workerView(row),
       // Processes and threads this browser's whole tree holds against the host's ceiling. Null
       // when it is not running or the host cannot be measured.
       ...this.threadView(row),
@@ -1280,14 +1363,42 @@ export class BrowserManager {
     };
   }
 
+  private workerView(row: BrowserRow): { id: string; name: string; online: boolean } | null {
+    if (!row.worker_id) return null;
+    try {
+      return { id: row.worker_id, name: this.workers.row(row.worker_id).name, online: this.workers.online(row.worker_id) };
+    } catch {
+      return { id: row.worker_id, name: "removed worker", online: false };
+    }
+  }
+
   private threadView(row: BrowserRow): { threads: number | null; peakThreads: number | null; launchThreads: number | null } {
     if (row.kind === "linked") return { threads: null, peakThreads: null, launchThreads: null };
+    if (row.worker_id) {
+      return { threads: this.workers.usage(row.id)?.threads ?? null, peakThreads: row.peak_threads ?? null, launchThreads: row.launch_threads ?? null };
+    }
     const { threads, peakThreads, launchThreads } = this.capacity.view(row.id);
     return { threads, peakThreads, launchThreads };
   }
 
   async recoverOnBoot(): Promise<void> {
     getDb().prepare(`UPDATE browsers SET status = 'stopped' WHERE status IN ('running', 'starting', 'stopping', 'queued', 'unhealthy')`).run();
+    // A browser's thread counts are only as good as the Chrome settings they were taken under.
+    // On 30 September CPU pinning went on, and a browser that would now launch at about 400
+    // was still sized from its unpinned 606 and refused. So when a setting that changes
+    // Chrome's thread count changes, the old measurements go, and each browser is measured
+    // again on its next start.
+    const threadConfig = `cpus=${config.chromeCpus};renderers=${config.rendererProcessLimit}`;
+    const seen = (getDb().prepare(`SELECT value FROM meta WHERE key = 'thread_config'`).get() as { value: string } | undefined)?.value;
+    if (seen !== threadConfig) {
+      // No record at all is an upgrade from a release that kept none: nothing is known to
+      // have changed, so what has been measured stands.
+      if (seen !== undefined) {
+        const cleared = getDb().prepare(`UPDATE browsers SET launch_threads = NULL, peak_threads = NULL WHERE launch_threads IS NOT NULL OR peak_threads IS NOT NULL`).run();
+        log.info("Chrome thread settings changed; browsers will be measured again", { from: seen, to: threadConfig, cleared: Number(cleared.changes) });
+      }
+      getDb().prepare(`INSERT INTO meta(key, value) VALUES ('thread_config', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(threadConfig);
+    }
     const rows = this.list();
     for (const r of rows) {
       if (existsSync(r.profile_path)) clearSingletonLocks(r.profile_path);
@@ -1319,6 +1430,14 @@ export class BrowserManager {
           hub.emitEvent("browser.stopped", {}, id);
           continue;
         }
+        if (this.row(id).worker_id) {
+          // Its Chrome died on the worker, or the worker went away. The listener that stood
+          // in for it here is still open, and closing it also tells the worker to clean up.
+          const close = this.shimClosers.get(id);
+          this.shimClosers.delete(id);
+          void close?.().catch(() => undefined);
+          void this.onGone?.(id);
+        }
         this.setStatus(id, "crashed");
         hub.emitEvent("browser.crashed", { reason: "process exited" }, id);
         continue;
@@ -1341,6 +1460,16 @@ export class BrowserManager {
           // The row is about to go, taking with it the only handle anyone had on its
           // tunnels; they would otherwise stay bound to an id that no longer resolves.
           dropTunnelsFor(id);
+          if (row.worker_id) {
+            // A temporary profile on a worker. If the worker cannot be asked now, keep the
+            // record, so the next sweep tries again instead of forgetting the profile exists.
+            try {
+              await this.workers.deleteBrowser(row);
+            } catch (e) {
+              log.warn("could not delete a temporary profile on its worker; will retry", { id, error: (e as Error).message });
+              continue;
+            }
+          }
           rmSync(row.profile_path, { recursive: true, force: true });
           getDb().prepare(`DELETE FROM browser_tunnels WHERE browser_id = ?`).run(id);
           deleteSiteAccessForBrowser(id);
@@ -1353,6 +1482,7 @@ export class BrowserManager {
   async snapshotSeed(browserId: string, name: string, principal: Principal,
     options: { seedId?: string; metadata?: unknown } = {}): Promise<SavedProfileResult> {
     this.assertManaged(browserId, "saving a profile");
+    this.assertLocal(browserId, "Saving a profile");
     // Publishing makes every login reusable. A loan grants driving, never export.
     // seed:write is an explicit grant to publish owned browsers and overwrite
     // their linked shared snapshot; seed:use alone is deliberately read-only.
@@ -1534,6 +1664,7 @@ export class BrowserManager {
     // Do not disclose another browser's linkage/name before authorization.
     this.assertAccess(principal, row, "control");
     this.assertManaged(browserId, "saving a profile");
+    this.assertLocal(browserId, "Saving a profile");
     const linked = this.linkedProfile(browserId);
     const profileId = options.asNew ? undefined : options.profileId ?? linked?.id;
     if (options.updateOnly && !profileId) throw Err.invalid("browser has no saved profile; use tallylamp_save_profile first");
@@ -1565,6 +1696,7 @@ export class BrowserManager {
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
     this.capacity.stopSampling();
+    this.workers.stopPolling();
     await Promise.allSettled([...this.profileSaves.values()]);
     const ids = [...this.runtimes.keys()];
     for (const id of ids) {

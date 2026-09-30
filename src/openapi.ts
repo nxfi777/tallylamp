@@ -91,6 +91,23 @@ export const openApiSpec = {
         requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["pinned"], properties: { pinned: { type: "boolean" } } } } } },
         responses: { "200": { description: "updated" }, "400": { description: "invalid input or a linked browser" }, "403": { description: "administrator required" } } },
     },
+    "/browsers/{id}/move": {
+      post: { summary: "Move a stopped browser, profile and all, to a worker or back to the main instance (administrator only).",
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["workerId"], properties: { workerId: { type: ["string", "null"], description: "A worker's id, or null for the main instance." } } } } } },
+        responses: { "200": { description: "moved" }, "409": { description: "stop the browser first, or a host is unreachable or on another release" }, "403": { description: "administrator required" } } },
+    },
+    "/workers": {
+      get: { summary: "List workers: other services running this image with TALLYLAMP_JOIN, which run Chrome for this instance (administrator only).", responses: { "200": { description: "ok" } } },
+    },
+    "/workers/join-tokens": {
+      post: { summary: "Make a one-time join token for a new worker (administrator only). Shown once; expires in an hour.", responses: { "201": { description: "created; includes the token" } } },
+    },
+    "/workers/{id}": {
+      delete: { summary: "Remove a worker that holds no browsers (administrator only).", responses: { "200": { description: "removed" }, "409": { description: "browsers still live on it" } } },
+    },
+    "/workers/join": {
+      post: { summary: "A worker joining with its one-time token. Called by the worker, not by people.", security: [], responses: { "200": { description: "joined; returns the worker's id and secret" }, "403": { description: "unknown, used or expired token" }, "409": { description: "the worker runs a different release" } } },
+    },
     "/browsers/{id}/agent-desktop": {
       put: { summary: "Grant or revoke the owning agent's full native browser access (administrator only). Not inherited by borrowed or copied browsers.",
         requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["enabled"], properties: { enabled: { type: "boolean" } } } } } },

@@ -12,6 +12,7 @@ It walks through hosting Tallylamp, connecting an agent, and trying a browser ha
 | Install a Chrome extension or open Full browser | [Chrome extensions](usage.md#chrome-extensions-and-full-browser) |
 | Let someone else sign in or clear 2FA in one browser | [Guest links](guest-access.md) |
 | Route a browser through an HTTP or HTTPS proxy | [Per-browser proxies](proxies.md) |
+| Run more browsers than one host's process limit allows | [Workers](workers.md) |
 | Understand permissions and network access | [Security model](security.md) |
 | Understand the server and browser lifecycle | [Architecture](architecture.md) |
 | Check what the realism tests establish | [Browser realism](browser-realism.md) |
@@ -22,3 +23,4 @@ Their dates matter: they include earlier findings and later corrections.
 
 For maintainers, the [launch plan](launch.md) tracks release work and the
 [template overview](template-overview.md) holds the published Railway listing copy.
+The [worker template overview](worker-template-overview.md) holds the worker's.

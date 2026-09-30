@@ -18,6 +18,14 @@ async function main(): Promise<void> {
     log.error("unhandledRejection", reason instanceof Error ? reason.stack : String(reason));
   });
 
+  // TALLYLAMP_JOIN is the whole switch: with it this process runs Chrome for another instance
+  // and nothing else, so none of what follows (database, dashboard, MCP) is started.
+  if (config.join) {
+    const { runWorker } = await import("./worker.js");
+    await runWorker();
+    return;
+  }
+
   if (!config.adminSecret) {
     log.warn("ADMIN_SECRET is empty — dashboard login will fail until it is set");
   }
