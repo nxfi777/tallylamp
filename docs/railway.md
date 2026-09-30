@@ -206,8 +206,10 @@ within one service, but everything still shares that service's 1,000.
 this image, which runs browsers for this instance within its own 1,000. Add
 one from **Workers** in the dashboard, then choose **Move to…** on the browser.
 It stops for the copy and starts again on the worker. You keep one dashboard
-and one `/mcp` URL, and the browser keeps its logins. Nothing on the main instance can use up a
-worker's processes, or the other way round.
+and one `/mcp` URL, and the browser keeps its logins. Full browser, tunnels,
+uploads and agent control of Chrome's windows work there too; only saving it as
+a saved profile does not. Nothing on the main instance can use up a worker's
+processes, or the other way round.
 
 ## Publishing the template
 

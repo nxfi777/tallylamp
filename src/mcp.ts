@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { startSseKeepalive } from "./http-util.js";
 import { log } from "./log.js";
-import { Err, errorBody } from "./errors.js";
+import { AppError, Err, errorBody } from "./errors.js";
 import { audit } from "./audit.js";
 import { requireScope, type Principal } from "./auth.js";
 import { CREATE_BROWSER_TOOL_DESCRIPTION } from "./metadata.js";
@@ -119,7 +119,7 @@ For extension toolbar popups, side panels and native dialogs, use tallylamp_desk
 
 A browser whose kind is "linked" is a person's own browser, reached through the Tallylamp Link extension. You can only use tabs that person has shared, and link.sharedTabs lists them. If link.online is false, or no tab is shared, you cannot fix that yourself: ask the user to open that browser and press Share this tab in the extension, then continue. A tab may be shared for one site only, and navigating away from it is then refused; ask the user to share it for any site if the task needs that. On a linked browser you cannot upload local files, read the browser-wide cookie jar, resize or close the window, close tabs you did not open, save the profile, use a proxy or tunnel, or lend or borrow it. Only the agents the user ticked for it in the dashboard can use it; if one you need is not in your browser list, ask the user to add you on its page in the dashboard. The person can stop sharing at any moment, so expect a tab to disappear mid-task and say so plainly when it does. tallylamp_stop_browser hands every shared tab back to them.
 
-The host may cap processes and threads for all browsers together. A browser with pinned: true is one the operator keeps room for; do not stop, delete or repurpose it unless asked. If a start fails with fleet_full, the host is out of room: stop a browser you no longer need rather than retrying in a loop. A browser whose status is "unhealthy" was found broken and is being restarted; wait a few seconds and call tallylamp_use_browser again. Notes starting with [tallylamp] on a tool result say what happened to your browser; tell the user when one says a browser was stopped or restarted. A browser whose worker field is set runs on another host. Drive it the same way, but upload_file, tunnels, saved profiles and the desktop tools are refused there with a message saying so; do not retry them, and ask the user to move the browser to the main instance if the task needs one.
+The host may cap processes and threads for all browsers together. A browser with pinned: true is one the operator keeps room for; do not stop, delete or repurpose it unless asked. If a start fails with fleet_full, the host is out of room: stop a browser you no longer need rather than retrying in a loop. A browser whose status is "unhealthy" was found broken and is being restarted; wait a few seconds and call tallylamp_use_browser again. Notes starting with [tallylamp] on a tool result say what happened to your browser; tell the user when one says a browser was stopped or restarted. A browser whose worker field is set runs on another host. Drive it the same way: every tool works there, including upload_file, tunnels and the desktop tools. Only saving it as a saved profile is refused there, with a message saying so; ask the user to move the browser to the main instance if the task needs that.
 
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
@@ -605,8 +605,11 @@ type Session = {
   clientInfo?: { name?: string; version?: string };
   /** The last browser notice this session was shown, per browser (BrowserManager.notice). */
   noticesSeen?: Map<string, number>;
-  /** Why the last automatic re-bind failed, so "no browser is bound" can say. */
-  lostBinding?: { browserId: string; error: string };
+  /**
+   * Why the last automatic re-bind failed, so "no browser is bound" can say. Retryable when
+   * the browser was only busy (being moved, say): the next call then tries the re-bind again.
+   */
+  lostBinding?: { browserId: string; error: string; retryable: boolean };
 };
 
 /**
@@ -807,6 +810,14 @@ export class McpGateway {
       // surface here as a bare "nothing is bound". Say what happened to it instead.
       const lost = session.lostBinding;
       session.lostBinding = undefined;
+      // The browser is still this session's, only busy for a moment. Saying "call use_browser"
+      // here sent an agent that called during a move off to re-bind by hand; the next call
+      // does that by itself.
+      if (lost?.retryable) {
+        return this.toolError(
+          Err.browserUnavailable(`Your browser (${lost.browserId}) is not available for a moment: ${lost.error.replace(/\.?$/, ".")} Retry this call; it reconnects to the same browser.`),
+        );
+      }
       const why = lost
         ? [`Your last browser (${lost.browserId}) could not be started again: ${lost.error}`,
           ...this.browsers.noticesSince(lost.browserId, session.noticesSeen?.get(lost.browserId) ?? 0).map((n) => n.text)]
@@ -821,19 +832,37 @@ export class McpGateway {
         ],
       };
     }
-    // The bridge hands Chrome a path on this host. Chrome on a worker would look for that
-    // path on its own disk and fail with an error about the page, not about where it runs.
+    // The bridge hands Chrome a path on this host. Chrome on a worker reads its own disk, so
+    // the files go there first, to a path that is the same on both (workers.ts, stageUploads).
+    // The bridge's answer names the path it was given, so each copy's path is put back to the
+    // one the agent asked for: that is the file it knows about.
+    let staged: Array<[copy: string, asked: string]> = [];
     if (name === "upload_file") {
-      try {
-        this.browsers.assertLocal(session.browserId, "Uploading a file");
-      } catch (e) {
-        return this.toolError(e);
+      const row = this.browsers.row(session.browserId);
+      if (row.worker_id) {
+        try {
+          const asked = args.filePaths;
+          const copies = await this.browsers.workers.stageUploads(row, asked);
+          if (Array.isArray(asked) && Array.isArray(copies)) {
+            staged = copies.map((c, i): [string, string] => [String(c), String(asked[i])]).filter(([c, a]) => c !== a);
+          }
+          args = { ...args, filePaths: copies };
+        } catch (e) {
+          return this.toolError(e);
+        }
       }
     }
     this.browsers.touch(session.browserId);
     logToolActivity(session.browserId, name);
     const bound = session.browserId;
     const result = await session.child.client.callTool({ name, arguments: args });
+    if (staged.length && Array.isArray(result.content)) {
+      for (const c of result.content as Array<{ type: string; text?: string }>) {
+        if (c.type === "text" && typeof c.text === "string") {
+          c.text = staged.reduce((t, [copy, asked]) => t.split(copy).join(asked), c.text);
+        }
+      }
+    }
     void this.browsers.refreshPageInfo(bound);
     if (name === "navigate_page" || name === "new_page") {
       const { outcome, url } = navigationOutcome(result);
@@ -1429,8 +1458,13 @@ export class McpGateway {
       // The browser may have been deleted, stopped, or handed to someone else, or the host may
       // have no room to start it. Fall through to the "nothing is bound" message, which tells
       // the caller what to do and, from lostBinding, why.
-      session.lostBinding = { browserId: id, error: (e as Error).message };
-      this.lastBound.delete(session.principal.id);
+      // A browser that is only busy for a moment -- being moved, started, saved or restarted --
+      // stays this principal's to restore, and the next call tries again. Not one refused for
+      // room: that browser may have been stopped to make room, and restarting it on every call
+      // would take the room straight back.
+      const retryable = e instanceof AppError && e.retryable && this.browsers.busy(id);
+      session.lostBinding = { browserId: id, error: (e as Error).message, retryable };
+      if (!retryable) this.lastBound.delete(session.principal.id);
       log.debug("mcp could not restore binding", { browser: id, error: (e as Error).message });
     }
   }

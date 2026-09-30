@@ -139,6 +139,18 @@ other. Process accounting stays per host: `src/capacity.ts` counts only this
 host's browsers, and a worker checks a start against its own ceiling. Details
 are in [workers.md](workers.md).
 
+What needs the browser's host rather than its debugging port crosses on its own
+path. Full browser and the agent desktop tools already take their `spawn` as a
+parameter, and a worker's runtime carries one (`desktopSpawn`,
+`src/x11-remote.ts`) that runs the same ffmpeg or xdotool command on the worker
+against that browser's display, each one checked against the few commands
+Tallylamp builds. Tunnels keep ending at the main instance: `workers.ts` holds a
+socket to each worker browser, and the worker's egress proxy asks over it
+whenever Chrome dials a private address (`serveTunnelDials`, `TunnelMux` in
+`src/tunnels.ts`). `upload_file` copies the file to the worker first, to one
+path that exists on both hosts, because the bridge checks the path here and
+Chrome reads it there (`stageUploads`).
+
 ## Lending and granting access to a browser
 
 An agent requesting another agent's browser gets `unauthorized` (403) by default.

@@ -679,8 +679,8 @@ export class BrowserManager {
         JSON.stringify(metadata.labels ?? {}),
         proxy ? JSON.stringify(proxy) : null,
         // Native desktop access and extensions both need this host's X display.
-        input.principal.type === "agent" && config.agentDesktopDefault && !workerId ? 1 : 0,
-        config.extensionsDefault && !workerId ? 1 : 0,
+        input.principal.type === "agent" && config.agentDesktopDefault ? 1 : 0,
+        config.extensionsDefault ? 1 : 0,
         workerId,
       );
     if (input.seedId) restoreSiteAccess(input.seedId, id);
@@ -690,8 +690,8 @@ export class BrowserManager {
       action: "browser.created",
       targetType: "browser",
       targetId: id,
-      detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault && !workerId,
-        extensionsEnabled: config.extensionsDefault && !workerId, worker: workerId },
+      detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault,
+        extensionsEnabled: config.extensionsDefault, worker: workerId },
     });
     hub.emitEvent("browser.created", { name, slug, owner: input.principal.id }, id);
     return this.row(id);
@@ -750,8 +750,9 @@ export class BrowserManager {
   }
 
   /**
-   * Things that need this host's X display or this host's disk, which a browser on a worker
-   * does not have here. They are refused by name until they cross to workers too.
+   * Things that need this host's disk, which a browser on a worker does not have here: saving
+   * its profile as a saved profile, which is kept on this instance. Refused by name until it
+   * crosses to workers too. Everything else reaches a worker (workers.ts).
    */
   assertLocal(id: string, what: string): void {
     const row = this.row(id);
@@ -762,7 +763,7 @@ export class BrowserManager {
     } catch {
       /* the worker was removed; the sentence still holds */
     }
-    throw Err.invalid(`${what} is not available yet for a browser on a worker, and ${row.name} is on ${name}. Stop it and move it to the main instance first.`);
+    throw Err.invalid(`${what} is not available yet for a browser on a worker, and ${row.name} is on ${name}. Move it to the main instance first.`);
   }
 
   /**
@@ -831,9 +832,7 @@ export class BrowserManager {
         const back = wasRunning && this.runtimes.get(id) ? `, and running again` : "";
         throw Err.browserUnavailable(`Could not move ${row.name} to ${to}: ${(e as Error).message}. It is still on ${from}${back}.`);
       }
-      const onWorker = workerId
-        ? " On a worker it cannot use Full browser, agent control of Chrome's windows, tunnels or upload_file."
-        : "";
+      const onWorker = workerId ? " Everything works there as before, apart from saving it as a saved profile." : "";
       this.notice(id, `The administrator moved this browser from ${from} to ${to} at ${new Date().toISOString().slice(11, 19)} UTC. Its tabs and logins came with it.${onWorker}`);
       if (wasRunning) {
         progress.phase = "starting";
@@ -1133,12 +1132,16 @@ export class BrowserManager {
     return this.row(id);
   }
 
+  /** Whether the host this browser's Chrome runs on gives it an X display: here, or its worker. */
+  private hostHasDisplay(row: BrowserRow): boolean {
+    return row.worker_id ? this.workers.fullBrowser(row.worker_id) : config.fullBrowser;
+  }
+
   updateExtensions(id: string, enabled: boolean, principal: Principal): BrowserRow {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can enable extensions");
     const row = this.row(id);
     if (enabled) this.assertManaged(id, "installing extensions");
-    if (enabled) this.assertLocal(id, "Installing extensions");
-    if (enabled && !config.fullBrowser) throw Err.invalid("extension support requires a real browser on a dedicated Xvfb display");
+    if (enabled && !this.hostHasDisplay(row)) throw Err.invalid("extension support requires a real browser on a dedicated Xvfb display");
     // No human-control check: only the admin gets this far, the admin is who holds that lease,
     // and the flag is read on the next start. A lease outlives a stop, so checking it locked the
     // operator out of a stopped browser until they pressed Return to agent.
@@ -1157,8 +1160,7 @@ export class BrowserManager {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can grant native browser access");
     const row = this.row(id);
     if (enabled) this.assertManaged(id, "native desktop access");
-    if (enabled) this.assertLocal(id, "Native desktop access");
-    if (enabled && !config.fullBrowser) throw Err.invalid("native browser access requires a dedicated Xvfb display");
+    if (enabled && !this.hostHasDisplay(row)) throw Err.invalid("native browser access requires a dedicated Xvfb display");
     if (enabled && row.owner_type !== "agent") throw Err.invalid("native agent access can only be granted to an agent-owned browser");
     getDb().prepare("UPDATE browsers SET agent_desktop_enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
     audit({ actorType: principal.type, actorId: principal.id, action: "browser.desktop-access.updated", targetType: "browser", targetId: id, detail: { enabled } });
@@ -1432,12 +1434,17 @@ export class BrowserManager {
     };
   }
 
-  private workerView(row: BrowserRow): { id: string; name: string; online: boolean } | null {
+  private workerView(row: BrowserRow): { id: string; name: string; online: boolean; fullBrowser: boolean } | null {
     if (!row.worker_id) return null;
     try {
-      return { id: row.worker_id, name: this.workers.row(row.worker_id).name, online: this.workers.online(row.worker_id) };
+      return {
+        id: row.worker_id,
+        name: this.workers.row(row.worker_id).name,
+        online: this.workers.online(row.worker_id),
+        fullBrowser: this.workers.fullBrowser(row.worker_id),
+      };
     } catch {
-      return { id: row.worker_id, name: "removed worker", online: false };
+      return { id: row.worker_id, name: "removed worker", online: false, fullBrowser: false };
     }
   }
 

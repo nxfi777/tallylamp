@@ -52,8 +52,9 @@ the internet.
 
 A new browser stays on the main instance while that has room for one. When it
 has not, the browser goes to the worker with the most room. That is the default
-because a worker's browser cannot do everything yet (see below), so it should
-not land there without a reason. Set `TALLYLAMP_PLACEMENT=spread` on the main
+because everything a worker's browser does crosses the private network, and it
+cannot be saved as a saved profile, so it should not land there without a
+reason. Set `TALLYLAMP_PLACEMENT=spread` on the main
 instance to always use the host with the most room, or `local` to keep every
 new browser on the main instance. A browser made from a saved profile always
 starts on the main instance, where saved profiles are kept.
@@ -71,19 +72,32 @@ browser runs.
 Each browser's card and page name its worker. The API reports it as `worker`
 on a browser, and `GET /api/v1/workers` lists the workers.
 
-## What does not work on a worker yet
+## What works on a worker
 
-These need the main instance's display or disk, and are refused on a worker's
-browser with a message saying to move it back first:
+Everything a browser does on the main instance, except saved profiles. Saved
+profiles are kept on the main instance, so a browser on a worker cannot be
+saved as one, and a browser made from one starts on the main instance. Saving
+is refused with a message saying to move the browser back first.
 
-- Full browser, and extension management, which uses it
-- agent control of Chrome's own windows
-- tunnels
-- saved profiles, both saving one and creating a browser from one
-- `upload_file` from an agent
+Some features reach the worker in their own way:
+
+- **Full browser and agent control of Chrome's windows.** Each worker browser
+  has its own display on the worker. The worker captures it and does the
+  clicks and keystrokes there. It runs only the screen capture and the pointer
+  and keyboard commands Tallylamp sends, so the link's secret cannot run
+  anything else on it. Extensions are managed through Full browser, as on the
+  main instance.
+- **Tunnels.** The tunnel still connects to the main instance. When Chrome on
+  the worker asks for a private address, the worker checks with the main
+  instance, which carries the traffic if a tunnel is bound to that address.
+  Public sites never wait on that check.
+- **`upload_file`.** It takes a file from the main instance's temp directory,
+  as it does for a browser there, and copies it to the worker before Chrome
+  gets it. Up to 512 MB per file. The copies are deleted when the browser
+  stops.
 
 The live view, takeover, guest links, lending, recording and per-browser
-proxies all work.
+proxies all work as they do on the main instance.
 
 Three more things differ:
 

@@ -2,8 +2,12 @@ import express, { type NextFunction, type Request, type Response } from "express
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
+import { Transform } from "node:stream";
+import { WebSocketServer } from "ws";
 import { setTimeout as sleep } from "node:timers/promises";
 import { config } from "./config.js";
 import { log } from "./log.js";
@@ -13,6 +17,9 @@ import { startEgressProxy, type EgressProxy } from "./egress-proxy.js";
 import { parseBrowserProxy } from "./browser-proxy.js";
 import { browserUsage, readPidLimit, scanProcesses, type PidLimit } from "./host-limits.js";
 import { forwardHttp, forwardUpgrade } from "./relay.js";
+import { hostLooksPrivate } from "./ssrf.js";
+import { MAX_CHUNK, TunnelMux } from "./tunnels.js";
+import { allowedFfmpeg, allowedXdotool, xFrame, X_ERROR, X_EXIT, X_STDOUT } from "./x11-remote.js";
 
 /**
  * A worker: this image started with TALLYLAMP_JOIN. It runs Chrome for another Tallylamp
@@ -37,14 +44,29 @@ export type WorkerBrowserState = {
   rendererZygotes: number | null;
   startedAt: string;
 };
-export type WorkerState = { version: string; name: string; pids: PidLimit | null; browsers: WorkerBrowserState[] };
+export type WorkerState = { version: string; name: string; pids: PidLimit | null; fullBrowser: boolean; browsers: WorkerBrowserState[] };
 export type WorkerStartRequest = { estimate?: number; extensionsEnabled?: boolean; proxy?: unknown };
 export type WorkerStartResult = {
   sandboxStatus: SandboxStatus;
   gpuStatus: GpuStatus;
   screen: { width: number; height: number };
   chromeVersion: string | null;
+  /** The browser's own X display on this worker, when it has one: Full browser and the desktop tools. */
+  display: string | null;
 };
+
+/** The largest file upload_file may send to a worker, per file. */
+export const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+
+/**
+ * Where a file for upload_file waits, on the main instance and on the worker alike. The bridge
+ * checks the path exists on the main instance and Chrome reads it on the worker, so both hosts
+ * must spell it the same, and both keep it under their temp directory, the only place the
+ * bridge accepts a file from.
+ */
+export function uploadStaging(browserId: string): string {
+  return path.join(realpathSync(os.tmpdir()), "tallylamp-uploads", browserId);
+}
 
 const TOKEN_PREFIX = "tlw1.";
 const BROWSER_ID = /^[0-9a-f]{16}$/;
@@ -93,7 +115,13 @@ export type WorkerOptions = {
   name: string;
 };
 
-export async function startWorker(opts: WorkerOptions): Promise<{ port: number; identity: Identity; close: () => Promise<void> }> {
+export async function startWorker(opts: WorkerOptions): Promise<{
+  port: number;
+  identity: Identity;
+  close: () => Promise<void>;
+  /** What a browser's egress proxy dials a tunnel with. Returned so tests can dial without a real Chrome. */
+  dialTunnel: (id: string, host: string, port: number) => Promise<import("node:stream").Duplex | null>;
+}> {
   const profiles = path.join(opts.dataDir, "profiles");
   const downloads = path.join(opts.dataDir, "downloads");
   mkdirSync(profiles, { recursive: true });
@@ -104,7 +132,19 @@ export async function startWorker(opts: WorkerOptions): Promise<{ port: number; 
   const running = new Map<string, Entry>();
   const starting = new Map<string, { need: number; promise: Promise<Entry> }>();
 
+  // The main instance's socket for each running browser's tunnels (tunnels.ts, serveTunnelDials).
+  const tunnels = new Map<string, TunnelMux>();
+  // A tunnel's far end is connected to the main instance, so a dial it might answer goes
+  // there. Only a private address can have a binding (tunnels.ts, normalizeAuthority), so
+  // nothing else waits on the round trip. With no socket up, it reads as no binding: the
+  // egress policy then refuses it, which is where the main instance would have ended too.
+  const dialTunnel = async (id: string, host: string, port: number) =>
+    hostLooksPrivate(host) ? (await tunnels.get(id)?.open(host, port)) ?? null : null;
+
   const drop = async (id: string): Promise<void> => {
+    tunnels.get(id)?.shutdown("browser stopped");
+    tunnels.delete(id);
+    rmSync(uploadStaging(id), { recursive: true, force: true });
     const e = running.get(id);
     if (!e) return;
     running.delete(id);
@@ -141,8 +181,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{ port: number; 
         return { rt: fake.runtime, closeFake: fake.close, startedAt: Date.now(), version: "FakeChrome/1.0" };
       }
       const upstream = parseBrowserProxy(body.proxy ?? null);
-      // No tunnel dialler: a tunnel ends at the main instance, which a worker cannot reach into.
-      const proxy = await startEgressProxy({ browserId: id, upstream });
+      const proxy = await startEgressProxy({ browserId: id, upstream, dial: (host, port) => dialTunnel(id, host, port) });
       try {
         const rt = await launchChrome({
           profileDir: path.join(profiles, id),
@@ -173,6 +212,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{ port: number; 
       version: config.release,
       name: opts.name,
       pids: readPidLimit(),
+      fullBrowser: config.fullBrowser,
       browsers: [...running].map(([id, e]) => {
         const alive = e.rt.chrome.exitCode === null;
         // The test fake's "Chrome" is this very process; counting it would count the worker.
@@ -221,7 +261,13 @@ export async function startWorker(opts: WorkerOptions): Promise<{ port: number; 
 
   app.post("/worker/v1/browsers/:id/start", express.json({ limit: "64kb" }), route(async (req, res) => {
     const e = await start(browserId(req), (req.body ?? {}) as WorkerStartRequest);
-    const out: WorkerStartResult = { sandboxStatus: e.rt.sandboxStatus, gpuStatus: e.rt.gpuStatus, screen: e.rt.screen, chromeVersion: e.version };
+    const out: WorkerStartResult = {
+      sandboxStatus: e.rt.sandboxStatus,
+      gpuStatus: e.rt.gpuStatus,
+      screen: e.rt.screen,
+      chromeVersion: e.version,
+      display: config.fullBrowser && e.rt.xvfb && e.rt.display ? e.rt.display : null,
+    };
     res.json(out);
   }));
 
@@ -263,6 +309,99 @@ export async function startWorker(opts: WorkerOptions): Promise<{ port: number; 
     res.json({ received: true });
   }));
 
+  // Full browser and the agent desktop tools (x11-remote.ts): one ffmpeg or xdotool command
+  // against this browser's display. Its stdout and exit come back framed, and the command dies
+  // when the main instance hangs up.
+  const x11Runs = new Map<string, number>();
+  app.post("/worker/v1/browsers/:id/x11", express.json({ limit: "64kb" }), route((req, res) => {
+    const id = browserId(req);
+    const e = running.get(id);
+    const display = e && e.rt.chrome.exitCode === null && config.fullBrowser && e.rt.xvfb ? e.rt.display : null;
+    if (!display) throw new Refused(409, "browser_unavailable", "that browser has no display on this worker", true);
+    const { tool, args, stdout } = (req.body ?? {}) as { tool?: unknown; args?: unknown; stdout?: unknown };
+    const list = Array.isArray(args) && args.length <= 64 && args.every((a) => typeof a === "string") ? (args as string[]) : null;
+    const allowed = list && (tool === "xdotool" ? allowedXdotool(list) : tool === "ffmpeg" ? allowedFfmpeg(list, display) : false);
+    if (!allowed) throw new Refused(400, "invalid_request", "this worker runs only the display commands Tallylamp sends");
+    // A viewer holds one capture and one input at a time, and an agent one operation.
+    const live = x11Runs.get(id) ?? 0;
+    if (live >= 8) throw new Refused(429, "browser_unavailable", "too many display commands are running for this browser", true);
+    x11Runs.set(id, live + 1);
+    res.writeHead(200, { "Content-Type": "application/octet-stream", "Cache-Control": "no-store" });
+    res.flushHeaders();
+    const child = spawn(tool as string, list, {
+      env: { PATH: process.env.PATH, DISPLAY: display, LANG: "C.UTF-8" },
+      stdio: ["ignore", stdout === true ? "pipe" : "ignore", "ignore"],
+    });
+    let ended = false;
+    const end = (type: number, body: unknown) => {
+      if (ended) return;
+      ended = true;
+      res.end(xFrame(type, Buffer.from(JSON.stringify(body), "utf8")));
+    };
+    let counted = true;
+    const uncount = () => {
+      if (!counted) return;
+      counted = false;
+      const n = (x11Runs.get(id) ?? 1) - 1;
+      if (n > 0) x11Runs.set(id, n);
+      else x11Runs.delete(id);
+    };
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (ended) return;
+      // A slow reader on the main instance holds ffmpeg back rather than piling frames up here.
+      if (!res.write(xFrame(X_STDOUT, chunk))) {
+        child.stdout!.pause();
+        res.once("drain", () => child.stdout?.resume());
+      }
+    });
+    child.on("error", (err: NodeJS.ErrnoException) => {
+      uncount();
+      end(X_ERROR, { code: err.code ?? "EFAIL", message: err.message });
+    });
+    child.on("close", (code, signal) => {
+      uncount();
+      end(X_EXIT, { code, signal });
+    });
+    res.on("close", () => {
+      if (ended) return;
+      ended = true;
+      child.kill("SIGKILL");
+    });
+  }));
+
+  // upload_file: a file the agent named on the main instance, waiting here at the same path.
+  app.put("/worker/v1/browsers/:id/uploads/:dir/:name", route(async (req, res) => {
+    const id = browserId(req);
+    const { dir, name } = req.params as { dir: string; name: string };
+    if (!/^[0-9a-f]{12}$/.test(dir) || !name || name === "." || name === ".." || /[/\\\0]/.test(name) || Buffer.byteLength(name) > 255) {
+      throw new Refused(400, "invalid_request", "not an upload name");
+    }
+    const e = running.get(id);
+    if (!e || e.rt.chrome.exitCode !== null) throw new Refused(409, "browser_unavailable", "that browser is not running on this worker", true);
+    const folder = path.join(uploadStaging(id), dir);
+    mkdirSync(folder, { recursive: true });
+    const dest = path.join(folder, name);
+    const part = `${dest}.${randomBytes(4).toString("hex")}.part`;
+    let bytes = 0;
+    const limit = new Transform({
+      transform(chunk: Buffer, _enc, cb) {
+        bytes += chunk.length;
+        if (bytes > MAX_UPLOAD_BYTES) return cb(new Refused(413, "invalid_request", "that file is too large to upload"));
+        cb(null, chunk);
+      },
+    });
+    try {
+      await pipeline(req, limit, createWriteStream(part, { mode: 0o600 }));
+      // Renamed into place, so a reader never sees half a file, and a file that already had
+      // that name is replaced rather than written through.
+      renameSync(part, dest);
+    } catch (err) {
+      rmSync(part, { force: true });
+      throw err;
+    }
+    res.json({ path: dest });
+  }));
+
   app.all("/worker/v1/browsers/:id/cdp/*", route((req, res) => {
     const id = browserId(req);
     const e = running.get(id);
@@ -280,7 +419,28 @@ export async function startWorker(opts: WorkerOptions): Promise<{ port: number; 
   });
 
   const server = http.createServer(app);
+  const tunnelSockets = new WebSocketServer({ noServer: true, maxPayload: MAX_CHUNK + 64 * 1024 });
   server.on("upgrade", (req, socket, head) => {
+    const t = /^\/worker\/v1\/browsers\/([0-9a-f]{16})\/tunnel$/.exec(req.url ?? "");
+    if (t) {
+      const id = t[1]!;
+      const e = running.get(id);
+      if (!authorized(req.headers.authorization) || !e || e.rt.chrome.exitCode !== null) {
+        socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      tunnelSockets.handleUpgrade(req, socket, head, (ws) => {
+        // A reconnect wins: a half-dead socket nobody has noticed must not keep the tunnel shut.
+        tunnels.get(id)?.shutdown("replaced by a new connection");
+        const mux = new TunnelMux(ws, { browserId: id });
+        tunnels.set(id, mux);
+        ws.on("close", () => {
+          if (tunnels.get(id) === mux) tunnels.delete(id);
+        });
+      });
+      return;
+    }
     const m = /^\/worker\/v1\/browsers\/([0-9a-f]{16})\/cdp(\/.*)$/.exec(req.url ?? "");
     const e = m ? running.get(m[1]!) : undefined;
     if (!m || !authorized(req.headers.authorization) || !e || e.rt.chrome.exitCode !== null) {
@@ -310,7 +470,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{ port: number; 
     throw e;
   }
   log.info("worker ready", { name: opts.name, workerId: identity.workerId, main: identity.controlUrl, url: opts.selfUrl, release: config.release });
-  return { port, identity, close };
+  return { port, identity, close, dialTunnel };
 }
 
 /** Unpack a tar stream into a fresh directory, then swap it in, so a broken upload leaves the old profile alone. */

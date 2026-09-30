@@ -1,9 +1,11 @@
 import http from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, linkSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { WebSocket } from "ws";
 import { config, downloadDir, profileDir } from "./config.js";
 import { getDb, nowIso } from "./db.js";
 import { AppError, Err } from "./errors.js";
@@ -14,7 +16,9 @@ import type { ChromeRuntime } from "./chrome.js";
 import type { Principal } from "./auth.js";
 import { launchEstimate } from "./host-limits.js";
 import { forwardHttp, forwardUpgrade, type RelayTarget } from "./relay.js";
-import { makeJoinToken, receiveProfile, sha256, type WorkerStartResult, type WorkerState } from "./worker.js";
+import { makeJoinToken, MAX_UPLOAD_BYTES, receiveProfile, sha256, uploadStaging, type WorkerStartResult, type WorkerState } from "./worker.js";
+import { MAX_CHUNK, serveTunnelDials } from "./tunnels.js";
+import { remoteSpawner } from "./x11-remote.js";
 import type { BrowserManager, BrowserRow } from "./browsers.js";
 
 export type WorkerRow = {
@@ -56,10 +60,14 @@ type RemoteBrowser = {
  * the worker with its secret, the same shape a linked browser already has. So the MCP bridge,
  * the live view and everything else that speaks CDP work without knowing the difference.
  *
- * What does not cross yet, and is refused on a worker's browser with a message saying so:
- * Full browser and agent desktop control (they need the X display), tunnels, and saved
- * profiles. The room held for pinned browsers is also per host: on a worker a start is
- * checked against that worker's ceiling, and nothing is stopped to make room for it.
+ * What needs the host rather than the debugging port reaches the worker by its own path.
+ * Full browser and the agent desktop tools run their ffmpeg and xdotool there
+ * (x11-remote.ts), a tunnel's streams cross on one socket per browser (tunnels.ts,
+ * serveTunnelDials), and a file for upload_file is copied across first (stageUploads).
+ * What does not cross is saved profiles, which are
+ * kept on the main instance and refused on a worker's browser by name. The room held for
+ * pinned browsers is also per host: on a worker a start is checked against that worker's
+ * ceiling, and nothing is stopped to make room for it.
  */
 export class Workers {
   private live = new Map<string, Live>();
@@ -90,6 +98,11 @@ export class Workers {
   online(id: string): boolean {
     const l = this.live.get(id);
     return Boolean(l && l.state && !l.error && Date.now() - l.at < FRESH_MS);
+  }
+
+  /** Whether a worker can show its browsers' displays. It runs this image, so as this instance can until it says otherwise. */
+  fullBrowser(id: string): boolean {
+    return this.live.get(id)?.state?.fullBrowser ?? config.fullBrowser;
   }
 
   /** Why a worker cannot be given a browser right now, or null when it can. */
@@ -314,7 +327,7 @@ export class Workers {
     };
     this.remote.set(row.id, rec);
     const runtime: ChromeRuntime = {
-      display: null,
+      display: started.display,
       cdpPort: shim.port,
       cdpUrl: `http://127.0.0.1:${shim.port}`,
       chrome: chrome as unknown as ChildProcess,
@@ -323,13 +336,129 @@ export class Workers {
       profileDir: row.profile_path,
       downloadDir: downloadDir(row.id),
       screen: started.screen,
+      // Full browser and the desktop tools, run against the display on the worker.
+      ...(started.display
+        ? {
+            desktopSpawn: remoteSpawner((body, signal) =>
+              fetch(`${w.url}/worker/v1/browsers/${row.id}/x11`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${w.secret}`, "content-type": "application/json" },
+                body: JSON.stringify(body),
+                signal,
+              }),
+            ),
+          }
+        : {}),
     };
+    const stopTunnel = this.keepTunnel(w, row.id);
     const close = async () => {
       if (this.remote.get(row.id) === rec) this.remote.delete(row.id);
+      stopTunnel();
+      rmSync(uploadStaging(row.id), { recursive: true, force: true });
       await stopRemote();
       await shim.close();
     };
     return { runtime, close, chromeVersion: started.chromeVersion };
+  }
+
+  /**
+   * Hold the socket a worker asks this instance's tunnels through, for as long as the browser
+   * runs there, and open it again when it drops. It carries nothing until a page in that
+   * browser dials a private address. Returns what stops it.
+   */
+  private keepTunnel(w: WorkerRow, id: string): () => void {
+    const url = `${w.url.replace(/^http/, "ws")}/worker/v1/browsers/${id}/tunnel`;
+    let stopped = false;
+    let ws: WebSocket | null = null;
+    let retry: NodeJS.Timeout | undefined;
+    const connect = () => {
+      if (stopped) return;
+      const sock = new WebSocket(url, { headers: { authorization: `Bearer ${w.secret}` }, maxPayload: MAX_CHUNK + 64 * 1024 });
+      ws = sock;
+      sock.on("open", () => serveTunnelDials(sock, id));
+      sock.on("error", () => undefined);
+      sock.on("close", () => {
+        if (stopped || ws !== sock) return;
+        retry = setTimeout(connect, 2_000);
+        retry.unref?.();
+      });
+    };
+    connect();
+    return () => {
+      stopped = true;
+      clearTimeout(retry);
+      ws?.terminate();
+    };
+  }
+
+  /**
+   * upload_file for a browser on a worker. The bridge reads the path here and Chrome reads it
+   * there, so each file is put at one path on both hosts, under a folder of its own, and the
+   * paths the bridge is given are those.
+   *
+   * Only a file the bridge would have taken anyway is copied: one under this instance's temp
+   * directory, which is where it accepts files from. Anything else goes through unchanged, and
+   * the bridge refuses it with its own message, as it would for a browser here. Copying first
+   * would let an agent upload any file on this instance, its database included.
+   */
+  async stageUploads(row: BrowserRow, filePaths: unknown): Promise<unknown> {
+    if (!Array.isArray(filePaths) || filePaths.length > 16 || !filePaths.every((f) => typeof f === "string")) return filePaths;
+    const w = this.row(row.worker_id!);
+    const tmp = realpathSync(os.tmpdir());
+    const staging = uploadStaging(row.id);
+    const out: string[] = [];
+    for (const asked of filePaths as string[]) {
+      let real: string;
+      try {
+        real = realpathSync(path.resolve(asked));
+      } catch {
+        out.push(asked);
+        continue;
+      }
+      // Already waiting on both hosts, from an earlier call.
+      if (real.startsWith(staging + path.sep)) {
+        out.push(real);
+        continue;
+      }
+      // Not a file the bridge takes. It refuses it, with its own message.
+      if (!real.startsWith(tmp + path.sep)) {
+        out.push(asked);
+        continue;
+      }
+      const st = statSync(real);
+      if (!st.isFile()) throw Err.invalid(`${asked} is not a file`);
+      if (st.size > MAX_UPLOAD_BYTES) throw Err.invalid(`${asked} is larger than the ${MAX_UPLOAD_BYTES / 1024 / 1024} MB a browser on a worker can be sent`);
+      const dir = randomBytes(6).toString("hex");
+      const name = path.basename(real);
+      const here = path.join(staging, dir, name);
+      mkdirSync(path.dirname(here), { recursive: true });
+      try {
+        linkSync(real, here);
+      } catch {
+        copyFileSync(real, here);
+      }
+      let res: Response;
+      try {
+        res = await fetch(`${w.url}/worker/v1/browsers/${row.id}/uploads/${dir}/${encodeURIComponent(name)}`, {
+          method: "PUT",
+          headers: { authorization: `Bearer ${w.secret}`, "content-type": "application/octet-stream" },
+          body: Readable.toWeb(createReadStream(here)) as ReadableStream<Uint8Array>,
+          duplex: "half",
+          signal: AbortSignal.timeout(TRANSFER_TIMEOUT_MS),
+        } as RequestInit);
+      } catch (e) {
+        throw this.unreachable(w, e);
+      }
+      const body = (await res.json().catch(() => ({}))) as { path?: string; error?: { code?: string; message?: string } };
+      if (!res.ok) throw this.refused(w, res.status, body);
+      if (body.path !== here) {
+        throw Err.browserUnavailable(
+          `Worker ${w.name} keeps uploads at ${body.path ?? "an unknown path"} and this instance at ${here}, so the file cannot be handed to its Chrome. Give both the same temp directory.`,
+        );
+      }
+      out.push(here);
+    }
+    return out;
   }
 
   /**

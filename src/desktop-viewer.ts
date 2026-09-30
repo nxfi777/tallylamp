@@ -48,6 +48,8 @@ const KEYS: Record<string, string> = {
   Home: "Home", End: "End", PageUp: "Prior", PageDown: "Next", Insert: "Insert",
   Shift: "Shift_L", Control: "Control_L", Alt: "Alt_L", Meta: "Super_L",
 };
+/** Every named keysym this module can send. A worker runs xdotool only with these (x11-remote.ts). */
+export const KEYSYMS: ReadonlySet<string> = new Set(Object.values(KEYS));
 // Never forward Caps Lock. The operator's `key` already has its effect applied ("D", not "d"),
 // and xdotool adds Shift for an uppercase keysym, so a remote Lock on top inverts every letter:
 // X reads Shift+Lock as lowercase. macOS makes it worse by sending only a keydown when Caps Lock
@@ -148,8 +150,10 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   const send = (data: object) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data)); };
   const reject = (message: string) => { send({ type: "error", message }); ws.close(1008, "desktop unavailable"); };
   const rt = browsers.runtime(id);
-  // Never capture the host's DISPLAY. Only this browser's service-owned Xvfb is eligible.
-  if (!config.fullBrowser || !rt?.xvfb || !rt.display) return reject("Full browser requires a real browser on a dedicated Xvfb display.");
+  // Never capture the host's DISPLAY. Only this browser's service-owned Xvfb is eligible: here,
+  // or on the worker its Chrome runs on, which captures and types there (x11-remote.ts).
+  if (!rt?.display || !(rt.desktopSpawn || (config.fullBrowser && rt.xvfb))) return reject("Full browser requires a real browser on a dedicated Xvfb display.");
+  if (rt.desktopSpawn) spawnProcess = rt.desktopSpawn;
   if (active.has(id)) return reject("Full browser is already open in another viewer. Close that view and try again.");
   const size = rt.screen;
   if (size.width * size.height > 16_000_000) return reject("The desktop is too large to stream. Reduce TALLYLAMP_XVFB_SCREEN.");

@@ -1258,7 +1258,8 @@ function switchButton(label, on, { disabled, title, onToggle }) {
 function settingsSection(b) {
   const id = b.id;
   const locked = !["stopped", "crashed"].includes(b.status) || b.savingProfile;
-  const full = Boolean(state.status?.fullBrowser);
+  // The display is on whichever host runs its Chrome: this instance, or its worker.
+  const full = Boolean(b.worker ? b.worker.fullBrowser : state.status?.fullBrowser);
   const why = b.savingProfile ? "Wait for the profile save to finish." : locked ? "Stop the browser to change this." : false;
   const loans = b.lentTo || [];
   return [
@@ -1270,13 +1271,9 @@ function settingsSection(b) {
         b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? ", authenticated" : ""}` : "Direct, no upstream proxy",
         h("button", { class: "btn", "aria-label": "Configure proxy", disabled: locked, title: why, onClick: () => editProxy(b) }, "Configure")),
       settingRow("Extensions",
-        b.worker
-          ? (b.extensionsEnabled
-            ? "On. Extensions already in its profile run on the worker. Installing or managing them needs Full browser, which works only on the main instance for now."
-            : "Off. Installing extensions needs Full browser, which works only on the main instance for now.")
-          : b.extensionsEnabled ? "On. Take control and open Full browser to install or manage them. A persistent profile keeps them."
+        b.extensionsEnabled ? "On. Take control and open Full browser to install or manage them. A persistent profile keeps them."
           : full ? "Off" : "Off. This host cannot run Full browser, which extensions need.",
-        switchButton("Extensions", b.extensionsEnabled, { disabled: ((!full || b.worker) && !b.extensionsEnabled) || locked, title: why,
+        switchButton("Extensions", b.extensionsEnabled, { disabled: (!full && !b.extensionsEnabled) || locked, title: why,
           onToggle: (enabled) => act(async () => {
             if (enabled && !confirm("Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust.\n\nEnable extension support?")) return;
             await api(`/api/v1/browsers/${id}/extensions`, { method: "PUT", body: { enabled } });
@@ -1530,7 +1527,9 @@ async function browserView(id, seq) {
   const guests = linked ? [] : (await api(`/api/v1/browsers/${id}/guests`).catch(() => ({ guests: [] }))).guests || [];
   if (seq !== undefined && seq !== renderSeq) return;
   const guestInControl = guestHolds(b) ? guests.find((g) => g.controlling) : null;
-  const surface = state.status?.fullBrowser && viewerSurfaces.get(id) === "desktop" ? "desktop" : "tab";
+  // Full browser shows the display of whichever host runs its Chrome: this instance, or its worker.
+  const fullHere = Boolean(b.worker ? b.worker.fullBrowser : state.status?.fullBrowser);
+  const surface = fullHere && viewerSurfaces.get(id) === "desktop" ? "desktop" : "tab";
   const switchSurface = (next) => {
     if (next === surface) return;
     if (next === "desktop" && !confirm("Full browser lets you use Chrome's toolbar and extension popups. It also gives access to Chrome settings and files on the host. Only install extensions you trust.\n\nOpen full browser?")) return;
@@ -1637,9 +1636,8 @@ async function browserView(id, seq) {
   const stagewrap = h("div", { class: "stagewrap" },
     h("div", { class: "row viewer-surfaces", role: "group", "aria-label": "Browser view" },
       h("button", { class: "btn tiny", "aria-pressed": String(surface === "tab"), onClick: () => switchSurface("tab") }, "Tab"),
-      h("button", { class: "btn tiny", "aria-pressed": String(surface === "desktop"), disabled: !state.status?.fullBrowser || Boolean(b.worker),
-        title: b.worker ? `Full browser is not available yet on a worker. Move this browser to the main instance to use it.`
-          : state.status?.fullBrowser ? "Show Chrome’s toolbar, popups and dialogs" : "Full browser needs a dedicated Xvfb display on the host",
+      h("button", { class: "btn tiny", "aria-pressed": String(surface === "desktop"), disabled: !fullHere,
+        title: fullHere ? "Show Chrome’s toolbar, popups and dialogs" : "Full browser needs a dedicated Xvfb display on the host",
         onClick: () => switchSurface("desktop") }, "Full browser"),
       surface === "desktop" && human ? h("button", { class: "btn tiny", onClick: () => viewer?.openExtensions() }, "Manage extensions") : null,
       surface === "desktop" && human ? h("button", { class: "btn tiny",
@@ -2803,7 +2801,7 @@ async function workersView() {
       : h("p", {}, "No workers yet. This instance runs every browser itself, within its host’s process limit. Add a worker when that limit is what stops another browser from starting."),
     h("h2", {}, "How a worker fits in"),
     h("p", {}, "A worker runs this same image with one setting, TALLYLAMP_JOIN. It has no dashboard and no agents of its own. This instance starts, drives and stops its browsers over your project’s private network, so both must be in the same Railway project and on the same release."),
-    h("p", {}, "A new browser stays on this instance while it has room, and goes to a worker when it has not. To move one, choose Move to… from its ⋯ menu. A running browser stops for the copy and starts again on the new host. Full browser, agent control, tunnels and saved profiles work only on this instance for now."),
+    h("p", {}, "A new browser stays on this instance while it has room, and goes to a worker when it has not. To move one, choose Move to… from its ⋯ menu. A running browser stops for the copy and starts again on the new host. Everything works there as it does here, apart from saving a browser as a saved profile."),
   ]);
 }
 
@@ -2844,6 +2842,9 @@ function movingText(b) {
  * background, with progress on its card and page, so nobody sits in front of a frozen dialog
  * while a profile crosses the network.
  */
+/** Browsers this tab is moving right now (moveBrowser); see the live update in listen(). */
+const movesFromHere = new Set();
+
 async function moveBrowser(b) {
   const here = b.worker ? b.worker.id : "local";
   const free = (pids) => (pids ? pids.max - pids.current : null);
@@ -2867,11 +2868,13 @@ async function moveBrowser(b) {
         running
           ? "It stops, its profile is copied across with its logins and tabs, and it starts again there. An agent using it waits; anyone watching loses the live view until then."
           : "Its profile is copied across with its logins and tabs. It stays stopped.",
-        "Full browser, agent control of Chrome's windows, tunnels and file uploads work only on the main instance for now.",
+        "On a worker everything works as it does here, apart from saving it as a saved profile.",
       ] },
   ], "Move browser");
   if (!answers || answers.host === here) return;
   const target = hosts.find((x) => x.id === answers.host);
+  // This page redraws and says how the move went itself, so the live update leaves it be.
+  movesFromHere.add(b.id);
   const moving = api(`/api/v1/browsers/${b.id}/move`, { method: "POST", body: { workerId: answers.host === "local" ? null : answers.host } });
   await refresh();
   await render();
@@ -2889,6 +2892,7 @@ async function moveBrowser(b) {
   }
   await refresh();
   await render();
+  movesFromHere.delete(b.id);
   flash(message, ok);
 }
 
@@ -2904,7 +2908,7 @@ async function createBrowser(seedId = "") {
     ...(state.workers.length ? [{ name: "host", label: "Runs on", value: "",
       options: [{ value: "", label: "Automatic: here while there is room" }, { value: "local", label: "This instance" },
         ...state.workers.map((w) => ({ value: w.id, label: w.online ? w.name : `${w.name} (not answering)` }))],
-      hint: "A browser made from a saved profile starts on this instance. Full browser, tunnels and saved profiles work on this instance only for now." }] : []),
+      hint: "A browser made from a saved profile starts on this instance, and only a browser here can be saved as a saved profile." }] : []),
     ...proxyFields(),
   ], "Create browser", async (values) => {
     const { name, project, purpose } = values;
@@ -3464,6 +3468,14 @@ function startEvents() {
         const ev = JSON.parse(msg.data);
         if (ev.type === "browser.moving") {
           for (const el of document.querySelectorAll(`[data-move-progress="${ev.browserId}"]`)) el.textContent = movingText({ moving: ev.payload });
+        }
+        // A browser's page redrew itself only after a move it started. One started anywhere
+        // else -- another tab, the API -- left it naming the old host and holding a Full
+        // browser view of a Chrome that had stopped, until the page was reloaded.
+        const r = route();
+        if (ev.type === "browser.moved" && r.name === "browser" && r.id === ev.browserId && !movesFromHere.has(ev.browserId) &&
+            !openMenu && !document.querySelector(".modal")) {
+          void refresh().then(() => render());
         }
       } catch { /* not every message is an event */ }
       if (!timer) timer = setTimeout(repaint, 1500);

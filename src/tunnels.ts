@@ -71,10 +71,16 @@ const F_DATA = 0x02;
 const F_CLOSE = 0x03;
 const F_ACK = 0x04;
 const F_ERROR = 0x05;
+/**
+ * No binding for that authority. Only between the main instance and a worker: the worker asks
+ * about every private address its Chrome dials, and most have no tunnel, which must fall
+ * through to the egress policy's refusal exactly as it does here, not read as a broken tunnel.
+ */
+const F_NONE = 0x06;
 
 const HEADER = 5;
 /** Frames are capped well under the socket's maxPayload so one write cannot be refused. */
-const MAX_CHUNK = 256 * 1024;
+export const MAX_CHUNK = 256 * 1024;
 /** Per-stream ceiling on unread bytes. The protocol has no window, so this is the backstop. */
 const MAX_BUFFERED = 8 * 1024 * 1024;
 
@@ -150,7 +156,6 @@ export function createTunnel(
   // A tunnel is matched in the egress proxy Chrome was launched behind. A linked browser was
   // not launched by us and has no such proxy -- and it is already on its owner's network.
   browsers.assertManaged(input.browserId, "a tunnel");
-  browsers.assertLocal(input.browserId, "A tunnel");
   // Ownership at create time is not enough on its own: a grant issued afterwards would hand
   // the borrower a browser that can already reach the owner's machine. The two are mutually
   // exclusive in both orderings -- issueGrant drops tunnels, and this refuses while a
@@ -228,17 +233,23 @@ function findBinding(browserId: string, host: string, port: number): TunnelRow |
   return row ?? null;
 }
 
-type StreamState = { duplex: Duplex; settle?: (err: Error | null) => void };
+type StreamState = { duplex: Duplex; settle?: (err: Error | null, unbound?: boolean) => void };
 
-class TunnelConnection {
+/**
+ * The side of a tunnel socket that opens streams: this instance towards whoever holds the
+ * tunnel (TunnelConnection below), or a worker towards this instance (worker.ts). Opening
+ * returns null when the far side says it has no binding for that authority.
+ */
+export class TunnelMux {
   private streams = new Map<number, StreamState>();
   private nextId = 1;
-  private closed = false;
+  protected closed = false;
+  protected bytesUp = 0;
+  protected bytesDown = 0;
 
   constructor(
-    readonly tunnelId: string,
-    readonly browserId: string,
-    private readonly ws: WebSocket,
+    protected readonly ws: WebSocket,
+    private readonly what: Record<string, unknown>,
   ) {
     ws.on("message", (data, isBinary) => {
       if (!isBinary) return;
@@ -247,7 +258,7 @@ class TunnelConnection {
     });
     ws.on("close", () => this.shutdown("socket closed"));
     ws.on("error", (e) => {
-      log.warn("tunnel socket error", { tunnelId, error: (e as Error).message });
+      log.warn("tunnel socket error", { ...what, error: (e as Error).message });
       this.shutdown("socket error");
     });
   }
@@ -257,8 +268,8 @@ class TunnelConnection {
     if (!f) return;
     const st = this.streams.get(f.streamId);
     if (!st) return;
-    if (f.type === F_ACK) {
-      st.settle?.(null);
+    if (f.type === F_ACK || f.type === F_NONE) {
+      st.settle?.(null, f.type === F_NONE);
       st.settle = undefined;
       return;
     }
@@ -277,7 +288,7 @@ class TunnelConnection {
       // The peer cannot be told to slow down -- the protocol has no window -- so a reader
       // slower than the sender is bounded here rather than allowed to buffer without limit.
       if (st.duplex.readableLength > MAX_BUFFERED) {
-        log.warn("tunnel stream exceeded its read buffer", { tunnelId: this.tunnelId, streamId: f.streamId });
+        log.warn("tunnel stream exceeded its read buffer", { ...this.what, streamId: f.streamId });
         this.dropStream(f.streamId);
       }
       return;
@@ -289,9 +300,6 @@ class TunnelConnection {
       this.streams.delete(f.streamId);
     }
   }
-
-  private bytesUp = 0;
-  private bytesDown = 0;
 
   private dropStream(streamId: number): void {
     const st = this.streams.get(streamId);
@@ -305,7 +313,7 @@ class TunnelConnection {
     this.ws.send(encode(type, streamId, payload), { binary: true });
   }
 
-  async open(host: string, port: number): Promise<Duplex> {
+  async open(host: string, port: number): Promise<Duplex | null> {
     if (this.closed) throw new TunnelUnavailable("tunnel is closing");
     if (this.streams.size >= config.tunnelMaxStreams) {
       throw new TunnelUnavailable(`tunnel is at its stream limit (${config.tunnelMaxStreams})`);
@@ -352,22 +360,21 @@ class TunnelConnection {
     const asked = `${host.toLowerCase().replace(/^\[|\]$/g, "")}:${port}`;
     this.send(F_OPEN, streamId, Buffer.from(asked, "utf8"));
 
-    await new Promise<void>((resolve, reject) => {
+    const bound = await new Promise<boolean>((resolve, reject) => {
       const timer = setTimeout(() => {
         state.settle = undefined;
         this.dropStream(streamId);
         reject(new TunnelUnavailable("tunnel did not answer the open in time"));
       }, config.tunnelOpenTimeoutMs);
       timer.unref?.();
-      state.settle = (err) => {
+      state.settle = (err, unbound) => {
         clearTimeout(timer);
-        if (err) {
-          this.dropStream(streamId);
-          reject(err);
-        } else resolve();
+        if (err || unbound) this.dropStream(streamId);
+        if (err) reject(err);
+        else resolve(!unbound);
       };
     });
-    return duplex;
+    return bound ? duplex : null;
   }
 
   shutdown(reason: string): void {
@@ -384,6 +391,24 @@ class TunnelConnection {
     } catch {
       /* already gone */
     }
+    this.closedBecause(reason);
+  }
+
+  /** What else has to happen when the socket goes. */
+  protected closedBecause(_reason: string): void {}
+}
+
+/** A tunnel's live socket to whoever holds it: the mux, plus the table and the dashboard. */
+class TunnelConnection extends TunnelMux {
+  constructor(
+    readonly tunnelId: string,
+    readonly browserId: string,
+    ws: WebSocket,
+  ) {
+    super(ws, { tunnelId });
+  }
+
+  protected override closedBecause(reason: string): void {
     if (connections.get(this.tunnelId) === this) connections.delete(this.tunnelId);
     this.flush();
     log.info("tunnel disconnected", { tunnelId: this.tunnelId, reason });
@@ -421,6 +446,60 @@ export async function dialTunnel(browserId: string, host: string, port: number):
     );
   }
   return conn.open(host, port);
+}
+
+/**
+ * The main instance's end of a worker's tunnel socket (workers.ts opens it; worker.ts opens
+ * streams over it). Chrome on a worker dials a private address; the worker asks here; this
+ * answers exactly as the egress proxy here would: a stream when the browser has a binding
+ * with something connected to it, a refusal when it has a binding with nothing connected,
+ * and "no binding" otherwise, which the worker treats as the policy refusal it is.
+ *
+ * The same loop the tunnel client runs on the agent's machine (bin/tallylamp.mjs), except that
+ * what it dials is dialTunnel, so a worker can reach only what a binding already allows.
+ */
+export function serveTunnelDials(ws: WebSocket, browserId: string): void {
+  const streams = new Map<number, Duplex>();
+  const send = (type: number, id: number, payload?: Buffer) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(encode(type, id, payload), { binary: true });
+  };
+  ws.on("message", (data, isBinary) => {
+    if (!isBinary) return;
+    const f = decode(Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer));
+    if (!f) return;
+    if (f.type === F_OPEN) {
+      const id = f.streamId;
+      const m = /^(.+):(\d{1,5})$/.exec(f.payload.toString("utf8"));
+      if (!m) {
+        send(F_ERROR, id, Buffer.from("not a host:port", "utf8"));
+        return;
+      }
+      dialTunnel(browserId, m[1]!, Number(m[2])).then((peer) => {
+        if (!peer) return send(F_NONE, id);
+        if (ws.readyState !== WebSocket.OPEN) return void peer.destroy();
+        streams.set(id, peer);
+        send(F_ACK, id);
+        peer.on("data", (chunk: Buffer) => {
+          for (let i = 0; i < chunk.length; i += MAX_CHUNK) send(F_DATA, id, chunk.subarray(i, i + MAX_CHUNK));
+        });
+        peer.on("end", () => send(F_CLOSE, id));
+        peer.on("error", () => peer.destroy());
+        peer.on("close", () => {
+          if (streams.delete(id)) send(F_CLOSE, id);
+        });
+      }, (e: Error) => send(F_ERROR, id, Buffer.from(e.message.slice(0, 200), "utf8")));
+      return;
+    }
+    const peer = streams.get(f.streamId);
+    if (!peer) return;
+    if (f.type === F_DATA) peer.write(f.payload);
+    else if (f.type === F_CLOSE) peer.end();
+  });
+  ws.on("close", () => {
+    for (const peer of streams.values()) peer.destroy();
+    streams.clear();
+  });
+  ws.on("error", () => undefined);
 }
 
 export function tunnelIsConnected(tunnelId: string): boolean {

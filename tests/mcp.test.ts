@@ -4,6 +4,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
 import { emitFakeFrame } from "../src/fake-chrome.js";
 import { createAgent, DEFAULT_AGENT_SCOPES } from "../src/auth.js";
+import { Err } from "../src/errors.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -621,6 +622,44 @@ describe("a dropped mcp session does not cost the agent its browser", () => {
     // And the restored binding is still behind the lease guard, not past it.
     assert.ok(text.includes("human_controlling_browser"), text.slice(0, 300));
     own.browsers.releaseControl(id);
+  });
+
+  it("keeps the binding through a call that lands while the browser is being moved", async () => {
+    const s = await newSession();
+    const created = await rpc(
+      { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "tallylamp_create_browser", arguments: { persistent: false } } },
+      s,
+    );
+    const raw = typeof created.body === "string" ? created.body : JSON.stringify(created.body);
+    const id = raw.match(/browserId\\":\\"([a-f0-9]+)/)?.[1] || raw.match(/"browserId":"([a-f0-9]+)"/)?.[1] || "";
+    assert.ok(id, raw.slice(0, 300));
+    // A move stops the browser, which unbinds every session on it, and the copy takes a while.
+    await own.browsers.stop(id);
+    const { busy, ensureRunning } = own.browsers;
+    own.browsers.busy = (b: string) => b === id || busy.call(own.browsers, b);
+    own.browsers.ensureRunning = async () => {
+      throw Err.browserUnavailable("this browser is being moved to another host; retry when that finishes");
+    };
+    try {
+      const during = JSON.stringify(
+        (await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "click", arguments: { pageId: 0, uid: "1_1" } } }, s)).body,
+      );
+      assert.match(during, /not available for a moment: this browser is being moved[^.]*\. Retry this call; it reconnects to the same browser/);
+      assert.match(during, /retryable[\\"]*:true/);
+      assert.ok(!during.includes("tallylamp_use_browser"), "it is not sent off to re-bind by hand");
+    } finally {
+      own.browsers.busy = busy;
+      own.browsers.ensureRunning = ensureRunning;
+    }
+    // The move is over: the next call finds the browser by itself, and starts it. (Under the
+    // fake Chrome a bound session has no bridge, so the call itself still ends on "no browser
+    // is bound"; read-access.test.ts uses that as its sign a call got that far.)
+    const after = JSON.stringify(
+      (await rpc({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "click", arguments: { pageId: 0, uid: "1_1" } } }, s)).body,
+    );
+    assert.ok(!after.includes("not available for a moment") && !after.includes("could not be started again"), after.slice(0, 300));
+    assert.equal(own.browsers.row(id).status, "running");
+    assert.equal(own.browsers.publicView(own.browsers.row(id)).mcpAttached, 1);
   });
 
   it("does not restore a browser the principal can no longer reach", async () => {

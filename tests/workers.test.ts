@@ -126,7 +126,8 @@ describe("workers", () => {
 
     const view = ctx.browsers.publicView(ctx.browsers.row(row.id));
     assert.equal(view.status, "running");
-    assert.deepEqual(view.worker, { id: worker.identity.workerId, name: "worker-a", online: true });
+    // The test worker runs the fake Chrome, which has no display, and says so.
+    assert.deepEqual(view.worker, { id: worker.identity.workerId, name: "worker-a", online: true, fullBrowser: false });
     assert.equal(ctx.browsers.managedIds().includes(row.id), false, "it draws on the worker's ceiling, not this host's");
 
     await ctx.browsers.stop(row.id);
@@ -173,13 +174,14 @@ describe("workers", () => {
     }
   });
 
-  it("says what does not reach a worker's browser yet, by name", async () => {
+  it("says what does not reach a worker's browser yet, by name: saving it as a saved profile", async () => {
     const row = browserOn(worker.identity.workerId, "limited");
-    const sentence = /is not available yet for a browser on a worker, and limited is on worker-a\. Stop it and move it to the main instance first/;
-    assert.throws(() => ctx.browsers.assertLocal(row.id, "A tunnel"), sentence);
-    assert.throws(() => ctx.browsers.updateAgentDesktop(row.id, true, admin), sentence);
+    const sentence = /Saving a profile is not available yet for a browser on a worker, and limited is on worker-a\. Move it to the main instance first/;
     await assert.rejects(ctx.browsers.saveProfile(row.id, admin, { name: "x" }), sentence);
-    assert.equal(row.extensions_enabled, 0, "extension support needs the X display, so it starts off there");
+    // Desktop access and extensions go by the worker's own display. This one has none.
+    assert.throws(() => ctx.browsers.updateAgentDesktop(row.id, true, admin), /requires a dedicated Xvfb display/);
+    assert.throws(() => ctx.browsers.updateExtensions(row.id, true, admin), /requires a real browser on a dedicated Xvfb display/);
+    assert.equal(row.extensions_enabled, 0, "extension support needs an X display, so it starts off there");
     assert.throws(
       () => ctx.browsers.create({ principal: admin, via: "control_api", name: "seeded", workerId: worker.identity.workerId, seedId: "nope" }),
       /starts on the main instance, where saved profiles are kept/,
@@ -218,7 +220,7 @@ describe("workers", () => {
     assert.deepEqual(phases, ["stopping", "copying", "starting", "moved:true"]);
     assert.equal(readFileSync(there, "utf8"), "signed-in");
     assert.equal(existsSync(profileDir(row.id)), false, "the copy left behind is deleted");
-    assert.match(ctx.browsers.noticesSince(row.id, 0).map((n) => n.text).join("\n"), /moved this browser from the main instance to worker-a .* Its tabs and logins came with it\. On a worker it cannot use Full browser/);
+    assert.match(ctx.browsers.noticesSince(row.id, 0).map((n) => n.text).join("\n"), /moved this browser from the main instance to worker-a .* Its tabs and logins came with it\. Everything works there as before, apart from saving it as a saved profile\./);
 
     // Stopped stays stopped.
     await ctx.browsers.stop(row.id);

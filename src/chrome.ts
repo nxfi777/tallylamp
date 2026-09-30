@@ -26,6 +26,11 @@ export type ChromeRuntime = {
   downloadDir: string;
   /** The X root window this Chrome draws on. The ceiling for any viewer-driven resize. */
   screen: { width: number; height: number };
+  /**
+   * Set when the display is on another host (a worker): runs ffmpeg and xdotool there
+   * instead of here. `display` then names the worker's display, which only the worker uses.
+   */
+  desktopSpawn?: typeof spawn;
 };
 
 /** Parse a "W,H" config pair, falling back when either half is not a positive number. */

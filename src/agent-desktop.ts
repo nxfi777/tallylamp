@@ -70,7 +70,9 @@ export function authorizeAgentDesktop(browsers: BrowserManager, p: Principal, id
   const control = browsers.controlState(id);
   if (control.controllerType === "agent" && control.controllerId !== p.id) throw Err.alreadyControlled();
   const rt = browsers.runtime(id);
-  if (!config.fullBrowser || !rt?.xvfb || !rt.display || rt.chrome.exitCode !== null) throw Err.browserUnavailable("native browser tools need a running browser with a dedicated Xvfb display");
+  if (!rt?.display || !(rt.desktopSpawn || (config.fullBrowser && rt.xvfb)) || rt.chrome.exitCode !== null) {
+    throw Err.browserUnavailable("native browser tools need a running browser with a dedicated Xvfb display");
+  }
   if (rt.screen.width * rt.screen.height > 16_000_000) throw Err.invalid("desktop exceeds the capture size limit");
   return rt;
 }
@@ -79,6 +81,8 @@ export function authorizeAgentDesktop(browsers: BrowserManager, p: Principal, id
 export async function agentDesktop(browsers: BrowserManager, principal: Principal, id: string, input: Action,
   screenshot: boolean, spawnProcess: typeof spawn = spawn): Promise<{ image?: Buffer; screenWidth: number; screenHeight: number; imageWidth?: number; imageHeight?: number }> {
   const rt = authorizeAgentDesktop(browsers, principal, id);
+  // On a worker the display is there, and so are ffmpeg and xdotool (x11-remote.ts).
+  if (rt.desktopSpawn) spawnProcess = rt.desktopSpawn;
   const command = screenshot ? null : agentDesktopCommand(input, rt.screen);
   if (busy.has(id)) throw Err.browserUnavailable("another native browser operation is in progress; retry after it finishes");
   const initialLease = browsers.controlState(id).leaseToken;

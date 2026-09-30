@@ -23,8 +23,8 @@ profiles of the browsers it runs. It has no public domain. Your Tallylamp
 reaches it over the project's private network, and it answers nothing else.
 
 You still have one Tallylamp: one dashboard, one `/mcp` URL, the same agent
-tokens. Each browser's page says which host it runs on. You can move a stopped
-browser between hosts, logins included.
+tokens. Each browser's page says which host it runs on, and **Move to…** in its
+menu moves it between hosts, logins included.
 
 ## Add it to your project
 
@@ -61,7 +61,7 @@ internet.
 ## Dependencies for Tallylamp Worker
 
 A running Tallylamp in the same Railway project, on the release this template
-installs, currently 0.10.1. A worker that tries to join a different release
+installs, currently 0.11.0. A worker that tries to join a different release
 refuses to start and names both versions.
 
 ### Deployment Dependencies
@@ -82,13 +82,13 @@ refuses to start and names both versions.
 Leave `TALLYLAMP_DATA_DIR` and `PORT` alone. The worker finds its own private
 address from Railway.
 
-## What a worker does not do yet
+## What works on a worker
 
-These work only for browsers on the main instance: Full browser, agent control
-of Chrome's own windows, tunnels to your machine, saved profiles, and file
-uploads from an agent. A browser on a worker refuses each one and says to move
-it back first. The live view, takeover, guest links and per-browser proxies all
-work on a worker.
+Everything a browser does on your Tallylamp: Full browser and extensions, agent
+control of Chrome's own windows, tunnels to your machine, file uploads from an
+agent, the live view, takeover, guest links and per-browser proxies. The one
+exception is saved profiles, which your Tallylamp keeps. A browser on a worker
+cannot be saved as one until it is moved back.
 
 Room held for a pinned browser is per host too. On a worker, a start is checked
 against that worker's own limit, and nothing is stopped to make room for it.

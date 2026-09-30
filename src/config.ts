@@ -238,8 +238,8 @@ export const config = {
    * workerName: shown in the dashboard. Defaults to the Railway service name.
    * placement: where a new browser goes when nobody says. "overflow" keeps it on the main
    *   instance while that has room for one, and otherwise puts it on the worker with the most
-   *   room: a worker's browser cannot yet use Full browser, tunnels or uploads, so it should
-   *   not land there without a reason. "spread" always picks the host with the most room, the
+   *   room: a worker's browser cannot be saved as a saved profile, and everything it does
+   *   crosses the private network, so it should not land there without a reason. "spread" always picks the host with the most room, the
    *   main instance included. "local" always keeps it on the main instance.
    */
   get join() { return (process.env.TALLYLAMP_JOIN ?? "").trim(); },
