@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.9.1` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.10.0` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -257,34 +257,44 @@ release: a worker and the instance it joins must run the same release.
 
 ## Releasing and upgrading
 
-The current release is [0.9.1](https://github.com/nxfi777/tallylamp/releases/tag/v0.9.1)
+The current release is [0.10.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.10.0)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:7c45912424388950b9f12783f0dc7b7f2b02b49f670f14e362a4488b4a504244
+ghcr.io/nxfi777/tallylamp@sha256:b149e059251d91fb6a119eb98a2d289945c31ee97f38e55f9185133f14c1b26c
 ```
 
-The [0.9.1 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/36604888308)
+The [0.10.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/36742604651)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, the version and source-revision labels, and the zip's manifest version
 were verified afterward. The image's source revision is
-`de8263a34c27e9a43503c1074900614d439b1b9e`.
+`425721031f721a602f98b4778b80ad734629f4b6`.
 
-The Railway template pins the `0.9.1` digest for new installations. Its
-published configuration was read back after the update, and the image was the
-only change. The listing copy changed where it names the release. Existing
-deployments keep their selected image. Version 0.9.1 changes no database tables
-and adds no settings. Version 0.9.0 added three columns to `browsers` and eight
-optional settings, described below and under
-[process limit settings](#process-limit-settings). Railway redeploy persistence
-and unique passwords across two template installations were checked for
-`0.1.1`, not repeated for `0.9.1`. The published image itself was not deployed
-to Railway before the pin. These checks do not certify every external MCP
-client, proxy provider, or Chrome extension.
+The Railway template pins the `0.10.0` digest for new installations, and the
+[Tallylamp Worker](https://railway.com/deploy/tallylamp-worker) template pins
+the same one. The main template's published configuration was read back after
+the update: the image changed, and `TALLYLAMP_CHROME_CPUS` was added as `4`.
+Its listing copy changed where it names the release and where it mentions
+workers. Existing deployments keep their selected image. Version 0.10.0 adds
+two tables and a column, described below, and the settings under
+[process limit settings](#process-limit-settings) and in [workers.md](workers.md).
 
-Version 0.9.0 adds `pinned`, `launch_threads` and `peak_threads` columns to
+Before the pin, the published image was deployed to Railway as a main instance
+with one worker, from the digest above. The worker joined over the private
+network. An agent's browser was moved to the worker and driven there through
+`/mcp`, storage written on each host read back on the other after a move, and
+`upload_file` was refused on the worker. A worker started with something that
+is not a join token exited with one line saying so. Railway redeploy
+persistence and unique passwords across two template installations were checked
+for `0.1.1`, not repeated for `0.10.0`. These checks do not certify every
+external MCP client, proxy provider, or Chrome extension.
+
+Version 0.10.0 adds `workers` and `worker_join_tokens` tables and a
+`browsers.worker_id` column. Older images ignore them, but do not roll back
+while a browser is on a worker: an older image would start it on an empty
+profile. Version 0.9.0 adds `pinned`, `launch_threads` and `peak_threads` columns to
 `browsers`. No browser is pinned after the upgrade, and older images ignore all
 three. Version 0.8.0 adds an `access` column to `browser_grants`, and `access` and
 `granted_access` columns to `browser_requests`. All three default to `control`,
@@ -315,8 +325,8 @@ notes](release-0.7.1.md), [0.8.0 read-access notes](release-0.8.0.md), [0.8.1 br
 notes](release-0.8.1.md), [0.8.2 dashboard thumbnail notes](release-0.8.2.md),
 [0.8.3 profile-save live view notes](release-0.8.3.md), [0.8.4 linked-browser
 frame notes](release-0.8.4.md), [0.8.5 process-limit notes](release-0.8.5.md),
-[0.9.0 pinning and recovery notes](release-0.9.0.md), and [0.9.1 zygote and
-pinning fixes](release-0.9.1.md).
+[0.9.0 pinning and recovery notes](release-0.9.0.md), [0.9.1 zygote and
+pinning fixes](release-0.9.1.md), and [0.10.0 worker notes](release-0.10.0.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing
