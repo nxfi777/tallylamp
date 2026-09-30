@@ -60,9 +60,9 @@ internet.
 
 ## Dependencies for Tallylamp Worker
 
-A running Tallylamp, version 0.10.0 or newer, in the same Railway project. The
-worker and the Tallylamp it joins must run the same release. A worker that
-tries to join on another release refuses to start and names both versions.
+A running Tallylamp in the same Railway project, on the release this template
+installs, currently 0.10.1. A worker that tries to join a different release
+refuses to start and names both versions.
 
 ### Deployment Dependencies
 

@@ -33,3 +33,17 @@ start.
 
 Tallylamp Link is unchanged apart from its version number, so a linked browser
 does not need the extension reinstalled.
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/36764518716)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.10.1` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Before the release, its source was deployed to Railway as a main
+instance with one worker, and a running browser with a 2.2 GB profile was moved
+to the worker from its menu and started again there. Pin this artifact on the
+main instance and on every worker:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:84e7560a906fc3467a4befd493feeb1a39ec5b4db2ebd4ba47b7aedc7e676df5
+```
