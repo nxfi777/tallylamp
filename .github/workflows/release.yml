@@ -103,7 +103,7 @@ jobs:
           docker push "$RELEASE_IMAGE"
           docker image inspect "$RELEASE_IMAGE" --format '{{index .RepoDigests 0}}' > image-digest.txt
           cat image-digest.txt >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: image-digest
           path: image-digest.txt
