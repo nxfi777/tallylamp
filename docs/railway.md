@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.11.0` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.11.1` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -259,34 +259,32 @@ release: a worker and the instance it joins must run the same release.
 
 ## Releasing and upgrading
 
-The current release is [0.11.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.11.0)
+The current release is [0.11.1](https://github.com/nxfi777/tallylamp/releases/tag/v0.11.1)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:24cd3892c2217ace46d9fcc23be951dc12a19e4a6df16a17138c4ca14e340de1
+ghcr.io/nxfi777/tallylamp@sha256:7de88ad3b765422b7ffb6002bfcb67d50206f932e522f163099ac908fc4f67d3
 ```
 
-The [0.11.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/36785913335)
+The [0.11.1 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/37013141176)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, the version and source-revision labels, and the zip's manifest version
 were verified afterward. The image's source revision is
-`20b0ce377786750b2d0e7215628ce021d88faf9b`.
+`113eb5db3519fa0f7c162fbd8c0abdb8e350008a`.
 
-The Railway template pins the `0.11.0` digest for new installations, and the
+The Railway template pins the `0.11.1` digest for new installations, and the
 [Tallylamp Worker](https://railway.com/deploy/tallylamp-worker) template pins
 the same one. Each template's published configuration was read back after the
 update, and only the image had changed. Existing deployments keep their
-selected image. Version 0.11.0 changes no tables and adds no settings.
+selected image. Version 0.11.1 changes no tables and adds no settings.
 
-Before the pin, the release's source was deployed to Railway as a main instance
-with one worker. A running browser was moved to the worker and driven there
-through `/mcp`. Chrome on the worker read a file `upload_file` sent from the
-main instance's temp directory, loaded a page from a laptop through a tunnel,
-and took agent keystrokes that opened `chrome://extensions`. The agent's
-desktop screenshot came from the worker's display, and the dashboard's Full
-browser view streamed it. A file outside the temp directory was still refused.
+Before the release, the dashboard's New agent and Permissions forms were driven
+against a local instance at 1440, 768 and 375 px wide: granting at creation,
+editing afterwards, a create request that failed, and a permission list that
+did not load. 0.11.1 changes nothing on a worker, so the worker checks made for
+0.11.0 were not repeated.
 Railway redeploy persistence and unique passwords across two template
 installations were checked for `0.1.1`, not repeated since. These checks do not
 certify every external MCP client, proxy provider, or Chrome extension.
@@ -327,8 +325,9 @@ notes](release-0.8.1.md), [0.8.2 dashboard thumbnail notes](release-0.8.2.md),
 frame notes](release-0.8.4.md), [0.8.5 process-limit notes](release-0.8.5.md),
 [0.9.0 pinning and recovery notes](release-0.9.0.md), [0.9.1 zygote and
 pinning fixes](release-0.9.1.md), [0.10.0 worker notes](release-0.10.0.md), [0.10.1 one-step move
-notes](release-0.10.1.md), and [0.11.0 notes on everything working on a
-worker](release-0.11.0.md).
+notes](release-0.10.1.md), [0.11.0 notes on everything working on a
+worker](release-0.11.0.md), and [0.11.1 notes on choosing permissions when you
+create an agent](release-0.11.1.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing

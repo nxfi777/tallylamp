@@ -143,10 +143,10 @@ accept automation.
 
 ## Updates are your choice
 
-The current release is `ghcr.io/nxfi777/tallylamp:0.11.0`. Pin this digest:
+The current release is `ghcr.io/nxfi777/tallylamp:0.11.1`. Pin this digest:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:24cd3892c2217ace46d9fcc23be951dc12a19e4a6df16a17138c4ca14e340de1
+ghcr.io/nxfi777/tallylamp@sha256:7de88ad3b765422b7ffb6002bfcb67d50206f932e522f163099ac908fc4f67d3
 ```
 
 Automatic image updates are disabled. Pushing source code or publishing a new
@@ -171,11 +171,10 @@ profile. **Save as new profile** creates a separate snapshot. Existing browsers
 stay independent; updates affect future copies only. A snapshot contains all
 saved logins, not just the sites listed in the inventory.
 
-Agents can load, modify, and update profiles through MCP. Enable loading and
-saving separately when you create the agent, or later with **Agents →
-Permissions**. Saving requires
-`seed:write`; borrowing a browser never permits exporting its logins. Saved
-profiles contain every login, so share them only with agents you trust.
+Agents can load and update profiles through MCP. Allow loading and saving
+separately when you create the agent or under **Agents → Permissions**. Saving
+requires `seed:write`; borrowing a browser never permits exporting its logins.
+Share profiles only with agents you trust.
 
 Site badges show detected or reported sign-ins, not every saved login.
 
