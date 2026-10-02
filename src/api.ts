@@ -2,6 +2,8 @@ import type { Express, NextFunction, Request, Response } from "express";
 import { config } from "./config.js";
 import { Err, errorBody, statusOf, AppError } from "./errors.js";
 import {
+  DEFAULT_AGENT_SCOPES,
+  OPT_IN_SCOPES,
   authenticateBearer,
   createAgent,
   createAdminSession,
@@ -559,6 +561,11 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
         labels: safeLabels(a.labels_json),
         browserCount: browsers.list({ ownerType: "agent", ownerId: a.id }).length,
       })),
+      // The dashboard offers these when it creates an agent and when it edits one, in the
+      // consent page's words. `scopes` on create replaces the defaults rather than adding to
+      // them, so a form that grants one permission has to send the defaults alongside it.
+      permissions: OPT_IN_SCOPES,
+      defaultScopes: DEFAULT_AGENT_SCOPES,
     });
   });
 

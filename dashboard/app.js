@@ -82,7 +82,10 @@ function askFor(title, fields, submitLabel, submit) {
           e.preventDefault();
           if (submitting) return;
           const out = {};
-          for (const [name, el] of inputs) out[name] = el.dataset.preserveWhitespace ? el.value : el.value.trim();
+          for (const [name, el] of inputs) {
+            const value = el.value;
+            out[name] = typeof value !== "string" || el.dataset.preserveWhitespace ? value : value.trim();
+          }
           submitting = true;
           const button = form.querySelector('button[type="submit"]');
           button.disabled = true;
@@ -100,6 +103,12 @@ function askFor(title, fields, submitLabel, submit) {
           inputs.set(f.name, picker.field);
           form.append(h("label", { for: id }, f.label), picker.select, picker.text);
           if (f.hint) form.append(h("div", { class: "sub field-hint" }, f.hint));
+          continue;
+        }
+        if (f.kind === "scopes") {
+          const picker = scopePicker(f, id);
+          inputs.set(f.name, picker.field);
+          form.append(picker.el);
           continue;
         }
         const input = f.options ? h("select", { id, name: f.name, required: !!f.required },
@@ -153,6 +162,49 @@ function projectPicker(f, id) {
     ...knownProjects(f.value).map(name => h("option", { value: name, selected: name === f.value }, name)),
     h("option", { value: NEW }, "New project…"));
   return { select, text, field: { dataset: {}, get value() { return select.value === NEW ? text.value : select.value; } } };
+}
+
+/**
+ * The permissions an agent does not get by default, as one list of boxes. Creating an agent and
+ * changing one later share it, so a permission reads the same in both places, and the words come
+ * from the server, so they are the OAuth consent page's words too.
+ *
+ * Granting one used to be possible only after the agent existed, from two separate editors, and
+ * the tunnel permission had no control anywhere in the dashboard.
+ */
+function scopePicker(f, id) {
+  const held = new Set(f.value || []);
+  const boxes = state.permissions.map((p, i) => {
+    const boxId = `${id}-${i}`;
+    // The whole row is the label so it is easy to hit, but a screen reader should hear the
+    // permission as the name and its consequence as the description, not one long name.
+    const box = h("input", {
+      type: "checkbox", id: boxId, value: p.scope, checked: held.has(p.scope) ? "checked" : false,
+      "aria-labelledby": `${boxId}-label`, "aria-describedby": `${boxId}-detail`,
+    });
+    return h("li", {}, box, h("label", { for: boxId },
+      h("span", { id: `${boxId}-label` }, p.label),
+      h("span", { class: "sub", id: `${boxId}-detail` }, p.detail)));
+  });
+  return {
+    el: h("fieldset", { class: "scope-picker" },
+      h("legend", {}, f.label),
+      f.hint ? h("div", { class: "sub field-hint" }, f.hint) : null,
+      boxes.length
+        ? h("ul", { class: "scope-pick" }, boxes)
+        : h("p", { class: "sub" }, f.unavailable || "Permissions did not load. Reload the page to try again.")),
+    field: { dataset: {}, get value() { return boxes.map((li) => li.firstChild).filter((b) => b.checked).map((b) => b.value); } },
+  };
+}
+
+/**
+ * The scopes to save: every scope the form does not show, kept exactly as the agent has it, plus
+ * the boxes ticked. A connector can be approved with part of its browser control unticked, and
+ * saving its permissions here must not quietly hand that back.
+ */
+function scopesWith(current, ticked) {
+  const shown = new Set(state.permissions.map((p) => p.scope));
+  return [...current.filter((s) => !shown.has(s)), ...ticked];
 }
 
 /**
@@ -469,6 +521,9 @@ const state = {
   me: null,
   browsers: [],
   agents: [],
+  // What an agent can be granted beyond its defaults, in the operator's words, and the defaults.
+  permissions: [],
+  defaultScopes: [],
   seeds: [],
   status: null,
   filter: "",
@@ -2496,8 +2551,7 @@ async function agentsView() {
     h("td", { title: a.lastSeenAt || false },
       a.lastSeenAt ? ago(a.lastSeenAt) : h("span", { class: "sub" }, "Never used")),
     h("td", {},
-      h("button", { class: "btn", onClick: () => editProfilePermissions(a) }, "Profile permissions"), " ",
-      h("button", { class: "btn", onClick: () => editLendingPermissions(a) }, "Lending"), " ",
+      h("button", { class: "btn", onClick: () => editPermissions(a) }, "Permissions"), " ",
       // A connector has no dashboard token to rotate; its credentials come from the grant.
       isConnector(a) ? null : h("button", { class: "btn", onClick: () => rotate(a.id) }, "Rotate"),
       " ",
@@ -2661,43 +2715,24 @@ function editSeedSites(seed) {
 }
 
 /**
- * Whether this agent may take part in agent-to-agent lending.
+ * Everything an agent may do beyond its own browsers, in one editor. Saved profiles and lending
+ * used to be two editors with their own wording, and the tunnel permission had none.
  *
- * Neither of these is needed to ask YOU for one of your browsers: that goes through the
- * requests panel on Browsers and an approval there is the whole permission. These two are
- * about agents lending to each other behind your back, which is a live credential transfer
- * between two things you are not watching, and so stays off unless you say otherwise.
+ * Neither lending permission is needed to ask YOU for one of your browsers: that goes through
+ * the requests panel on Browsers and an approval there is the whole permission. They are about
+ * agents lending to each other behind your back, so they stay off unless you say otherwise.
  */
-async function editLendingPermissions(agent) {
-  const options = [{ value: "no", label: "Not allowed" }, { value: "yes", label: "Allowed" }];
-  const answers = await askFor(`Lending \u00b7 ${agent.name}`, [
-    { name: "borrow", label: "Borrow other agents' browsers", value: agent.scopes.includes("browser:borrow") ? "yes" : "no", options,
-      hint: "Lets it ask another agent for a browser and use one it is lent, logins included. Not needed to ask you for one of yours." },
-    { name: "lend", label: "Lend its own browsers out", value: agent.scopes.includes("browser:lend") ? "yes" : "no", options,
-      hint: "Lets it answer requests for browsers it owns, and turn on lending when idle. Its own browsers only; never yours." },
-  ], "Save permissions", async values => {
-    const scopes = agent.scopes.filter(scope => !["browser:borrow", "browser:lend"].includes(scope));
-    if (values.borrow === "yes") scopes.push("browser:borrow");
-    if (values.lend === "yes") scopes.push("browser:lend");
-    await api(`/api/v1/agents/${agent.id}`, { method: "PATCH", body: { scopes } });
+async function editPermissions(agent) {
+  if (!state.permissions.length) { flash("Permissions did not load. Reload the page and try again."); return; }
+  // The legend reads straight into each box: "Also allow it to / Load saved profiles".
+  const answers = await askFor(`Permissions · ${agent.name}`, [
+    { name: "scopes", kind: "scopes", label: "Also allow it to", value: agent.scopes },
+  ], "Save permissions", async (values) => {
+    await api(`/api/v1/agents/${agent.id}`, { method: "PATCH", body: { scopes: scopesWith(agent.scopes, values.scopes) } });
   });
-  if (answers) { await render(); flash(`Lending permissions saved for ${agent.name}.`, true); }
-}
-
-async function editProfilePermissions(agent) {
-  const options = [{ value: "no", label: "Not allowed" }, { value: "yes", label: "Allowed" }];
-  const answers = await askFor(`Profile permissions · ${agent.name}`, [
-    { name: "load", label: "Load saved profiles", value: agent.scopes.includes("seed:use") ? "yes" : "no", options,
-      hint: "Lets this agent copy every login in any saved profile. Grant only to agents you trust with those accounts." },
-    { name: "write", label: "Save and update profiles", value: agent.scopes.includes("seed:write") ? "yes" : "no", options,
-      hint: "Lets it publish logins from its own browsers and overwrite their linked shared profiles. Other agents' future copies will use those changes. Borrowed browsers cannot be exported." },
-  ], "Save permissions", async values => {
-    const scopes = agent.scopes.filter(scope => !["seed:use", "seed:write"].includes(scope));
-    if (values.load === "yes") scopes.push("seed:use");
-    if (values.write === "yes") scopes.push("seed:write");
-    await api(`/api/v1/agents/${agent.id}`, { method: "PATCH", body: { scopes } });
-  });
-  if (answers) { await render(); flash(`Profile permissions saved for ${agent.name}.`, true); }
+  // A live session re-reads its scopes on every request (mcp.ts), so nothing has to reconnect --
+  // which is the first thing to wonder after taking a permission away from a running agent.
+  if (answers) { await render(); flash(`Permissions saved for ${agent.name}. They apply from its next request, with the same token.`, true); }
 }
 
 async function deleteSavedProfile(profile) {
@@ -3081,19 +3116,30 @@ async function saveProfileTemplate(b, saved = null, asNew = false) {
   });
 }
 
+/**
+ * Name the agent and choose what it may do, in one form. Permissions used to wait until the agent
+ * existed, so an agent meant to load saved profiles took a create, a token, a trip back to its row
+ * and a second form. The request runs inside the form, so a failure leaves the boxes ticked.
+ */
 async function createAgent() {
+  let created = null;
   const answers = await askFor("New agent", [
-    { name: "name", label: "Name", value: "Development Agent", hint: "Shown wherever this agent's browsers appear." },
-  ], "Create agent");
-  const name = answers && answers.name;
-  if (!name) return;
-  await act(async () => {
-    const created = await api("/api/v1/agents", { method: "POST", body: { name } });
-    await refresh();
-    void render();
-    revealToken(`Token for ${name}`, created.token, {
-      command: `claude mcp add --transport http tallylamp ${location.origin}/mcp --header "Authorization: Bearer ${created.token}"`,
-    });
+    { name: "name", label: "Name", value: "Development Agent", required: true, hint: "Shown wherever this agent's browsers appear." },
+    { name: "scopes", kind: "scopes", label: "Permissions", value: [],
+      hint: "It can always create, start, stop and drive browsers of its own. Tick anything else it needs.",
+      unavailable: "Permissions did not load. Reload to choose them now, or create the agent and add them later from its row." },
+  ], "Create agent", async (values) => {
+    // `required` lets a name of only spaces through, and it trims to nothing.
+    if (!values.name) throw new Error("Give the agent a name.");
+    // `scopes` replaces the defaults on the server rather than adding to them.
+    created = await api("/api/v1/agents", { method: "POST", body: { name: values.name, scopes: scopesWith(state.defaultScopes, values.scopes) } });
+  });
+  if (!answers || !created) return;
+  void render();
+  const granted = state.permissions.filter((p) => answers.scopes.includes(p.scope)).map((p) => p.label);
+  revealToken(`Token for ${answers.name}`, created.token, {
+    command: `claude mcp add --transport http tallylamp ${location.origin}/mcp --header "Authorization: Bearer ${created.token}"`,
+    note: granted.length ? `Also allowed: ${granted.join(", ")}. Change this any time from Permissions on its row.` : undefined,
   });
 }
 
@@ -3229,7 +3275,11 @@ async function refresh() {
   if (workers.status === "fulfilled") state.workers = workers.value.workers;
   if (status.status === "fulfilled") state.status = status.value;
   if (browsers.status === "fulfilled") state.browsers = browsers.value.browsers;
-  if (agents.status === "fulfilled") state.agents = agents.value.agents;
+  if (agents.status === "fulfilled") {
+    state.agents = agents.value.agents;
+    state.permissions = agents.value.permissions || [];
+    state.defaultScopes = agents.value.defaultScopes || [];
+  }
   if (seeds.status === "fulfilled") state.seeds = seeds.value.seeds;
   if (requests.status === "fulfilled") state.requests = requests.value.requests;
   const failed = [

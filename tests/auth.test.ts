@@ -1,6 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
+import { AGENT_SCOPES } from "../src/auth.js";
 
 let ctx: TestCtx;
 
@@ -64,6 +65,29 @@ describe("authentication", () => {
     });
     const r = await json(`${ctx.url}/api/v1/browsers`, { headers: { Authorization: `Bearer ${token}` } });
     assert.equal(r.status, 401);
+  });
+
+  it("offers every non-default scope as a permission the dashboard can grant at creation", async () => {
+    const list = await json(`${ctx.url}/api/v1/agents`, { headers: { Cookie: ctx.cookie } });
+    const { permissions, defaultScopes } = list.body as {
+      permissions: { scope: string; label: string; detail: string }[];
+      defaultScopes: string[];
+    };
+    // A scope that is neither a default nor offered can only be granted through the raw API.
+    // That is how browser:tunnel went without a dashboard control.
+    assert.deepEqual([...defaultScopes, ...permissions.map((p) => p.scope)].sort(), [...AGENT_SCOPES].sort());
+    for (const p of permissions) assert.ok(p.label && p.detail, `${p.scope} says what it hands over`);
+
+    const created = await json(`${ctx.url}/api/v1/agents`, {
+      method: "POST",
+      headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "loads profiles", scopes: [...defaultScopes, "seed:use"] }),
+    });
+    assert.equal(created.status, 201);
+    const { scopes } = (created.body as { agent: { scopes: string[] } }).agent;
+    assert.ok(scopes.includes("seed:use"), "granted on the create form, not afterwards");
+    assert.ok(scopes.includes("browser:create"), "still drives its own browsers");
+    assert.ok(!scopes.includes("seed:write"), "nothing it was not given");
   });
 
   it("serves standalone favicons without leaking markup into the dashboard", async () => {

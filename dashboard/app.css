@@ -817,6 +817,9 @@ body.busy::before {
   width: min(560px, 92vw); background: var(--surface);
   border: 1px solid var(--line-strong); border-radius: 12px;
   padding: 1.2rem; box-shadow: var(--shadow);
+  /* A form taller than the screen, like New agent with its permissions on a phone, ran off both
+     edges with nothing to scroll: the backdrop is fixed and centres the box. */
+  max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem); overflow-y: auto;
 }
 .modal-box h2 { margin: 0 0 0.3rem; font-size: 1.05rem; }
 .token {
@@ -865,13 +868,26 @@ body.busy::before {
 .agent-picker { border: 0; padding: 0; margin: 0.6rem 0 0; min-width: 0; }
 .agent-picker legend { color: var(--muted); font-size: 0.85rem; padding: 0; margin-bottom: 0.4rem; }
 .agent-picker .pick-any, .agent-pick li { display: flex; align-items: flex-start; gap: 0.55rem; }
-.agent-picker input[type="checkbox"] { margin: 0.2rem 0 0; flex: none; width: 1rem; height: 1rem; accent-color: var(--primary); }
+.agent-picker input[type="checkbox"] { margin: 0.2rem 0 0; padding: 0; flex: none; width: 1rem; height: 1rem; min-height: 0; accent-color: var(--primary); }
 .agent-picker label { color: var(--text); font-size: 0.9rem; margin: 0; cursor: pointer; }
 .agent-picker label .sub { display: block; margin: 0; font-size: 0.78rem; }
 .agent-picker .pick-any { padding-bottom: 0.6rem; margin-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
 .agent-pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; max-height: 22rem; overflow-y: auto; }
 .agent-pick input:disabled + label { color: var(--muted); }
 .linked-access .row { margin-top: 0.7rem; }
+
+/* An agent's permissions, on New agent and on Permissions. The agent picker's shape: the fieldset
+   groups, the modal frames. Each consequence sits inside its label, so the whole row is the
+   target. Two classes deep because `.modal-box form label` would otherwise mute every row. */
+.scope-picker { border: 0; padding: 0; margin: 0.6rem 0 0; min-width: 0; }
+.scope-picker legend { color: var(--muted); font-size: 0.85rem; padding: 0; }
+.scope-picker .scope-pick { list-style: none; margin: 0.7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.scope-picker .scope-pick li { display: flex; align-items: flex-start; gap: 0.6rem; }
+/* min-height: the text-field rule above makes every input 32px tall, which dropped the box to the
+   middle of a two-line row instead of beside the permission's name. */
+.scope-picker .scope-pick input[type="checkbox"] { margin: 0.2rem 0 0; padding: 0; flex: none; width: 1rem; height: 1rem; min-height: 0; accent-color: var(--primary); }
+.scope-picker .scope-pick label { color: var(--text); font-size: 0.9rem; font-weight: 500; margin: 0; cursor: pointer; }
+.scope-picker .scope-pick label .sub { display: block; margin: 0.15rem 0 0; font-size: 0.8rem; font-weight: 400; line-height: 1.45; }
 
 /* The Agents page groups by liveness rather than listing everything at one weight. The token
    policy that used to sit above the table folds away here too: it is a rule you read once, and

@@ -5,6 +5,7 @@ import { getDb, nowIso } from "./db.js";
 import {
   AGENT_SCOPES,
   DEFAULT_AGENT_SCOPES,
+  OPT_IN_SCOPES,
   createConnectorAgent,
   getAgent,
   issueCredential,
@@ -425,45 +426,12 @@ function consentTokenValid(expected: string, supplied: string): boolean {
 }
 
 /**
- * What each scope actually hands over, in the operator's words rather than the wire's.
- *
- * The consent form used to render `AGENT_SCOPES` as bare monospace ids, which asked the one
- * person who can refuse this grant to know that `seed:use` means "copy every login in every
- * saved profile". The dashboard already had those sentences on its Profile permissions modal;
- * they belong here too, because this is the screen where the decision is actually made.
- *
- * The wording is deliberately the same on both screens. An operator who reads "Load saved
- * profiles" here and something else in the dashboard has to work out whether they are looking
- * at one permission or two.
+ * The `browser:*` scopes: what a connector needs to be a connector at all. Everything else is in
+ * `OPT_IN_SCOPES`, with the sentence that says what it hands over. The consent form used to
+ * render `AGENT_SCOPES` as bare monospace ids, which asked the one person who can refuse this
+ * grant to know that `seed:use` means "copy every login in every saved profile".
  */
-const SCOPE_COPY: Record<string, { label: string; detail: string }> = {
-  "seed:use": {
-    label: "Load saved profiles",
-    detail: "Copies every login inside any saved profile into a browser it controls. Grant this only if you trust this client with those accounts.",
-  },
-  "seed:write": {
-    label: "Save and update profiles",
-    detail: "Publishes the logins from its own browsers into saved profiles, and overwrites the linked profile other agents copy from.",
-  },
-  "browser:lend": {
-    label: "Lend its browsers to other agents",
-    detail: "Hands over a live browser rather than a copy, so the borrower gets every session still signed in.",
-  },
-  "browser:borrow": {
-    label: "Borrow browsers from other agents",
-    detail: "Takes control of browsers whose owner turned on Lend when idle, session cookies included.",
-  },
-  "browser:tunnel": {
-    label: "Reach private addresses on this machine",
-    detail: "Points a browser at localhost on the computer running Tallylamp, which the egress proxy otherwise refuses.",
-  },
-};
-
-/** The eight `browser:*:own` scopes: what a connector needs to be a connector at all. */
-const BASE_SCOPES = AGENT_SCOPES.filter((s) => !(s in SCOPE_COPY));
-
-/** The five held out of `DEFAULT_AGENT_SCOPES`, in the order they are worth thinking about. */
-const SENSITIVE_SCOPES = AGENT_SCOPES.filter((s) => s in SCOPE_COPY);
+const BASE_SCOPES = AGENT_SCOPES.filter((s) => !OPT_IN_SCOPES.some((o) => o.scope === s));
 
 const PAGE_CSS = `
   body { margin:0; min-height:100vh; display:grid; place-items:center; background:#0c1014; color:#fdffff;
@@ -542,8 +510,7 @@ function consentPage(opts: {
 
   // The five that hand over logins get a sentence each and a checkbox of their own. They are
   // the whole decision on this page; everything else is bookkeeping.
-  const sensitive = SENSITIVE_SCOPES.map((s) => {
-    const copy = SCOPE_COPY[s]!;
+  const sensitive = OPT_IN_SCOPES.map(({ scope: s, ...copy }) => {
     const asked = opts.askedScopes.includes(s)
       ? `\n        <p class="asked">Requested by this client</p>`
       : "";

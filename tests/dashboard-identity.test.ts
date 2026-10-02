@@ -34,3 +34,23 @@ test("browser metadata editing is not labelled as saved-profile editing", () => 
   assert.ok(source.includes('label: "Browser name"'));
   assert.ok(source.includes('class: "browser-id"'));
 });
+
+const scopesWithStart = source.indexOf("function scopesWith(");
+const scopesWithFunction = source.slice(scopesWithStart, source.indexOf("\n}\n", scopesWithStart) + 2);
+const scopesWith = runInNewContext(`${scopesWithFunction}; scopesWith`, {
+  state: { permissions: [{ scope: "seed:use" }, { scope: "seed:write" }, { scope: "browser:lend" }] },
+}) as (current: string[], ticked: string[]) => string[];
+
+test("a new agent gets its defaults plus exactly the permissions ticked", () => {
+  // Spread: arrays made inside the vm context have another realm's prototype.
+  assert.deepEqual([...scopesWith(["browser:create", "browser:control:own"], ["seed:use"])],
+    ["browser:create", "browser:control:own", "seed:use"]);
+  assert.deepEqual([...scopesWith(["browser:create"], [])], ["browser:create"]);
+});
+
+test("saving permissions changes only the scopes the form shows", () => {
+  // A connector approved without browser:delete:own must not get it back from this form, and
+  // unticking lending must not take seed:write with it.
+  assert.deepEqual([...scopesWith(["browser:create", "browser:lend", "seed:write"], ["seed:write", "seed:use"])],
+    ["browser:create", "seed:write", "seed:use"]);
+});

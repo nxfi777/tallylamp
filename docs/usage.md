@@ -153,8 +153,10 @@ scopes such as `browser:create` and `browser:list:own`.
 Five scopes require an explicit grant: `seed:use`, `seed:write`, `browser:lend`,
 `browser:borrow`, and `browser:tunnel`. They allow access to copied logins,
 shared profile updates, another agent's browser, or a private network address.
-Use **Agents → Profile permissions** for the first two and **Agents → Lending**
-for the next two, or set scopes with `PATCH /api/v1/agents/:id`.
+Tick any of them under **Permissions** when you create the agent with **New
+agent**, change them later with **Permissions** on its row in **Agents**, or set
+scopes with `PATCH /api/v1/agents/:id`. A running agent picks up a change on its
+next request and keeps its token.
 
 `browser:borrow` and `browser:lend` cover lending *between agents*. Neither is
 needed for an agent to ask **you** for a browser you own: that request appears in

@@ -50,6 +50,46 @@ export const DEFAULT_AGENT_SCOPES = AGENT_SCOPES.filter(
   (s) => s !== "seed:use" && s !== "seed:write" && s !== "browser:lend" && s !== "browser:borrow" && s !== "browser:tunnel",
 );
 
+/**
+ * What each scope held out of `DEFAULT_AGENT_SCOPES` hands over, in the operator's words rather
+ * than the wire's, in the order they are worth thinking about.
+ *
+ * The OAuth consent page and the dashboard's agent forms both render from this one list. They
+ * used to carry a copy each and the copies drifted: the dashboard said "Lend its own browsers
+ * out" where the consent page said "Lend its browsers to other agents", and `browser:tunnel`
+ * never got a dashboard control at all. An operator who meets two wordings has to work out
+ * whether they are looking at one permission or two.
+ */
+export const OPT_IN_SCOPES: readonly { scope: AgentScope; label: string; detail: string }[] = [
+  {
+    scope: "seed:use",
+    label: "Load saved profiles",
+    detail: "Copies every login inside any saved profile into a browser it controls. Grant this only if you trust this agent with those accounts.",
+  },
+  {
+    scope: "seed:write",
+    label: "Save and update profiles",
+    detail: "Publishes the logins from its own browsers into saved profiles, and overwrites the linked profile other agents copy from.",
+  },
+  {
+    scope: "browser:lend",
+    label: "Lend its browsers to other agents",
+    detail: "Hands over a live browser rather than a copy, so the borrower gets every session still signed in. Its own browsers only, never yours.",
+  },
+  {
+    scope: "browser:borrow",
+    label: "Borrow browsers from other agents",
+    detail: "Takes control of browsers whose owner turned on Lend when idle, session cookies included. Not needed to ask you for one of yours.",
+  },
+  {
+    // The tunnel ends on whichever machine runs the tunnel command -- usually the operator's
+    // laptop, and on a hosted deployment never the computer Tallylamp itself runs on.
+    scope: "browser:tunnel",
+    label: "Reach private addresses on your machine",
+    detail: "Lets one of its browsers reach a private port, such as localhost:3000, on the machine that runs the tunnel command. Private addresses are refused otherwise.",
+  },
+];
+
 export type Principal =
   | { type: "admin"; id: "admin"; name: "Administrator"; scopes: string[] }
   | { type: "agent"; id: string; name: string; scopes: string[]; maxBrowsers: number; enabled: boolean; labels: Record<string, string> };

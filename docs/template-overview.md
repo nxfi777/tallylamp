@@ -172,7 +172,8 @@ stay independent; updates affect future copies only. A snapshot contains all
 saved logins, not just the sites listed in the inventory.
 
 Agents can load, modify, and update profiles through MCP. Enable loading and
-saving separately under **Agents → Profile permissions**. Saving requires
+saving separately when you create the agent, or later with **Agents →
+Permissions**. Saving requires
 `seed:write`; borrowing a browser never permits exporting its logins. Saved
 profiles contain every login, so share them only with agents you trust.
 
