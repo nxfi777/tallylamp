@@ -78,12 +78,18 @@ function scopeLine(t) {
   return parts.filter(Boolean).join(" · ");
 }
 
+/** Chrome reports whatever icon a page names, and this panel may load only some of them. A page
+    belonging to another extension names an icon inside that extension (daily.dev's new tab
+    does), which Chrome refuses to load here and files on chrome://extensions as an error against
+    Tallylamp Link. chrome:// and file:// icons are refused the same way. */
+const loadable = (icon) => /^(https?|data):/.test(icon ?? "");
+
 function tabLine(tab, caption) {
   const host = siteOf(tab.url);
   return h("div", { class: "tab" },
     // A round letter, never an empty rounded square: that is exactly what an unticked
     // checkbox looks like, and there is a real checkbox directly underneath.
-    tab.favIconUrl ? h("img", { src: tab.favIconUrl, alt: "" }) : h("span", { class: "fav", "aria-hidden": "true" }, (host ?? "·").slice(0, 1).toUpperCase()),
+    loadable(tab.favIconUrl) ? h("img", { src: tab.favIconUrl, alt: "" }) : h("span", { class: "fav", "aria-hidden": "true" }, (host ?? "·").slice(0, 1).toUpperCase()),
     h("div", { class: "words" },
       h("div", { class: "title" }, tab.title || "Untitled tab"),
       h("div", { class: "host" }, caption ?? host ?? "A page built into the browser"),
