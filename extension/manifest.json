@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Tallylamp Link",
   "short_name": "Tallylamp",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "Share one tab of your browser with an AI agent on your own Tallylamp server. You pick the tab, and one click takes it back.",
   "homepage_url": "https://tallylamp.dev",
   "minimum_chrome_version": "125",
