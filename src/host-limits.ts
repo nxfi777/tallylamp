@@ -192,6 +192,18 @@ export function launchEstimate(measured: number | null | undefined, fallback = c
 }
 
 /**
+ * What a refusal for room adds when the browser's own measurement is what keeps it out: sized
+ * from an earlier start it does not fit, where a browser never measured would. Only the
+ * administrator can reset its counts, so this names who can, and an agent that reads it has
+ * something to tell its user rather than something to retry. `unmeasured` is what the start
+ * would need after a reset; `room` is what the host has for it now.
+ */
+export function resetHint(need: number, room: number, unmeasured = config.browserThreads): string {
+  if (need <= unmeasured || room < unmeasured) return "";
+  return "That estimate comes from an earlier start. If it needs less now, the administrator can reset its thread counts on its page. ";
+}
+
+/**
  * The room a running browser should be allowed to grow into before anything is shed to keep
  * it alive. Its own peak plus a tenth; never less than it launched at.
  */

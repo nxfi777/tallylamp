@@ -9,6 +9,7 @@ import {
   growthTarget,
   launchEstimate,
   readPidLimit,
+  resetHint,
   scanProcesses,
   type PidLimit,
   type Usage,
@@ -125,6 +126,21 @@ export class Capacity {
     this.fleet.recordThreads(id, launch, t.peak > 0 ? t.peak : null);
   }
 
+  /**
+   * A running browser whose thread counts were reset: what it has reached so far is forgotten,
+   * and it is measured again from now. Its launch peak is left to its next start, because what
+   * is left of this start's first minute is not a whole launch.
+   */
+  forget(id: string): void {
+    const t = this.tracks.get(id);
+    if (!t) return;
+    t.launchPeak = 0;
+    t.launchSaved = true;
+    t.peak = 0;
+    t.savedPeak = 0;
+    this.forceScans = Math.max(this.forceScans, 1);
+  }
+
   /** The start has launched or failed; either way it is no longer held at its estimate. */
   release(id: string): void {
     this.launching.delete(id);
@@ -202,8 +218,10 @@ export class Capacity {
     let queued = false;
     for (;;) {
       // Re-read every pass. A browser pinned while its start is waiting must be admitted as
-      // pinned: in 0.9.0 a pin made mid-wait changed nothing until the next start.
+      // pinned: in 0.9.0 a pin made mid-wait changed nothing until the next start. One whose
+      // thread counts were reset while it waited is sized afresh.
       me.pinned = this.fleet.row(id).pinned === 1;
+      me.need = this.estimate(id);
       const pids = readPidLimit();
       if (!pids) return;
       const held = this.holds(me).total;
@@ -463,6 +481,7 @@ export class Capacity {
       `This host is out of room for ${name}: ${pids.current} of ${pids.max} processes and threads are in use` +
       (held > 0 ? `, ${held} more are held for pinned browsers and starts in progress` : "") +
       `, and ${name} needs about ${need}. ` +
+      resetHint(need, pids.max - pids.current - config.processHeadroom - held) +
       (waitedMs > 0 ? `It waited ${Math.round(waitedMs / 1000)} seconds for room. ` : "") +
       (top.length ? `The largest running browsers are ${top.join(", ")}. ` : "") +
       `Stop a browser you are not using, then start this one.`

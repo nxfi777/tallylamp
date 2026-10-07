@@ -1300,6 +1300,16 @@ function switchButton(label, on, { disabled, title, onToggle }) {
   return el;
 }
 
+/** What a browser uses of the host's processes and threads, and what its next start is sized at. */
+function threadsStatus(b) {
+  const used = b.threads != null
+    ? `Using ${b.threads}${b.peakThreads ? `, and ${b.peakThreads} at most` : ""}. `
+    : b.peakThreads ? `It reached ${b.peakThreads} on its last run. ` : "";
+  return used + (b.launchThreads != null
+    ? `Its next start needs room for about ${b.startThreads}.`
+    : `Its launch is not measured yet, so its next start is assumed to need about ${b.startThreads}.`);
+}
+
 /**
  * Proxy, extensions, agent control and lending, as four rows.
  *
@@ -1367,6 +1377,18 @@ function settingsSection(b) {
             flash(on ? `${b.name} is pinned.` : `${b.name} is no longer pinned.`);
             await refresh(); void render();
           }) })) : null,
+      // What it is sized at decides whether its next start is admitted, and one heavy run can
+      // leave it sized past what it needs. Only where a host has a ceiling to admit against.
+      b.kind !== "linked" && (state.status?.host?.pids || b.worker) ? settingRow("Processes and threads",
+        threadsStatus(b),
+        h("button", { class: "btn", "aria-label": "Reset thread counts",
+          disabled: b.launchThreads == null && b.peakThreads == null,
+          title: b.launchThreads == null && b.peakThreads == null ? "Nothing has been measured yet." : false,
+          // No flash: render() clears it, and the row's own sentence changes to say what follows.
+          onClick: () => act(async () => {
+            await api(`/api/v1/browsers/${id}/threads/reset`, { method: "POST" });
+            await refresh(); void render();
+          }) }, "Reset")) : null,
       settingRow("Lend when idle",
         b.lendable ? "On. A waiting agent can borrow it after a couple of idle minutes, logins included." : "Off. It is lent only when you say so.",
         switchButton("Lend when idle", b.lendable, {

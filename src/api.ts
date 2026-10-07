@@ -526,6 +526,10 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     res.json({ browser: browsers.publicView(browsers.setPinned(req.params.id, req.body.pinned, req.principal!)) });
   });
 
+  api.post("/api/v1/browsers/:id/threads/reset", requireAdmin, (req, res) => {
+    res.json({ browser: browsers.publicView(browsers.resetThreads(req.params.id, req.principal!)) });
+  });
+
   api.put("/api/v1/browsers/:id/agent-desktop", requireAdmin, (req, res) => {
     if (typeof req.body?.enabled !== "boolean") throw Err.invalid("enabled must be a boolean");
     res.json({ browser: browsers.publicView(browsers.updateAgentDesktop(req.params.id, req.body.enabled, req.principal!)) });

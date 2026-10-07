@@ -66,7 +66,7 @@ These apply only where the host sets a process ceiling, as Railway does. See
 | Name | Required | Notes |
 | --- | --- | --- |
 | `TALLYLAMP_ADMISSION_WAIT_SEC` | no | default 30. How long a start waits for room before it fails with `fleet_full`. `0` refuses at once. |
-| `TALLYLAMP_BROWSER_THREADS` | no | default 300. What a start is assumed to need before that browser has been measured. After its first start, its own launch peak plus a quarter and 25 is used. |
+| `TALLYLAMP_BROWSER_THREADS` | no | default 300. What a start is assumed to need before that browser has been measured, or after its thread counts are reset. After its first start, its own launch peak plus a quarter and 25 is used. |
 | `TALLYLAMP_PROCESS_HEADROOM` | no | default 50. Kept free at all times, so ffmpeg, xdotool and MCP bridges can still start. |
 | `TALLYLAMP_SHED_IDLE_SEC` | no | default 300. A browser unused this long, with nobody watching, may be stopped to make room. `0` never stops an idle browser for room. |
 | `TALLYLAMP_UNHEALTHY_RESTARTS` | no | default 3. Automatic restarts of a broken browser allowed in 30 minutes. Past that it is left running and reported `unhealthy`. |
@@ -92,7 +92,8 @@ The GPU process stayed at about 30 threads in every run.
 When this setting or the renderer limit changes, Tallylamp forgets each
 browser's measured thread counts on its next boot, and measures again on the
 browser's next start. Counts taken under the old setting would size a start
-wrongly.
+wrongly. To forget one browser's counts without changing a setting, reset it
+from its page; see [Isolating production browsers](#isolating-production-browsers).
 
 `--in-process-gpu` was an option in 0.9.x and is gone. Chrome 154 dies at launch
 with it here, before its debugging port opens. Turning site isolation off is
@@ -183,6 +184,13 @@ does instead:
 - It admits a start on the peak that browser reached in the first minute of
   its last start. When there is no room yet, the start waits for up to
   `TALLYLAMP_ADMISSION_WAIT_SEC`.
+- When one heavy run has left a browser sized past what it needs, **Reset**
+  under **Processes and threads** on its page forgets its counts, whether it
+  is running or stopped, and so does `POST /api/v1/browsers/{id}/threads/reset`.
+  It is measured again, and until a start of it has been measured, a start is
+  assumed to need `TALLYLAMP_BROWSER_THREADS`. Only the administrator can
+  reset a browser. When a start is refused for room and a reset would let it
+  in, the refusal says so, on a worker too, so an agent knows to ask you.
 - When room runs short it stops idle, unpinned browsers, largest first.
   Profiles and tabs are kept, and the browser starts again on its next use.
 - It finds a browser that lost its renderer zygote, or whose navigations all

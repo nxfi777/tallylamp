@@ -375,6 +375,8 @@ There is no fleet cap by default; `TALLYLAMP_MAX_BROWSERS` sets one, and
 `/api/v1/status` reports it (`null` when uncapped). An agent's cap of `0` means
 no per-agent cap. On a host with a process limit, such as Railway's 1,000, a start
 waits until the browser's measured launch peak fits, then fails with `fleet_full`.
+When an earlier measurement is what keeps it out, the error says the
+administrator can reset the browser's thread counts, which an agent cannot do.
 An administrator can pin a browser so room is held for it and other browsers are
 stopped before it runs short. A browser that loses its renderer zygote, or whose
 navigations all fail with `net::ERR_ABORTED`, shows `unhealthy` and is restarted.

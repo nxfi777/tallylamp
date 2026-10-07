@@ -297,6 +297,7 @@ export class Workers {
       `/worker/v1/browsers/${row.id}/start`,
       {
         estimate: launchEstimate(row.launch_threads),
+        unmeasuredEstimate: config.browserThreads,
         extensionsEnabled: Boolean(row.extensions_enabled),
         proxy: row.proxy_json ? JSON.parse(row.proxy_json) : null,
       },
@@ -508,6 +509,16 @@ export class Workers {
   /** Delete a browser's profile and downloads on its worker. Throws when the worker cannot confirm it. */
   async deleteBrowser(row: BrowserRow): Promise<void> {
     await this.call(this.row(row.worker_id!), "DELETE", `/worker/v1/browsers/${row.id}`);
+  }
+
+  /** Capacity.forget, for a browser running on a worker. */
+  forget(id: string): void {
+    const rec = this.remote.get(id);
+    if (!rec) return;
+    rec.launchPeak = 0;
+    rec.launchSaved = true;
+    rec.peak = 0;
+    rec.savedPeak = 0;
   }
 
   private gone(id: string, rec: RemoteBrowser): void {

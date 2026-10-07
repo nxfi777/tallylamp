@@ -91,6 +91,10 @@ export const openApiSpec = {
         requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["pinned"], properties: { pinned: { type: "boolean" } } } } } },
         responses: { "200": { description: "updated" }, "400": { description: "invalid input or a linked browser" }, "403": { description: "administrator required" } } },
     },
+    "/browsers/{id}/threads/reset": {
+      post: { summary: "Forget a managed browser's measured thread counts, launchThreads and peakThreads (administrator only). Works on a stopped browser. A running browser is measured again from now; its launch is measured on its next start, and until then a start is assumed to need TALLYLAMP_BROWSER_THREADS (startThreads). Use it when a browser was sized from an unusually heavy run and is refused starts it would fit.",
+        responses: { "200": { description: "reset" }, "400": { description: "a linked browser" }, "403": { description: "administrator required" } } },
+    },
     "/browsers/{id}/move": {
       post: { summary: "Move a stopped browser, profile and all, to a worker or back to the main instance (administrator only).",
         requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["workerId"], properties: { workerId: { type: ["string", "null"], description: "A worker's id, or null for the main instance." } } } } } },

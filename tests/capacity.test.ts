@@ -195,6 +195,78 @@ describe("host capacity", () => {
     assert.equal(ctx.browsers.runtime(busy.id), undefined, "and stopped the busy browser to do it");
   });
 
+  it("forgets a stopped browser's thread counts on reset, so a start it fits is admitted", async () => {
+    // A browser measured at 606 is sized at 606 * 1.25 + 25 = 783, and refused the 450 free.
+    const b = browser("oversized");
+    ctx.browsers.recordThreads(b.id, 606, 640);
+    pids(500);
+    await assert.rejects(ctx.browsers.ensureRunning(b.id), (e: { message?: string }) => /needs about 783/.test(e.message ?? ""));
+    const r = await json(`${ctx.url}/api/v1/browsers/${b.id}/threads/reset`, { method: "POST", headers: { Cookie: ctx.cookie } });
+    assert.equal(r.status, 200);
+    const view = (r.body as { browser: { launchThreads: number | null; peakThreads: number | null; startThreads: number } }).browser;
+    assert.deepEqual([view.launchThreads, view.peakThreads, view.startThreads], [null, null, 300]);
+    await ctx.browsers.ensureRunning(b.id);
+    assert.equal(ctx.browsers.row(b.id).status, "running");
+    const audited = getDb().prepare(`SELECT detail_json FROM audit_events WHERE action = 'browser.threads_reset' AND target_id = ?`).get(b.id) as
+      { detail_json: string } | undefined;
+    assert.deepEqual(JSON.parse(audited!.detail_json), { launchThreads: 606, peakThreads: 640 });
+  });
+
+  it("lets only the administrator reset a browser's thread counts", async () => {
+    const { agent, token } = createAgent({ name: "Resetter", scopes: DEFAULT_AGENT_SCOPES, maxBrowsers: 2 });
+    const own = ctx.browsers.create({ principal: agent, via: "control_api", name: "measured" });
+    ctx.browsers.recordThreads(own.id, 606, 640);
+    const r = await json(`${ctx.url}/api/v1/browsers/${own.id}/threads/reset`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    assert.ok(r.status === 401 || r.status === 403, `status ${r.status}`);
+    assert.equal(ctx.browsers.row(own.id).launch_threads, 606);
+  });
+
+  it("measures a running browser again from its reset, and its launch on its next start", async () => {
+    const b = browser("remeasured");
+    pids(100);
+    await ctx.browsers.ensureRunning(b.id);
+    measured.set(b.id, usage(400));
+    await ctx.browsers.capacity.sampleNow();
+    assert.equal(ctx.browsers.row(b.id).peak_threads, 400);
+    ctx.browsers.resetThreads(b.id, admin);
+    assert.equal(ctx.browsers.publicView(ctx.browsers.row(b.id)).peakThreads, null, "the peak this run had reached is forgotten too");
+    measured.set(b.id, usage(250));
+    await ctx.browsers.capacity.sampleNow();
+    assert.equal(ctx.browsers.row(b.id).peak_threads, 250, "the new peak is not held up by the old one");
+    // Stopped inside its first minute: without the reset, the 250 it reached would be kept as
+    // its launch peak. Part of a launch is not a launch.
+    await ctx.browsers.stop(b.id);
+    assert.equal(ctx.browsers.row(b.id).launch_threads, null);
+    assert.equal(ctx.browsers.row(b.id).peak_threads, 250);
+  });
+
+  it("admits a waiting start on its new size when its thread counts are reset", async () => {
+    process.env.TALLYLAMP_ADMISSION_WAIT_SEC = "10";
+    const b = browser("waiting oversized");
+    ctx.browsers.recordThreads(b.id, 606, 640); // needs 783, with 450 free
+    pids(500);
+    const started = ctx.browsers.ensureRunning(b.id);
+    await sleep(300);
+    assert.equal(ctx.browsers.row(b.id).status, "queued");
+    ctx.browsers.resetThreads(b.id, admin);
+    await started;
+    assert.equal(ctx.browsers.row(b.id).status, "running");
+  });
+
+  it("names the reset in a refusal only when a reset would let the browser in", async () => {
+    // An agent cannot reset a browser, so the refusal is how it learns to ask somebody who can.
+    const hint = /That estimate comes from an earlier start\. If it needs less now, the administrator can reset its thread counts on its page\./;
+    const b = browser("heavy once");
+    ctx.browsers.recordThreads(b.id, 606, 640); // sized at 783
+    const refusal = () => ctx.browsers.ensureRunning(b.id).then(() => assert.fail("the start was admitted"), (e: Error) => e.message);
+    pids(500); // 450 of room: 783 does not fit, and the 300 of a browser never measured would
+    assert.match(await refusal(), hint);
+    pids(800); // 150 of room: a reset would not let it in either
+    assert.doesNotMatch(await refusal(), /reset/);
+    ctx.browsers.resetThreads(b.id, admin);
+    assert.doesNotMatch(await refusal(), /reset/, "a browser never measured has nothing to reset");
+  });
+
   it("never stops a browser that is in use to start an unpinned one", async () => {
     const busy = browser("active test");
     pids(100);

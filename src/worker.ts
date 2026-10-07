@@ -15,7 +15,7 @@ import { chromeVersion, clearSingletonLocks, launchChrome, stopRuntime, type Chr
 import { startFakeChrome } from "./fake-chrome.js";
 import { startEgressProxy, type EgressProxy } from "./egress-proxy.js";
 import { parseBrowserProxy } from "./browser-proxy.js";
-import { browserUsage, readPidLimit, scanProcesses, type PidLimit } from "./host-limits.js";
+import { browserUsage, readPidLimit, resetHint, scanProcesses, type PidLimit } from "./host-limits.js";
 import { forwardHttp, forwardUpgrade } from "./relay.js";
 import { hostLooksPrivate } from "./ssrf.js";
 import { MAX_CHUNK, TunnelMux } from "./tunnels.js";
@@ -45,7 +45,13 @@ export type WorkerBrowserState = {
   startedAt: string;
 };
 export type WorkerState = { version: string; name: string; pids: PidLimit | null; fullBrowser: boolean; browsers: WorkerBrowserState[] };
-export type WorkerStartRequest = { estimate?: number; extensionsEnabled?: boolean; proxy?: unknown };
+export type WorkerStartRequest = {
+  estimate?: number;
+  /** What the start would need had its thread counts been reset: the main instance's default. */
+  unmeasuredEstimate?: number;
+  extensionsEnabled?: boolean;
+  proxy?: unknown;
+};
 export type WorkerStartResult = {
   sandboxStatus: SandboxStatus;
   gpuStatus: GpuStatus;
@@ -172,6 +178,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
       if (room < need) {
         throw new Refused(429, "fleet_full",
           `Worker ${opts.name} is out of room: ${pids.current} of ${pids.max} processes and threads are in use, and this browser needs about ${need}. ` +
+            resetHint(need, room, Number(body.unmeasuredEstimate) || config.browserThreads) +
             `Stop a browser on this worker, or move this one to a host with more room.`, true);
       }
     }

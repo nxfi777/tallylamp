@@ -291,6 +291,34 @@ describe("workers", () => {
     }
   });
 
+  it("says when a reset would let a browser into its worker's room, and only then", async () => {
+    // The worker checks a start against its own limit, so it is the worker that has to say so.
+    // Here it reads the same fake cgroup as this instance, which does not check a worker's
+    // browser against its own room at all.
+    const cgroup = mkdtempSync(path.join(os.tmpdir(), "tallylamp-cgroup-"));
+    dirs.push(cgroup);
+    const pids = (current: number) => {
+      writeFileSync(path.join(cgroup, "pids.max"), "1000\n");
+      writeFileSync(path.join(cgroup, "pids.current"), `${current}\n`);
+      writeFileSync(path.join(cgroup, "pids.events"), "max 0\n");
+    };
+    const row = browserOn(worker.identity.workerId, "heavy on the worker");
+    ctx.browsers.recordThreads(row.id, 606, 640); // sized at 783
+    const refusal = () => ctx.browsers.ensureRunning(row.id)
+      .then(() => assert.fail("the start was admitted"), (e: { code?: string; message: string }) => `${e.code}: ${e.message}`);
+    process.env.TALLYLAMP_CGROUP_DIR = cgroup;
+    try {
+      pids(500); // 450 of room on the worker
+      const refused = await refusal();
+      assert.match(refused, /^fleet_full: Worker worker-a is out of room/);
+      assert.match(refused, /needs about 783\. That estimate comes from an earlier start\. If it needs less now, the administrator can reset its thread counts on its page\. Stop a browser/);
+      pids(800); // 150: a reset would not let it in either
+      assert.doesNotMatch(await refusal(), /reset/);
+    } finally {
+      delete process.env.TALLYLAMP_CGROUP_DIR;
+    }
+  });
+
   it("relays a refusal as a refusal", async () => {
     // A relay that cannot reach its target answers 502 with a reason, not a hang.
     const http = await import("node:http");

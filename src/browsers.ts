@@ -8,6 +8,7 @@ import { Err } from "./errors.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
 import { Capacity } from "./capacity.js";
+import { launchEstimate } from "./host-limits.js";
 import { Workers } from "./workers.js";
 import { PageCacheEvictor, type InUse } from "./page-cache.js";
 import { activity, audit, type AuditActor } from "./audit.js";
@@ -326,6 +327,29 @@ export class BrowserManager {
     getDb().prepare(`UPDATE browsers SET pinned = ? WHERE id = ?`).run(pinned ? 1 : 0, id);
     audit({ actorType: principal.type, actorId: principal.id, action: pinned ? "browser.pinned" : "browser.unpinned",
       targetType: "browser", targetId: id });
+    hub.emitEvent("browser.updated", {}, id);
+    return this.row(id);
+  }
+
+  /**
+   * Forget what this browser has used, so it is measured again: from now if it is running, and
+   * from its next start either way. For a browser sized from a run that no longer says what it
+   * needs, such as one that hit an unusually heavy page, which is otherwise refused starts it
+   * would fit, or has room held for it that it will not use. Stopped or running, on this host
+   * or a worker. Administrator only, as pinning is: a smaller estimate is room another
+   * browser's start was counting on.
+   */
+  resetThreads(id: string, principal: Principal): BrowserRow {
+    if (principal.type !== "admin") throw Err.unauthorized("only the administrator can reset a browser's thread counts");
+    this.assertManaged(id, "resetting thread counts");
+    const row = this.row(id);
+    const was = this.threadView(row);
+    getDb().prepare(`UPDATE browsers SET launch_threads = NULL, peak_threads = NULL WHERE id = ?`).run(id);
+    if (row.worker_id) this.workers.forget(id);
+    else this.capacity.forget(id);
+    log.info("browser thread counts reset", { id, name: row.name, launch: was.launchThreads, peak: was.peakThreads });
+    audit({ actorType: principal.type, actorId: principal.id, action: "browser.threads_reset", targetType: "browser", targetId: id,
+      detail: { launchThreads: was.launchThreads, peakThreads: was.peakThreads } });
     hub.emitEvent("browser.updated", {}, id);
     return this.row(id);
   }
@@ -1448,13 +1472,16 @@ export class BrowserManager {
     }
   }
 
-  private threadView(row: BrowserRow): { threads: number | null; peakThreads: number | null; launchThreads: number | null } {
-    if (row.kind === "linked") return { threads: null, peakThreads: null, launchThreads: null };
+  private threadView(row: BrowserRow): { threads: number | null; peakThreads: number | null; launchThreads: number | null; startThreads: number | null } {
+    if (row.kind === "linked") return { threads: null, peakThreads: null, launchThreads: null, startThreads: null };
+    // What its next start is admitted on: the launch peak plus a quarter and 25, or
+    // TALLYLAMP_BROWSER_THREADS until it has one. The figure a fleet_full error quotes.
+    const startThreads = launchEstimate(row.launch_threads);
     if (row.worker_id) {
-      return { threads: this.workers.usage(row.id)?.threads ?? null, peakThreads: row.peak_threads ?? null, launchThreads: row.launch_threads ?? null };
+      return { threads: this.workers.usage(row.id)?.threads ?? null, peakThreads: row.peak_threads ?? null, launchThreads: row.launch_threads ?? null, startThreads };
     }
     const { threads, peakThreads, launchThreads } = this.capacity.view(row.id);
-    return { threads, peakThreads, launchThreads };
+    return { threads, peakThreads, launchThreads, startThreads };
   }
 
   async recoverOnBoot(): Promise<void> {
