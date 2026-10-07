@@ -44,3 +44,14 @@ nothing on a worker.
 
 Install the new `tallylamp-link.zip`, or reload an unpacked copy, to get the
 side panel fix. A linked browser keeps working with the old extension.
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/37627257910)
+passed application tests, headed-Chrome tests, and running-container checks
+before publishing `ghcr.io/nxfi777/tallylamp:0.11.2` for Linux amd64, then
+attached `tallylamp-link.zip`. Anonymous registry access, the manifest digest,
+the version and source-revision labels, and the extension's manifest version
+were verified. Pin this artifact on the main instance and on every worker:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:4429543652378d650c9018cbb981b1a77fc9595f276e9459f66d13c70250246c
+```

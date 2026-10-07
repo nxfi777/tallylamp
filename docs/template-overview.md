@@ -143,25 +143,25 @@ accept automation.
 
 ## Updates are your choice
 
-The current release is `ghcr.io/nxfi777/tallylamp:0.11.1`. Pin this digest:
+The current release is `ghcr.io/nxfi777/tallylamp:0.11.2`. Pin this digest:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:7de88ad3b765422b7ffb6002bfcb67d50206f932e522f163099ac908fc4f67d3
+ghcr.io/nxfi777/tallylamp@sha256:4429543652378d650c9018cbb981b1a77fc9595f276e9459f66d13c70250246c
 ```
 
-Automatic image updates are disabled. Pushing source code or publishing a new
-release does not upgrade your deployment.
+Automatic image updates are disabled. Neither a source push nor a new release
+upgrades your deployment.
 
-To upgrade, read the release notes, back up your `/data` volume, then change
-the image reference in Railway to that digest and deploy it.
+To upgrade, read the release notes, back up your `/data` volume, then point
+Railway's image at that digest and deploy it.
 
 ## What to expect
 
-Chrome runs in headed mode, not headless mode. Xvfb gives it a display inside
-the container. User-agent and device emulation let you test browser settings;
+Chrome runs headed, not headless. Xvfb gives it a display inside the container.
+User-agent and device emulation let you test browser settings;
 they do not make an agent behave like a person.
 
-Persistent browsers keep their own data automatically across stops and redeploys.
+Persistent browsers keep their data across stops and redeploys.
 **Record signed-in site** only adds an inventory note for agents; it does not
 sign you in or copy cookies. **Edit browser details** changes its name and
 metadata.
@@ -179,11 +179,12 @@ Share profiles only with agents you trust.
 Site badges show detected or reported sign-ins, not every saved login.
 
 Railway limits a service to 1,000 processes and threads, shared by all browsers.
-Tallylamp queues starts until they fit and holds room for pinned browsers. For more
+Tallylamp queues starts until they fit and holds room for pinned browsers. If one
+heavy run oversizes a browser, reset its thread counts on its page. For more
 room, add a Tallylamp Worker.
 
 A volume-backed deployment uses one replica. Redeploys interrupt active browsers;
-their profiles remain, and Chrome starts again on the next use. Railway provides
+their profiles remain, and Chrome restarts on next use. Railway provides
 no GPU for this service, and Chrome's renderer sandbox may be unavailable.
 The dashboard reports both states. Browsers share the container's isolation boundary.
 

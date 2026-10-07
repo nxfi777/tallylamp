@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.11.1` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.11.2` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -267,31 +267,32 @@ release: a worker and the instance it joins must run the same release.
 
 ## Releasing and upgrading
 
-The current release is [0.11.1](https://github.com/nxfi777/tallylamp/releases/tag/v0.11.1)
+The current release is [0.11.2](https://github.com/nxfi777/tallylamp/releases/tag/v0.11.2)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:7de88ad3b765422b7ffb6002bfcb67d50206f932e522f163099ac908fc4f67d3
+ghcr.io/nxfi777/tallylamp@sha256:4429543652378d650c9018cbb981b1a77fc9595f276e9459f66d13c70250246c
 ```
 
-The [0.11.1 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/37013141176)
+The [0.11.2 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/37627257910)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, the version and source-revision labels, and the zip's manifest version
 were verified afterward. The image's source revision is
-`113eb5db3519fa0f7c162fbd8c0abdb8e350008a`.
+`8aeda7e7f3cb5bc01cf2dd08a4c4386f2c93f20b`.
 
-The Railway template pins the `0.11.1` digest for new installations, and the
+The Railway template pins the `0.11.2` digest for new installations, and the
 [Tallylamp Worker](https://railway.com/deploy/tallylamp-worker) template pins
 the same one. Each template's published configuration was read back after the
 update, and only the image had changed. Existing deployments keep their
-selected image. Version 0.11.1 changes no tables and adds no settings.
+selected image. Version 0.11.2 changes no tables and adds no settings.
 
-Before the release, the dashboard's New agent and Permissions forms were driven
-against a local instance at 1440, 768 and 375 px wide: granting at creation,
-editing afterwards, a create request that failed, and a permission list that
-did not load. 0.11.1 changes nothing on a worker, so the worker checks made for
+Before the release, a browser's Processes and threads row was driven against a
+local instance with a fake process limit, at 768 and 500 px wide: its counts
+before **Reset**, the default after it, and the audit entry it leaves. Tests
+cover a stopped browser, a running one, a start waiting for room, and refusals
+for room on the main instance and on a worker. The worker checks made for
 0.11.0 were not repeated.
 Railway redeploy persistence and unique passwords across two template
 installations were checked for `0.1.1`, not repeated since. These checks do not
@@ -334,8 +335,9 @@ frame notes](release-0.8.4.md), [0.8.5 process-limit notes](release-0.8.5.md),
 [0.9.0 pinning and recovery notes](release-0.9.0.md), [0.9.1 zygote and
 pinning fixes](release-0.9.1.md), [0.10.0 worker notes](release-0.10.0.md), [0.10.1 one-step move
 notes](release-0.10.1.md), [0.11.0 notes on everything working on a
-worker](release-0.11.0.md), and [0.11.1 notes on choosing permissions when you
-create an agent](release-0.11.1.md).
+worker](release-0.11.0.md), [0.11.1 notes on choosing permissions when you
+create an agent](release-0.11.1.md), and [0.11.2 notes on resetting a
+browser's thread counts](release-0.11.2.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing
