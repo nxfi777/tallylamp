@@ -35,6 +35,7 @@
   --tally-text: #a32521;   /* danger label — 7.44 on --bg */
   --info-text: #1d5fa4;    /* links — 6.94 on --bg */
   --ok: #136c43;           /* white on it 6.42 */
+  --ok-text: #136c43;
   --human: #9a3412;        /* takeover fill — white on it 8.10 */
   --warn: #7a5c00;         /* 6.36 on --bg */
   /* Drawn outside the control with a background-coloured gap between the two, so it only ever
@@ -87,6 +88,7 @@
     --tally-text: #f58079;   /* 6.28 on --bg */
     --info-text: #84b7e8;    /* 8.03 on --bg */
     --ok: #2f8256;           /* white on it 5.15 */
+    --ok-text: #78bd98;
     --human: #c2560c;        /* white on it 5.06 */
     --warn: #d0a24a;         /* 7.58 on --bg */
     --focus: #a9a5a1;
@@ -118,6 +120,7 @@
   --tally-text: #f58079;
   --info-text: #84b7e8;
   --ok: #2f8256;
+  --ok-text: #78bd98;
   --human: #c2560c;
   --warn: #d0a24a;
   --focus: #a9a5a1;
@@ -132,6 +135,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body {
   margin: 0; height: 100%;
   background: var(--bg); color: var(--text);
@@ -147,6 +151,7 @@ html, body {
 #app { height: 100%; }
 button, input, select, textarea { font: inherit; color: inherit; }
 a { color: var(--info-text); text-decoration: none; }
+.main p a, .ask-what a { text-decoration: underline; text-underline-offset: 0.15em; }
 button { cursor: pointer; }
 
 /* There was no focus rule at all: keyboard navigation was invisible. */
@@ -181,7 +186,12 @@ button { cursor: pointer; }
   padding: 0.45rem 0; background: var(--bg);
 }
 
-.app { min-height: 100%; display: grid; grid-template-columns: 220px 1fr; }
+.app { min-height: 100%; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+.nav, .main { min-width: 0; }
+.nav-pages, .nav-options { width: 100%; }
+.nav-pages > summary, .nav-options > summary { display: none; }
+.nav-links, .nav-preferences { display: flex; flex-direction: column; gap: 0.35rem; }
+@media (min-width: 901px) { .app { height: 100%; } }
 .nav {
   border-right: 1px solid var(--line);
   background: var(--nav-bg);
@@ -607,30 +617,8 @@ input::placeholder { color: var(--muted); }
 }
 .btn.tiny { min-height: 0; padding: 0.15rem 0.5rem; font-size: 0.75rem; border-radius: 5px; }
 
-/* Watch mode, said by the picture itself. The banner and the two pills all say "read only" in
-   words, and words are what nobody reads while looking at a browser: the report was clicking
-   into a watched view and wondering why nothing happened. An edge of light in the same green
-   as the watch banner is visible from anywhere on the stage, including a 1400px desktop stage
-   whose bottom bar is under the fold. It breathes once on arrival and then holds still. */
-.stage.watching::after {
-  /* Brighter than --ok, which is tuned as a fill under white text and goes muddy as light. */
-  --watch-edge: #3fbf7f;
-  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  border-radius: inherit;
-  box-shadow:
-    inset 0 0 0 2px var(--watch-edge),
-    inset 0 0 28px color-mix(in srgb, var(--watch-edge) 55%, transparent),
-    inset 0 0 90px color-mix(in srgb, var(--watch-edge) 30%, transparent);
-  animation: watch-arrive 1.6s ease-out 1;
-}
-@keyframes watch-arrive {
-  0% {
-    box-shadow: inset 0 0 0 2px var(--watch-edge),
-      inset 0 0 60px color-mix(in srgb, var(--watch-edge) 85%, transparent),
-      inset 0 0 160px color-mix(in srgb, var(--watch-edge) 55%, transparent);
-  }
-}
-@media (prefers-reduced-motion: reduce) { .stage.watching::after { animation: none; } }
+/* Read-only mode stays visible without tinting the remote page's pixels. */
+.stage.watching { outline: 2px solid var(--ok-text); outline-offset: 1px; }
 
 /* Settings as rows: what it is and what it is set to on the left, the one control on the
    right. Each used to be a heading, a sentence, a bordered button and a paragraph or two of
@@ -679,7 +667,7 @@ input::placeholder { color: var(--muted); }
 .banner { max-width: 92ch; }
 .mono { font-family: var(--mono); font-size: 0.8rem; letter-spacing: -0.01em; }
 .warn { color: var(--warn); }
-.ok { color: var(--ok); }
+.ok { color: var(--ok-text); }
 .err { color: var(--tally-text); }
 .timeline { list-style: none; padding: 0; margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--muted); }
 .timeline li { padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
@@ -715,7 +703,7 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
 .ask .sub { margin-top: 0.15rem; }
 /* Actions stay together and stay to the right of the text they act on, so the pointer travels
    once per decision rather than hunting between two columns. */
-.ask .row { flex: 0 0 auto; }
+.ask .row { min-width: 0; flex: 0 1 auto; }
 /* Grant is the action the operator opened this panel to take, so it keeps the filled
    treatment and Deny gives up its border until you are on it. Deny keeps the full 32px
    target, though -- quieter is not the same as harder to hit, and it is the safe choice
@@ -772,10 +760,15 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
   .switch[aria-checked="true"]::after { transform: translateX(20px); }
 }
 @media (max-width: 900px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   /* Wrap rather than scroll sideways. As a scroller this nav overflowed (527px of items in
      485px) and pushed Log out off the edge. */
-  .nav { flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); }
+  .nav { position: relative; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 0.5rem; gap: 0.25rem; }
+  .nav-pages, .nav-options { width: auto; }
+  .nav-pages { margin-left: auto; }
+  .nav-pages > summary, .nav-options > summary { display: flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0.4rem 0.55rem; cursor: pointer; border-radius: var(--radius-sm); }
+  .nav-pages > summary::after, .nav-options > summary::after { content: "⌄"; }
+  .nav-links, .nav-preferences { position: absolute; right: 0.5rem; top: calc(100% - 0.25rem); z-index: 30; min-width: 200px; padding: 0.5rem; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); }
   .nav .spacer { display: none; }
   /* `.nav .logout` used to sit here too and never applied: `.nav button.link` above is more
      specific and kept it displayed. Log out now stays on purpose — an operator on a tablet
@@ -786,10 +779,41 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
   /* Stacked, the page scrolls rather than .main, but overflow: auto still made .main the box
      sticky elements stick to, so the flash scrolled away with it. clip trims sideways overflow
      the same way without claiming the scrolling. */
-  .main { overflow: visible; overflow-x: clip; }
+  .main { overflow: visible; padding: 1rem; }
   .stage { height: clamp(240px, 56vh, 560px); }
   .site-list li { align-items: flex-start; flex-direction: column; }
 }
+
+/* Touch targets include the small controls and form fields, not just primary buttons. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]), select, .btn.tiny, .nav summary,
+  .tab-new, .tab-x, .menu-item, .stage .bar .btn.tiny { min-height: 44px; }
+  input:not([type="checkbox"]):not([type="radio"]), select { font-size: 16px; }
+  .ask-actions select { min-height: 44px; font-size: 16px; }
+  .btn.more, .navbtn, .tab-new, .tab-x { min-width: 44px; }
+  .tabstrip { height: 50px; }
+  .tab { min-width: 160px; }
+  .tab-x { opacity: 1; }
+}
+@media (max-width: 500px) {
+  .brand { font-size: 0.85rem; gap: 0.35rem; padding-inline: 0; }
+  .nav-pages > summary, .nav-options > summary { font-size: 0.85rem; padding-inline: 0.4rem; }
+  .top { gap: 0.7rem; }
+  .top > .row { width: 100%; }
+  .top input { width: 100%; }
+  .thumb { aspect-ratio: auto; height: 100px; }
+  .body { padding: 0.7rem; }
+  .body .purpose, .body .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ask-actions { width: 100%; }
+  .ask-actions > .row { flex: 1 1 100%; }
+  .request-help { margin-block: 0.5rem; }
+}
+.data-notice { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.7rem; margin-block: 0.7rem; }
+.data-notice p { margin: 0 0 0.5rem; }
+.table-wrap { min-width: 0; max-width: 100%; }
+.tabrow { display: flex; min-width: 0; background: var(--surface-2); border: 1px solid var(--line); border-bottom: 0; border-radius: 10px 10px 0 0; }
+.tabrow .tabstrip { flex: 1; min-width: 0; border: 0; background: none; }
+.tabrow > .tab-new { margin: 4px; align-self: stretch; }
 
 /* Doherty: a navigation that outlasts ~400ms says so, instead of showing dead air. */
 body.busy::before {
@@ -833,6 +857,16 @@ body.busy::before {
 .modal-box form { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 1rem; }
 .modal-box form label { color: var(--muted); font-size: 0.85rem; margin-top: 0.6rem; }
 .modal-box .field-hint { font-size: 0.78rem; margin-top: 0.15rem; }
+.advanced-settings { margin-top: 0.8rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.advanced-settings summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.advanced-settings summary::after { content: "⌄"; margin-left: 0.5rem; }
+.advanced-fields { display: flex; flex-direction: column; gap: 0.25rem; }
+.card-task { margin-bottom: 0.35rem; font-size: 0.85rem; }
+@media (max-width: 500px) {
+  .meter-wrap { flex-wrap: wrap; }
+  .meter-label { flex: 1 1 100%; }
+  .card-task { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}
 .modal-box .cmd-label { margin: 0.9rem 0 0; }
 .modal-box .modal-foot { margin-top: 1rem; align-items: center; }
 .modal-box .token { margin: 0.5rem 0 0.6rem; }
@@ -906,3 +940,17 @@ body.busy::before {
 .table-wrap .table { min-width: 620px; }
 .table-wrap:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .main > .setting-more.revoked .table-wrap { margin-top: 0.6rem; }
+@media (pointer: coarse) {
+  .agent-picker label, .scope-picker label { min-height: 44px; flex: 1; display: block; }
+  summary { min-height: 44px; cursor: pointer; }
+  .btn.tiny { min-width: 44px; }
+  .setting .btn { min-height: 44px; }
+  .switch { height: 44px; border: 0; background: transparent; }
+  .switch::before {
+    content: ""; position: absolute; top: 8px; left: 0; width: 48px; height: 28px;
+    border: 1px solid var(--line-strong); border-radius: 999px; background: transparent;
+  }
+  .switch::after { top: 12px; left: 4px; }
+  .switch[aria-checked="true"] { background: transparent; }
+  .switch[aria-checked="true"]::before { background: var(--text); border-color: var(--text); }
+}

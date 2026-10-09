@@ -107,9 +107,9 @@ Load the `extension` folder of this repo instead of the release zip, and press t
 
 ## Things that go wrong
 
-**The dashboard says offline.** The browser is closed, the laptop is asleep, or the extension lost its link. Open the browser and look at the panel. If it asks you to connect again, the link was revoked or the server's admin secret changed.
+**The dashboard says offline.** The browser is closed, the laptop is asleep, or the extension lost its link. Open the browser and look at the panel. A connection or DNS interruption is retried automatically. During recovery, the extension can still hold your shared tabs, but the agent cannot use them until the panel says Connected. Reconnecting sends their list again; you do not need to stop sharing and reshare. If the server stays unreachable for a minute, the tabs are handed back, even if Chrome restarts the extension's background worker. If the panel asks you to connect again, the link was revoked or the server's admin secret changed.
 
-**The agent says no tab is shared.** It is right. Nothing on the server can share a tab for you.
+**The agent says no tab is shared.** Check that the extension says Connected and lists the tab as shared. If it says Reconnecting or Offline, wait for recovery before asking the agent to retry. Nothing on the server can share a tab for you.
 
 **Another tool is already debugging this tab.** Some other extension holds the debugger on that tab. Chrome's own DevTools window does not cause this.
 

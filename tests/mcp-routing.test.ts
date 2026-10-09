@@ -9,7 +9,7 @@ import { createTunnel } from "../src/tunnels.js";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
 
 type Result = { isError?: boolean; content: Array<{ text?: string }>; tools?: Tool[] };
-type Binding = { browserId: string; closed: boolean; child?: { client: Client } };
+type Binding = { browserId: string; closed: boolean; child?: { client: Client; workerId?: string; bridgeId?: string } };
 type Session = { browserId?: string; bindings: Map<string, Binding> };
 type Gateway = { sessions: Map<string, Session>; startBinding(session: Session, binding: Binding, row: BrowserRow): Promise<void> };
 const deferred = () => {
@@ -194,6 +194,20 @@ describe("MCP browser routing", { timeout: 10_000 }, () => {
     assert.equal(calls.length, 0);
     assert.equal(attached(borrowed), 0);
     assert.equal(gateway.sessions.get(session)!.bindings.has(borrowed), false);
+  });
+
+  it("strips the routing ID on worker dispatch as well as local dispatch", async () => {
+    ok(await call("tallylamp_use_browser", { browserId: a }));
+    const child = gateway.sessions.get(session)!.bindings.get(a)!.child!;
+    child.workerId = "worker-test"; child.bridgeId = "bridge-test";
+    let forwarded: Record<string, unknown> | undefined;
+    ctx.browsers.workers.callLinkedTool = async (_bridge, name, args) => {
+      assert.equal(name, "take_snapshot"); forwarded = args;
+      return { content: [{ type: "text", text: a }] };
+    };
+    assert.equal(text(ok(await call("take_snapshot", { browserId: a, verbose: true }))), a);
+    assert.deepEqual(forwarded, { verbose: true });
+    assert.equal(calls.length, 0, "worker routing was used");
   });
 
   it("checks the tunnel's browser even when another default browser is under human control", async () => {

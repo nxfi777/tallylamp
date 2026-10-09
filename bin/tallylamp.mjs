@@ -11,6 +11,8 @@ Usage:
   tallylamp browser list
   tallylamp browser create [--name NAME] [--purpose TEXT]
   tallylamp agent create --name NAME
+  tallylamp export FILE.tar.gz [--exclude SLUG] [--browser SLUG]
+  tallylamp import FILE.tar.gz --data-dir NEW_DIRECTORY [--max-gb 64]
   tallylamp tunnel PORT [--host 127.0.0.1] [--browser SLUG] [--ttl 3600]
   tallylamp tunnel PORT --tunnel-id ID          (with TALLYLAMP_TUNNEL_TOKEN set)
 
@@ -24,6 +26,12 @@ Env:
   TALLYLAMP_URL    default http://127.0.0.1:8080
   TALLYLAMP_TOKEN  admin secret or agent bearer
   TALLYLAMP_TUNNEL_TOKEN  a tunnel's connect token, for the second tunnel form
+
+Transfer:
+  Export stops selected browsers and leaves them stopped; source data is retained.
+  Repeat --exclude or --browser to select several. All saved profiles are included.
+  Import restores offline into a new directory; it never overwrites existing data.
+  Archives contain logins and credentials. Keep them private.
 `);
 }
 
@@ -68,7 +76,57 @@ if (!cmd || cmd === "-h" || cmd === "--help") {
   process.exit(0);
 }
 
-if (cmd === "status") {
+if (cmd === "export") {
+  if (!sub || sub.startsWith("--")) throw new Error("usage: tallylamp export FILE.tar.gz [--exclude SLUG] [--browser SLUG]");
+  const { createWriteStream } = await import("node:fs");
+  const { link, lstat, rm } = await import("node:fs/promises");
+  const { randomBytes } = await import("node:crypto");
+  const { pipeline } = await import("node:stream/promises");
+  const { Readable } = await import("node:stream");
+  try { await lstat(sub); throw new Error("export file already exists; choose a new filename"); }
+  catch (e) { if (e.code !== "ENOENT") throw e; }
+  const options = {};
+  for (let i = 0; i < rest.length; i += 2) {
+    const key = { "--exclude": "exclude", "--browser": "browsers" }[rest[i]];
+    if (!key || !rest[i + 1] || rest[i + 1].startsWith("--")) throw new Error(`invalid export option: ${rest[i]}`);
+    (options[key] ??= []).push(rest[i + 1]);
+  }
+  if (!token) throw new Error("set ADMIN_SECRET or TALLYLAMP_TOKEN to the instance admin secret");
+  const login = await fetch(`${base}/api/v1/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ secret: token }), signal: AbortSignal.timeout(30_000),
+  });
+  if (!login.ok) throw new Error(`admin login failed (${login.status}); export requires the instance admin secret`);
+  const cookie = login.headers.get("set-cookie")?.split(";")[0];
+  if (!cookie) throw new Error("admin login did not return a session");
+  const temporary = `${sub}.partial-${randomBytes(6).toString("hex")}`;
+  try {
+    console.error("Exporting selected browsers, saved profiles and downloads. Selected browsers will remain stopped.");
+    const response = await fetch(`${base}/api/v1/export`, {
+      method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify(options), signal: AbortSignal.timeout(60 * 60_000),
+    });
+    if (!response.ok || !response.body) throw new Error(`export failed (${response.status}): ${await response.text()}`);
+    await pipeline(Readable.fromWeb(response.body), createWriteStream(temporary, { flags: "wx", mode: 0o600 }));
+    // Atomic publish without overwriting an existing archive.
+    await link(temporary, sub);
+    console.log(`Export saved to ${sub}`);
+  } finally {
+    await rm(temporary, { force: true });
+    await fetch(`${base}/api/v1/logout`, { method: "POST", headers: { Cookie: cookie }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+  }
+} else if (cmd === "import") {
+  if (!sub || sub.startsWith("--")) throw new Error("usage: tallylamp import FILE.tar.gz --data-dir NEW_DIRECTORY");
+  for (let i = 0; i < rest.length; i += 2) {
+    if (!["--data-dir", "--max-gb"].includes(rest[i]) || !rest[i + 1] || rest[i + 1].startsWith("--")) throw new Error(`invalid import option: ${rest[i]}`);
+  }
+  const destination = flag(rest, "--data-dir");
+  if (!destination) throw new Error("import requires --data-dir pointing to a new directory");
+  const { importInstance } = await import("../dist/transfer.js").catch(() => { throw new Error("run npm run build before importing"); });
+  const manifest = await importInstance(sub, destination, Number(flag(rest, "--max-gb", "64")) * 1024 ** 3);
+  console.log(`Restored ${manifest.browsers.length} browsers and ${manifest.profiles.length} saved profiles to ${destination}.`);
+  console.log("Set TALLYLAMP_DATA_DIR to this directory before starting Tallylamp. Reconnect OAuth clients and linked browsers; some sites may need sign-in again.");
+} else if (cmd === "status") {
   console.log(JSON.stringify(await req("/api/v1/status"), null, 2));
 } else if (cmd === "browser" && sub === "list") {
   console.log(JSON.stringify(await req("/api/v1/browsers"), null, 2));

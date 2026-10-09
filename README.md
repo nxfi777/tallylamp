@@ -380,6 +380,8 @@ On a Linux host without a display, install Xvfb and set `TALLYLAMP_XVFB=1` for
 the realism command. Use `TALLYLAMP_FAKE_CHROME=1` only in tests.
 
 The command-line tool runs from this checkout as `node bin/tallylamp.mjs`.
+Use [export and import](docs/transfer.md) to back up the instance or move selected
+browsers, saved profiles and downloads to another machine.
 See [the user guide](docs/usage.md) for recording, profiles, and tunnel commands.
 Project rules and local cleanup instructions are in the
 [contributor guide](docs/contributing.md).

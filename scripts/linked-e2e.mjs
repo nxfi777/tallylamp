@@ -7,8 +7,8 @@
 //
 //   node scripts/linked-e2e.mjs            (CHROME_BIN overrides the browser path)
 //
-// Two headless Chromes, the second with the "Extensions on chrome-extension:// URLs" flag on,
-// both killed in finally. Needs a branded Chrome or Chromium on this machine, which is why it
+// Two sequential headless Chromes, the second with the "Extensions on chrome-extension:// URLs"
+// flag on, both killed in finally. Needs a branded Chrome or Chromium, which is why it
 // is not part of `npm test`.
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -25,7 +25,8 @@ const pages = http.createServer((req, res) => { res.setHeader("content-type", "t
 await new Promise((r) => pages.listen(0, "127.0.0.1", r)); const PP = pages.address().port;
 const data = path.join(OUT, "e2e-data"); rmSync(data, { recursive: true, force: true }); mkdirSync(data, { recursive: true });
 const PORT = 19000 + Math.floor(Math.random() * 900); const base = `http://127.0.0.1:${PORT}`;
-const svc = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], { env: { ...process.env, PORT: String(PORT), HOST: "127.0.0.1", ADMIN_SECRET: "e2e-secret-value-12345", TALLYLAMP_DATA_DIR: data, TALLYLAMP_FAKE_CHROME: "1", TALLYLAMP_PUBLIC_URL: base }, stdio: "ignore" });
+const startService = () => spawn(process.execPath, ["--import", "tsx", "src/index.ts"], { env: { ...process.env, PORT: String(PORT), HOST: "127.0.0.1", ADMIN_SECRET: "e2e-secret-value-12345", TALLYLAMP_DATA_DIR: data, TALLYLAMP_FAKE_CHROME: "1", TALLYLAMP_PUBLIC_URL: base }, stdio: "ignore" });
+let svc = startService();
 const chromes = []; let failed = 0;
 const check = (name, ok, detail = "") => { log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  — " + String(detail).slice(0, 220).replace(/\s+/g, " ") : ""}`); if (!ok) failed++; };
 /** One headless Chrome on a CDP pipe, killed in finally. Returns its `send`. */
@@ -54,6 +55,18 @@ try {
   const send = launch("e2e-profile");
   const { id: extId } = await send("Extensions.loadUnpacked", { path: EXT });
   check("extension loads unpacked in real Chrome", Boolean(extId), extId);
+  // Render the existing panel fixtures in this test Chrome; no extra browser is needed.
+  const { targetId: demoTarget } = await send("Target.createTarget", { url: `chrome-extension://${extId}/panel.html?demo=shared-connecting` });
+  const { sessionId: demoSession } = await send("Target.attachToTarget", { targetId: demoTarget, flatten: true });
+  await sleep(500);
+  for (const width of [375, 768, 1440]) {
+    await send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false }, demoSession);
+    const { result } = await send("Runtime.evaluate", { expression: "({text:document.body.innerText,overflow:document.documentElement.scrollWidth>innerWidth})", returnByValue: true }, demoSession);
+    check(`reconnecting panel at ${width}px pauses the control claim without overflow`, /Reconnecting\./.test(result.value.text) && !/Your agent can see and control/.test(result.value.text) && !result.value.overflow, result.value.text);
+    const { data: screenshot } = await send("Page.captureScreenshot", { format: "png" }, demoSession);
+    writeFileSync(path.join(OUT, `panel-reconnecting-${width}.png`), Buffer.from(screenshot, "base64"));
+  }
+  await send("Target.closeTarget", { targetId: demoTarget });
   await send("Target.createTarget", { url: `http://127.0.0.1:${PP}/` });
   const inExt = await panelOf(send, extId);
   const state = () => inExt(`return (await chrome.runtime.sendMessage({type:"getState"})).state`);
@@ -63,6 +76,7 @@ try {
   check("popup -> worker: pairing started, code shown", st.link === "pairing" && /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(st.pairing?.userCode ?? ""), JSON.stringify(st.pairing?.userCode ?? st.error));
   const approve = await fetch(`${base}/api/v1/links/pair/${st.pairing.userCode}/approve`, { method: "POST", headers: H, body: JSON.stringify({ agentIds: [agentId], name: "E2E Chrome" }) });
   check("dashboard approves the code", approve.status === 201, approve.status);
+  const { browserId: pairedBrowserId } = await approve.json();
   for (let i = 0; i < 20 && (st = await state()).link !== "online"; i++) await sleep(500);
   check("extension collects its token and connects", st.link === "online", `${st.link} ${st.error ?? ""}`);
 
@@ -74,6 +88,21 @@ try {
   check("sharing the Tallylamp dashboard itself is refused", dash.ok === false && /Tallylamp dashboard/.test(dash.error), dash.error);
   const sharedRes = await inExt(`return await chrome.runtime.sendMessage({type:"shareTab", tabId:${tabId}, site:"127.0.0.1"})`);
   check("chrome.debugger attaches and the tab is shared", sharedRes.ok && sharedRes.state.shared.length === 1, sharedRes.error ?? JSON.stringify(sharedRes.state.shared));
+
+  // A transient link failure must keep all existing debugger attachments and replay them to
+  // the server. The user should not need Stop -> Share to make three tabs usable again.
+  const extraTabs = await inExt(`const ids=[]; for (let i=0;i<2;i++) { const t=await chrome.tabs.create({url:"http://127.0.0.1:${PP}/two",active:false}); ids.push(t.id); } return ids`);
+  await sleep(500);
+  for (const id of extraTabs) await inExt(`return await chrome.runtime.sendMessage({type:"shareTab",tabId:${id},site:"127.0.0.1"})`);
+  // Restart the local test server, preserving its database and pairing token.
+  await new Promise((resolve) => { svc.once("exit", resolve); svc.kill("SIGTERM"); });
+  st = await state();
+  check("a dropped link pauses access but retains all three shared tabs", st.link === "offline" && st.shared.length === 3, `${st.link}, ${st.shared.length} tabs`);
+  svc = startService();
+  for (let i = 0; i < 40 && (st = await state()).link !== "online"; i++) await sleep(250);
+  const reconnected = await (await fetch(`${base}/api/v1/browsers/${pairedBrowserId}`, { headers: H })).json();
+  check("reconnect restores all three tabs on both sides without resharing", st.link === "online" && st.shared.length === 3 && reconnected.browser?.link?.sharedTabs.length === 3, `${st.link}, ${st.shared.length} local / ${reconnected.browser?.link?.sharedTabs.length} server tabs`);
+  for (const id of extraTabs) await inExt(`return await chrome.runtime.sendMessage({type:"unshareTab",tabId:${id}})`);
 
   const rpc = (method, params, extra = {}) => fetch(`${base}/mcp`, { method: "POST", headers: { authorization: `Bearer ${agentToken}`, accept: "application/json, text/event-stream", "content-type": "application/json", "MCP-Protocol-Version": "2025-11-25", ...extra }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: AbortSignal.timeout(90_000) });
   const init = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "e2e", version: "1" } });
@@ -125,6 +154,9 @@ try {
   // chrome://flags "Extensions on chrome-extension:// URLs" lifts that rule, so Chrome shares the
   // tab and the agent's auto-attach reaches into the other extension's frame. That frame stands
   // in for a password manager's menu here: its text must never reach the agent.
+  // The first Chrome's checks are finished. Run the variants sequentially on shared machines.
+  const firstChrome = chromes[0];
+  await new Promise((resolve) => { firstChrome.once("exit", resolve); firstChrome.kill("SIGKILL"); });
   const send2 = launch("e2e-flagged", ["--extensions-on-extension-urls"]);
   const { id: ext2 } = await send2("Extensions.loadUnpacked", { path: EXT });
   const { id: vaultId } = await send2("Extensions.loadUnpacked", { path: makeFramer(path.join(OUT, "vault"), "Saved login: e2e-vault-secret") });
