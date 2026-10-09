@@ -240,7 +240,8 @@ export const config = {
    *   instance while that has room for one, and otherwise puts it on the worker with the most
    *   room: a worker's browser cannot be saved as a saved profile, and everything it does
    *   crosses the private network, so it should not land there without a reason. "spread" always picks the host with the most room, the
-   *   main instance included. "local" always keeps it on the main instance.
+   *   main instance included. "local" always keeps it on the main instance. Linked-browser
+   *   MCP bridges prefer workers under either non-local policy; Chrome stays on the owner host.
    */
   get join() { return (process.env.TALLYLAMP_JOIN ?? "").trim(); },
   get workerUrl() {

@@ -1,6 +1,9 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import WebSocket from "ws";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
 import { createAgent, DEFAULT_AGENT_SCOPES } from "../src/auth.js";
@@ -11,6 +14,8 @@ import { dbPath } from "../src/config.js";
 import { linkedAccess } from "../src/linked.js";
 import { hub } from "../src/events.js";
 import { candidates, requestBrowser } from "../src/lending.js";
+import { allocatePort } from "../src/chrome.js";
+import { startWorker, type WorkerState } from "../src/worker.js";
 
 let ctx: TestCtx;
 
@@ -26,6 +31,8 @@ type Call = { method: string; params: Record<string, unknown> };
  */
 class FakeExtension {
   readonly calls: Call[] = [];
+  /** A test can execute a command but withhold its reply to model uncertain delivery. */
+  intercept?: (call: Call) => boolean;
   readonly tabs = new Map<number, { targetId: string; url: string; title: string }>();
   closed: Promise<number>;
   private nextTab = 100;
@@ -75,7 +82,9 @@ class FakeExtension {
   private onMessage(msg: { id?: number; method?: string; params?: Record<string, unknown> }): void {
     if (typeof msg.id !== "number" || !msg.method) return;
     const params = msg.params ?? {};
-    this.calls.push({ method: msg.method === "cdp" ? `cdp:${String(params.method)}` : msg.method, params });
+    const call = { method: msg.method === "cdp" ? `cdp:${String(params.method)}` : msg.method, params };
+    this.calls.push(call);
+    if (this.intercept?.(call)) return;
     const reply = (result: unknown) => this.emit({ id: msg.id, result });
     if (msg.method === "tabs.create") {
       const tabId = this.nextTab++;
@@ -433,6 +442,137 @@ describe("linked browsers", () => {
     assert.equal(ext.tabs.size, 0);
     ext.close();
     await ext.closed;
+  });
+
+  it("offloads linked sessions independently and recovers worker loss without replaying a mutation", { timeout: 45_000 }, async () => {
+    const admin = { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] } as const;
+    const dataDir = mkdtempSync(path.join(os.tmpdir(), "tallylamp-linked-worker-"));
+    const port = await allocatePort();
+    const workerUrl = `http://127.0.0.1:${port}`;
+    let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
+    let workerClosed = false;
+    let ext: FakeExtension | undefined;
+    const sessions: Array<{ close(): Promise<void> }> = [];
+    const oldPlacement = process.env.TALLYLAMP_PLACEMENT;
+    process.env.TALLYLAMP_PLACEMENT = "overflow";
+    const waitFor = async (check: () => Promise<boolean>) => {
+      for (let n = 0; n < 240; n++) {
+        if (await check()) return;
+        await sleep(25);
+      }
+      assert.fail("linked worker did not reach the expected state");
+    };
+    try {
+      worker = await startWorker({
+        dataDir, host: "127.0.0.1", port, selfUrl: workerUrl, name: "linked-control-worker",
+        join: ctx.browsers.workers.createJoinToken(admin).token,
+      });
+      await ctx.browsers.workers.poll();
+      const state = async () => (await (await fetch(`${workerUrl}/worker/v1/state`, {
+        headers: { Authorization: `Bearer ${worker!.identity.secret}` },
+      })).json()) as WorkerState;
+      const first = createAgent({ name: "First linked worker session", scopes: [...DEFAULT_AGENT_SCOPES] });
+      const { token, browserId } = await pair({ agentIds: [first.agent.id] }, "Offloaded laptop");
+      ext = await FakeExtension.connect(token, [
+        [1, "https://example.test/first", "First"],
+        [2, "https://example.test/second", "Second"],
+      ]);
+      const open = async (agentToken: string) => {
+        const rpc = (method: string, params: unknown, extra: Record<string, string> = {}) =>
+          json(`${ctx.url}/mcp`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${agentToken}`, Accept: "application/json, text/event-stream",
+              "Content-Type": "application/json", "MCP-Protocol-Version": "2025-11-25", ...extra,
+            },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+          });
+        const init = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "linked-worker", version: "1" } });
+        const headers = { "MCP-Session-Id": init.headers.get("mcp-session-id")! };
+        const session = {
+          async call(name: string, args: Record<string, unknown> = {}) {
+            const response = await rpc("tools/call", { name, arguments: args }, headers);
+            const line = String(response.body).split("\n").find((value) => value.trim().startsWith("data:"));
+            const message = typeof response.body === "object" && response.body ? response.body : JSON.parse(line!.trim().slice(5));
+            const result = (message as any).result;
+            return {
+              isError: Boolean((message as any).error || result?.isError),
+              text: result ? (result.content ?? []).map((item: { text?: string }) => item.text ?? "").join("\n") : JSON.stringify(message),
+            };
+          },
+          async close() {
+            await json(`${ctx.url}/mcp`, { method: "DELETE", headers: { Authorization: `Bearer ${agentToken}`, ...headers } });
+          },
+        };
+        sessions.push(session);
+        return session;
+      };
+      const a = await open(first.token);
+      const b = await open(first.token);
+      for (const session of [a, b]) {
+        const bound = await session.call("tallylamp_use_browser", { browserId });
+        assert.equal(bound.isError, false, bound.text);
+      }
+      assert.equal(ctx.browsers.row(browserId).worker_id, null, "the worker never owns the person's Chrome or profile");
+      assert.equal((await state()).browsers.length, 0);
+      assert.equal((await state()).linkedBridges?.length, 2, "each session has its own worker bridge");
+      const pages = (await a.call("list_pages")).text;
+      const firstPage = Number(/(\d+): https:\/\/example\.test\/first/.exec(pages)?.[1]);
+      const secondPage = Number(/(\d+): https:\/\/example\.test\/second/.exec(pages)?.[1]);
+      assert.ok(Number.isFinite(firstPage) && Number.isFinite(secondPage), pages);
+      assert.equal((await a.call("select_page", { pageId: firstPage })).isError, false);
+      assert.equal((await b.call("select_page", { pageId: secondPage })).isError, false);
+      assert.match((await a.call("list_pages")).text, /\d+: https:\/\/example\.test\/first \[selected\]/);
+      assert.match((await b.call("list_pages")).text, /\d+: https:\/\/example\.test\/second \[selected\]/);
+
+      const cut = await json(`${ctx.url}/api/v1/browsers/${browserId}/access`, {
+        method: "PUT", headers: { "Content-Type": "application/json", Cookie: ctx.cookie, Origin: ctx.url },
+        body: JSON.stringify({ agentIds: [] }),
+      });
+      assert.equal(cut.status, 200);
+      await waitFor(async () => (await state()).linkedBridges?.length === 0);
+      assert.equal((await b.call("list_pages")).isError, true, "revoked session cannot restore a remote bridge");
+      const restored = await json(`${ctx.url}/api/v1/browsers/${browserId}/access`, {
+        method: "PUT", headers: { "Content-Type": "application/json", Cookie: ctx.cookie, Origin: ctx.url },
+        body: JSON.stringify({ agentIds: [first.agent.id] }),
+      });
+      assert.equal(restored.status, 200);
+      assert.equal((await a.call("tallylamp_use_browser", { browserId })).isError, false, "restored access can create a remote bridge");
+      assert.equal((await state()).linkedBridges?.length, 1);
+
+      const navigated = "https://example.test/changed-once";
+      ext.intercept = (call) => {
+        if (call.method !== "cdp:Page.navigate") return false;
+        // The browser applied this operation, but the worker will disappear before its reply.
+        ext!.tabs.get(Number(call.params.tabId))!.url = String((call.params.params as { url: string }).url);
+        return true;
+      };
+      let changedResult: { isError: boolean; text: string } | undefined;
+      const changed = a.call("navigate_page", { pageId: secondPage, url: navigated, timeout: 5000 }).then((result) => { changedResult = result; return result; });
+      await waitFor(async () => Boolean(changedResult) || ext!.calls.some((call) => call.method === "cdp:Page.navigate"));
+      assert.ok(ext.calls.some((call) => call.method === "cdp:Page.navigate"), changedResult?.text ?? "navigation never reached the extension");
+      await worker.close();
+      workerClosed = true;
+      assert.equal((await changed).isError, true, "the uncertain tool call must fail, not silently execute again");
+      await ctx.browsers.workers.poll();
+      const after = await view(browserId);
+      assert.equal(after.link.online, true, "the extension stays connected when its control worker stops");
+      assert.equal(ext.tabs.size, 2, "worker loss must not unshare the person's tabs");
+      const recovered = await a.call("list_pages");
+      assert.equal(recovered.isError, false, recovered.text);
+      assert.equal(ext.calls.filter((call) => call.method === "cdp:Page.navigate").length, 1, "recovery does not replay the uncertain mutation");
+      assert.equal(ctx.browsers.row(browserId).worker_id, null);
+    } finally {
+      for (const session of sessions) await session.close();
+      if (ext) { ext.close(); await ext.closed; }
+      if (worker) {
+        if (!workerClosed) await worker.close();
+        ctx.browsers.workers.remove(worker.identity.workerId, admin);
+      }
+      rmSync(dataDir, { recursive: true, force: true });
+      if (oldPlacement === undefined) delete process.env.TALLYLAMP_PLACEMENT;
+      else process.env.TALLYLAMP_PLACEMENT = oldPlacement;
+    }
   });
 
   it("lets only the ticked agents in, any agent when chosen, and never lets an agent lend it or change the list", async () => {

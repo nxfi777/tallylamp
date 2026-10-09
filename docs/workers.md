@@ -74,6 +74,25 @@ on a browser, and `GET /api/v1/workers` lists the workers.
 
 ## What works on a worker
 
+Linked browsers automatically use an available worker for each MCP control
+bridge. Chrome stays on its owner's machine; the bridge's Node process and
+threads run on the worker. Each bound session gets its own bridge, so page
+selection stays independent. The main instance still checks access and human
+control and relays the extension connection.
+
+Under both `overflow` and `spread`, new linked bridges prefer the available
+worker with the most process capacity. `TALLYLAMP_PLACEMENT=local` keeps them
+on the main instance. With no compatible worker with room, a bridge runs on
+the main instance if it has capacity. Existing bridges stay where they were
+started until their connection is closed or recreated.
+
+If a worker disconnects, the linked browser and its shared tabs stay online.
+The next tool call can reconnect through another worker or the main instance.
+A tool interrupted by the disconnect is reported as failed and is never
+automatically repeated. Output files are copied back to the main instance
+before their paths are returned. Closing or revoking a session also closes
+its worker bridge; a heartbeat reaps abandoned bridges after a lost connection.
+
 Everything a browser does on the main instance, except saved profiles. Saved
 profiles are kept on the main instance, so a browser on a worker cannot be
 saved as one, and a browser made from one starts on the main instance. Saving

@@ -19,6 +19,9 @@ import { forwardHttp, forwardUpgrade, type RelayTarget } from "./relay.js";
 import { makeJoinToken, MAX_UPLOAD_BYTES, receiveProfile, sha256, uploadStaging, type WorkerStartResult, type WorkerState } from "./worker.js";
 import { MAX_CHUNK, serveTunnelDials } from "./tunnels.js";
 import { remoteSpawner } from "./x11-remote.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { createLinkedBridgeTransport, LINKED_BRIDGE_THREADS } from "./linked-bridge.js";
+import { bridgeResultFiles, prepareBridgeFiles, receiveBridgeFile, replaceBridgePaths } from "./bridge-files.js";
 import type { BrowserManager, BrowserRow } from "./browsers.js";
 
 export type WorkerRow = {
@@ -59,6 +62,8 @@ type RemoteBrowser = {
  * runtime like any other, whose debugging port happens to be a local listener that relays to
  * the worker with its secret, the same shape a linked browser already has. So the MCP bridge,
  * the live view and everything else that speaks CDP work without knowing the difference.
+ * Linked browsers keep that connection on main and place each MCP bridge separately;
+ * those transient assignments never change the browser's worker_id or profile ownership.
  *
  * What needs the host rather than the debugging port reaches the worker by its own path.
  * Full browser and the agent desktop tools run their ffmpeg and xdotool there
@@ -72,6 +77,7 @@ type RemoteBrowser = {
 export class Workers {
   private live = new Map<string, Live>();
   private remote = new Map<string, RemoteBrowser>();
+  private bridges = new Map<string, { workerId: string; close: () => Promise<void> }>();
   private timer: NodeJS.Timeout;
 
   constructor(private fleet: BrowserManager) {
@@ -131,6 +137,7 @@ export class Workers {
       pids,
       browsers: assigned,
       running: l?.state?.browsers.filter((b) => b.running).length ?? 0,
+      linkedBridges: l?.state?.linkedBridges?.length ?? 0,
       createdAt: w.created_at,
       lastSeenAt: l?.state && !l.error ? new Date(l.at).toISOString() : w.last_seen_at,
     };
@@ -216,6 +223,7 @@ export class Workers {
     if (n > 0) {
       throw Err.conflict(`${n === 1 ? "1 browser still lives" : `${n} browsers still live`} on ${w.name}. Move or delete ${n === 1 ? "it" : "them"} first.`);
     }
+    for (const bridge of this.bridges.values()) if (bridge.workerId === id) void bridge.close();
     getDb().prepare(`DELETE FROM workers WHERE id = ?`).run(id);
     this.live.delete(id);
     audit({ actorType: principal.type, actorId: principal.id, action: "worker.removed", targetType: "worker", targetId: id, detail: { name: w.name } });
@@ -241,6 +249,76 @@ export class Workers {
       if (free > best.free) best = { id: w.id, free };
     }
     return best.id;
+  }
+
+  /** Linked Chrome stays on its owner's machine; only the session's Node bridge moves. */
+  async linkedBridge(cdpPort: number) {
+    if (config.placement === "local") return null;
+    const candidates = this.rows().flatMap((w) => {
+      const live = this.live.get(w.id);
+      if (!this.online(w.id) || this.unusable(w) || !live?.state?.linkedBridges || !live.state.linkedBridgeFilesRoot) return [];
+      const held = [...this.bridges].filter(([, b]) => b.workerId === w.id).reduce((n, [id]) => {
+        const reported = live.state!.linkedBridges!.find((b) => b.id === id);
+        return n + Math.max(0, LINKED_BRIDGE_THREADS - (reported?.threads ?? 0));
+      }, 0);
+      const pids = live.state.pids;
+      const free = (pids ? pids.max - pids.current - config.processHeadroom : Number.MAX_SAFE_INTEGER) - held;
+      return free >= LINKED_BRIDGE_THREADS ? [{ w, free }] : [];
+    }).sort((a, b) => b.free - a.free);
+    for (const { w } of candidates) {
+      const bridgeId = randomBytes(16).toString("hex");
+      const url = w.url.replace(/^http/, "ws") + `/worker/v1/linked-bridges/${bridgeId}/mcp`;
+      const transport = createLinkedBridgeTransport(url, w.secret, cdpPort);
+      const client = new Client({ name: "tallylamp-bridge", version: config.version });
+      const release = () => { this.bridges.delete(bridgeId); };
+      client.onclose = release;
+      this.bridges.set(bridgeId, { workerId: w.id, close: () => client.close() });
+      try {
+        await client.connect(transport);
+        return { client, transport, workerId: w.id, bridgeId, release };
+      } catch (e) {
+        release();
+        await client.close().catch(() => undefined);
+        // Initialization runs no browser tools, so another host is safe to try here.
+        log.warn("linked bridge worker unavailable", { worker: w.name, error: (e as Error).message });
+      }
+    }
+    return null;
+  }
+
+  async callLinkedTool(bridge: { client: Client; workerId: string; bridgeId: string }, name: string, args: Record<string, unknown>, beforeCall: () => void) {
+    const w = this.row(bridge.workerId);
+    const root = this.live.get(w.id)?.state?.linkedBridgeFilesRoot;
+    if (!root) throw Err.browserUnavailable("Worker does not report a control-bridge artifact directory.");
+    const directory = path.posix.join(root, bridge.bridgeId);
+    const prepared = await prepareBridgeFiles(directory, name, args);
+    beforeCall();
+    const result = await bridge.client.callTool({ name, arguments: prepared.args });
+    if (result.isError) return replaceBridgePaths(result, prepared.files.map((f): [string, string] => [f.remote, f.local]));
+    const replacements: Array<[string, string]> = [];
+    for (const file of bridgeResultFiles(directory, result, prepared.files)) {
+      const relative = path.posix.relative(directory, file.remote);
+      const url = `${w.url}/worker/v1/linked-bridges/${bridge.bridgeId}/files?path=${encodeURIComponent(relative)}`;
+      for (let attempt = 0; ; attempt++) {
+        let transient = true;
+        try {
+          const response = await fetch(url, { headers: { authorization: `Bearer ${w.secret}` }, signal: AbortSignal.timeout(60_000) });
+          if (!response.ok) {
+            transient = response.status === 429 || response.status >= 500;
+            await response.body?.cancel();
+            throw new Error(`Worker artifact download returned HTTP ${response.status}`);
+          }
+          transient = false;
+          replacements.push(await receiveBridgeFile(response, file));
+          break;
+        } catch (e) {
+          transient ||= e instanceof TypeError || ["AbortError", "TimeoutError"].includes((e as Error).name);
+          if (!transient || attempt >= 2) throw Err.browserUnavailable(`The tool ran, but its output file could not be copied from ${w.name}: ${(e as Error).message}. The tool has not been repeated.`);
+          await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt * (0.5 + Math.random())));
+        }
+      }
+    }
+    return replaceBridgePaths(result, replacements);
   }
 
   private target(w: WorkerRow, p: string): RelayTarget {
