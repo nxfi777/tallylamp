@@ -31,8 +31,8 @@ async function addWorker(name: string, token?: string): Promise<Worker> {
   return { ...w, dataDir, url, name };
 }
 
-const browserOn = (workerId: string | null, name: string) =>
-  ctx.browsers.create({ principal: admin, via: "control_api", name, workerId });
+const browserOn = async (workerId: string | null, name: string) =>
+  (await ctx.browsers.create({ principal: admin, via: "control_api", name, workerId }));
 
 describe("workers", () => {
   let worker: Worker;
@@ -106,7 +106,7 @@ describe("workers", () => {
   });
 
   it("starts a browser on the worker and drives it through a local endpoint", async () => {
-    const row = browserOn(worker.identity.workerId, "remote");
+    const row = (await browserOn(worker.identity.workerId, "remote"));
     assert.equal(existsSync(profileDir(row.id)), false, "nothing of its profile is kept on the main instance");
     const rt = await ctx.browsers.ensureRunning(row.id);
     assert.match(rt.cdpUrl, /^http:\/\/127\.0\.0\.1:\d+$/);
@@ -136,15 +136,15 @@ describe("workers", () => {
     await assert.rejects(fetch(`${rt.cdpUrl}/json/version`), "and the local endpoint is closed");
   });
 
-  it("lets only the administrator choose where a browser runs", () => {
+  it("lets only the administrator choose where a browser runs", async () => {
     const { agent } = createAgent({ name: "Placer", scopes: DEFAULT_AGENT_SCOPES, maxBrowsers: 2 });
-    assert.throws(
-      () => ctx.browsers.create({ principal: agent, via: "mcp", name: "sneaky", workerId: worker.identity.workerId }),
+    await assert.rejects(
+      async () => (await ctx.browsers.create({ principal: agent, via: "mcp", name: "sneaky", workerId: worker.identity.workerId })),
       /only the administrator can choose where a browser runs/,
     );
   });
 
-  it("keeps a new browser on the main instance while it has room, and overflows to a worker when it has not", () => {
+  it("keeps a new browser on the main instance while it has room, and overflows to a worker when it has not", async () => {
     // No process ceiling on this host: it has all the room there is, so it keeps its browsers.
     assert.equal(ctx.browsers.workers.pick(), null);
     const hostView = ctx.browsers.capacity.hostView.bind(ctx.browsers.capacity);
@@ -165,7 +165,7 @@ describe("workers", () => {
       localWith(900);
       assert.equal(ctx.browsers.workers.pick(), worker.identity.workerId);
       const { agent } = createAgent({ name: "Overflow", scopes: DEFAULT_AGENT_SCOPES, maxBrowsers: 2 });
-      assert.equal(ctx.browsers.create({ principal: agent, via: "mcp", name: "placed" }).worker_id, worker.identity.workerId);
+      assert.equal((await ctx.browsers.create({ principal: agent, via: "mcp", name: "placed" })).worker_id, worker.identity.workerId);
       process.env.TALLYLAMP_PLACEMENT = "local";
       assert.equal(ctx.browsers.workers.pick(), null);
     } finally {
@@ -175,21 +175,21 @@ describe("workers", () => {
   });
 
   it("says what does not reach a worker's browser yet, by name: saving it as a saved profile", async () => {
-    const row = browserOn(worker.identity.workerId, "limited");
+    const row = (await browserOn(worker.identity.workerId, "limited"));
     const sentence = /Saving a profile is not available yet for a browser on a worker, and limited is on worker-a\. Move it to the main instance first/;
     await assert.rejects(ctx.browsers.saveProfile(row.id, admin, { name: "x" }), sentence);
     // Desktop access and extensions go by the worker's own display. This one has none.
     assert.throws(() => ctx.browsers.updateAgentDesktop(row.id, true, admin), /requires a dedicated Xvfb display/);
     assert.throws(() => ctx.browsers.updateExtensions(row.id, true, admin), /requires a real browser on a dedicated Xvfb display/);
     assert.equal(row.extensions_enabled, 0, "extension support needs an X display, so it starts off there");
-    assert.throws(
-      () => ctx.browsers.create({ principal: admin, via: "control_api", name: "seeded", workerId: worker.identity.workerId, seedId: "nope" }),
+    await assert.rejects(
+      async () => (await ctx.browsers.create({ principal: admin, via: "control_api", name: "seeded", workerId: worker.identity.workerId, seedId: "nope" })),
       /starts on the main instance, where saved profiles are kept/,
     );
   });
 
   it("moves a running browser in one step: stops it, copies its profile, and starts it on the new host", async () => {
-    const row = browserOn(null, "mover");
+    const row = (await browserOn(null, "mover"));
     mkdirSync(path.join(profileDir(row.id), "Default"), { recursive: true });
     writeFileSync(path.join(profileDir(row.id), "Default", "Cookies"), "signed-in");
     const there = path.join(worker.dataDir, "profiles", row.id, "Default", "Cookies");
@@ -234,7 +234,7 @@ describe("workers", () => {
 
   it("leaves a running browser running where it was when its move fails", async () => {
     const dead = await addWorker("worker-dead");
-    const row = browserOn(null, "stayer");
+    const row = (await browserOn(null, "stayer"));
     await ctx.browsers.ensureRunning(row.id);
     // Answering the poll a moment ago, gone by the time the copy starts.
     await dead.close();
@@ -248,7 +248,7 @@ describe("workers", () => {
 
   it("keeps a browser whose worker cannot confirm its profile is deleted", async () => {
     const gone = await addWorker("worker-gone");
-    const row = browserOn(gone.identity.workerId, "stranded");
+    const row = (await browserOn(gone.identity.workerId, "stranded"));
     await gone.close();
     await assert.rejects(ctx.browsers.destroy(row.id, admin), /Worker worker-gone cannot be reached/);
     assert.equal(ctx.browsers.row(row.id).id, row.id, "the record stays, so the profile is not forgotten");
@@ -258,7 +258,7 @@ describe("workers", () => {
   });
 
   it("marks a browser crashed when its worker restarts or stops answering", async () => {
-    const row = browserOn(worker.identity.workerId, "orphaned");
+    const row = (await browserOn(worker.identity.workerId, "orphaned"));
     const rt = await ctx.browsers.ensureRunning(row.id);
     // The worker restarted: it says hello again, and whatever it was running is gone.
     ctx.browsers.workers.hello({ workerId: worker.identity.workerId, secret: worker.identity.secret, name: "worker-a", url: worker.url, version: ctx.browsers.workers.view(ctx.browsers.workers.row(worker.identity.workerId)).version });
@@ -276,7 +276,7 @@ describe("workers", () => {
   });
 
   it("forgets thread measurements when a Chrome thread setting changes, and only then", async () => {
-    const row = browserOn(null, "measured");
+    const row = (await browserOn(null, "measured"));
     ctx.browsers.recordThreads(row.id, 606, 710);
     await ctx.browsers.recoverOnBoot(); // first boot of a release that keeps the record: nothing is known to have changed
     assert.equal(ctx.browsers.row(row.id).launch_threads, 606);
@@ -302,7 +302,7 @@ describe("workers", () => {
       writeFileSync(path.join(cgroup, "pids.current"), `${current}\n`);
       writeFileSync(path.join(cgroup, "pids.events"), "max 0\n");
     };
-    const row = browserOn(worker.identity.workerId, "heavy on the worker");
+    const row = (await browserOn(worker.identity.workerId, "heavy on the worker"));
     ctx.browsers.recordThreads(row.id, 606, 640); // sized at 783
     const refusal = () => ctx.browsers.ensureRunning(row.id)
       .then(() => assert.fail("the start was admitted"), (e: { code?: string; message: string }) => `${e.code}: ${e.message}`);

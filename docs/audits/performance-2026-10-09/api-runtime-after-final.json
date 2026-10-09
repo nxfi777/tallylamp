@@ -1,0 +1,1329 @@
+{
+  "label": "runtime-after-final",
+  "timestamp": "2026-10-09T03:08:19.334Z",
+  "node": "v26.8.1",
+  "platform": "darwin",
+  "arch": "arm64",
+  "cpu": "Apple M4 Pro",
+  "fakeChrome": true,
+  "samples": 20,
+  "fixture": {
+    "seed": "deterministic fleet rows v1",
+    "profiles": "64 files × 16 KiB, 1 MiB total",
+    "sqlite": "temporary on-disk WAL; unchanged durability",
+    "warmup": 1
+  },
+  "routes": [
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/export"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/openapi.json"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/login"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/logout"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/me"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/poll"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/join"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/hello"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/workers"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/join-tokens"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/workers/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/move"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/links/pair/:code"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/:code/approve"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/:code/deny"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/access"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/access"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/link"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/status"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "PATCH",
+      "route": "/api/v1/browsers/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/sites"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/sites/:siteId"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/start"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/stop"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/restart"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/tunnels"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/tunnels"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/tunnels/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/requests"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/requests/:id/answer"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/lendable"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/grants/:granteeId"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/control"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/control"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/control/heartbeat"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/viewer-ticket"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/guests"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/guests"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/guests/:guestId"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/extensions"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/pinned"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/threads/reset"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/agent-desktop"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/thumbnail"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/agents"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/agents"
+    },
+    {
+      "source": "api.ts",
+      "method": "PATCH",
+      "route": "/api/v1/agents/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/agents/:id/rotate"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/seeds"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/seeds"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/seeds/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/seeds/:id/sites"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/seeds/:id/sites"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/seeds/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/audit"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/events"
+    },
+    {
+      "source": "server.ts",
+      "method": "GET",
+      "route": "/healthz"
+    },
+    {
+      "source": "server.ts",
+      "method": "ALL",
+      "route": "/mcp"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "GET",
+      "route": "/guest"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/session"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "GET",
+      "route": "/browser"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "DELETE",
+      "route": "/session"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/start"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/control"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "DELETE",
+      "route": "/control"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/control/heartbeat"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/viewer-ticket"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "GET",
+      "route": "/oauth/authorize"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/authorize"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/token"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/revoke"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/register"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/healthz"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/state"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/linked-bridges/:id/files"
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/start"
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/stop"
+    },
+    {
+      "source": "worker.ts",
+      "method": "DELETE",
+      "route": "/worker/v1/browsers/:id"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/browsers/:id/export"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/browsers/:id/profile"
+    },
+    {
+      "source": "worker.ts",
+      "method": "PUT",
+      "route": "/worker/v1/browsers/:id/profile"
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/x11"
+    },
+    {
+      "source": "worker.ts",
+      "method": "PUT",
+      "route": "/worker/v1/browsers/:id/uploads/:dir/:name"
+    },
+    {
+      "source": "worker.ts",
+      "method": "ALL",
+      "route": "/worker/v1/browsers/:id/cdp/*"
+    }
+  ],
+  "lifecycleTools": [
+    "tallylamp_desktop_screenshot",
+    "tallylamp_desktop_action",
+    "tallylamp_create_browser",
+    "tallylamp_list_browsers",
+    "tallylamp_update_browser",
+    "tallylamp_report_site_access",
+    "tallylamp_save_profile",
+    "tallylamp_update_profile",
+    "tallylamp_list_profile_templates",
+    "tallylamp_use_browser",
+    "tallylamp_screencast_start",
+    "tallylamp_screencast_stop",
+    "tallylamp_stop_browser",
+    "tallylamp_delete_browser",
+    "tallylamp_request_browser",
+    "tallylamp_list_requests",
+    "tallylamp_answer_request",
+    "tallylamp_set_lendable",
+    "tallylamp_open_tunnel",
+    "tallylamp_list_tunnels",
+    "tallylamp_close_tunnel",
+    "tallylamp_select_page",
+    "tallylamp_revoke_grant"
+  ],
+  "results": [
+    {
+      "name": "guest HTML HTTP download",
+      "coveredRoutes": [
+        "GET /guest"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 3.441667000000052,
+      "p50Ms": 1.7217500000000427,
+      "p95Ms": 1.905958000000055,
+      "maxMs": 2.08887500000003,
+      "peakRssMiB": 134.375,
+      "rawMs": [
+        1.770667000000003,
+        1.304416999999944,
+        1.105957999999987,
+        1.8597499999999627,
+        0.8684590000000298,
+        1.2600830000000087,
+        1.5729579999999714,
+        2.08887500000003,
+        1.874249999999961,
+        1.8789580000000115,
+        1.6875,
+        1.771665999999982,
+        0.44929100000001654,
+        1.846416999999974,
+        1.7999579999999469,
+        1.7217500000000427,
+        1.7105420000000322,
+        1.905958000000055,
+        1.7851249999999936,
+        1.7043750000000273
+      ]
+    },
+    {
+      "name": "SSE connect + matching event receipt + close",
+      "coveredRoutes": [
+        "GET /api/v1/events"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "endpoint": "connect-through-event-receipt; not browser repaint latency",
+      "n": 20,
+      "coldMs": 4.660250000000019,
+      "p50Ms": 0.5062500000000227,
+      "p95Ms": 0.9430000000000973,
+      "maxMs": 1.7474580000000515,
+      "peakRssMiB": 137.4375,
+      "rawMs": [
+        1.7474580000000515,
+        0.93100000000004,
+        0.6879999999999882,
+        0.6457500000000209,
+        0.455332999999996,
+        0.9317079999999578,
+        0.9430000000000973,
+        0.7787080000000515,
+        0.6430830000000469,
+        0.49545899999998255,
+        0.4695409999999356,
+        0.357291000000032,
+        0.5602499999999964,
+        0.37316599999996924,
+        0.4852080000000569,
+        0.43537499999990814,
+        0.39650000000006,
+        0.6574590000000171,
+        0.5062500000000227,
+        0.39874999999995
+      ]
+    },
+    {
+      "name": "worker health HTTP",
+      "coveredRoutes": [
+        "GET /healthz"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "routeSource": "worker.ts",
+      "n": 20,
+      "coldMs": 1.610166999999933,
+      "p50Ms": 1.5661249999999427,
+      "p95Ms": 1.8013750000000073,
+      "maxMs": 1.8092920000000277,
+      "peakRssMiB": 140.1875,
+      "rawMs": [
+        1.555332999999905,
+        1.4989590000000135,
+        1.5564589999999043,
+        1.545541999999955,
+        1.5171249999999645,
+        1.518666000000053,
+        1.8092920000000277,
+        1.6466669999999795,
+        1.5994590000000244,
+        1.5734579999999596,
+        1.5418339999999944,
+        1.6575829999999314,
+        1.6629580000000033,
+        1.6644999999999754,
+        0.2703749999999445,
+        1.8013750000000073,
+        1.5904580000000124,
+        1.5760000000000218,
+        1.5661249999999427,
+        1.5631660000000238
+      ]
+    },
+    {
+      "name": "worker state HTTP",
+      "coveredRoutes": [
+        "GET /worker/v1/state"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 1.7328330000000278,
+      "p50Ms": 1.6407910000000356,
+      "p95Ms": 2.014542000000006,
+      "maxMs": 2.2582089999999653,
+      "peakRssMiB": 140.765625,
+      "rawMs": [
+        1.619874999999979,
+        1.5902920000000904,
+        1.6404169999999567,
+        1.7543749999999818,
+        1.5260000000000673,
+        1.7447499999999536,
+        1.6407910000000356,
+        1.9062079999999924,
+        1.5470420000000331,
+        1.6418749999999136,
+        2.014542000000006,
+        1.8302079999999705,
+        1.732582999999977,
+        1.6025419999999713,
+        1.86850000000004,
+        1.6444159999999783,
+        1.6167090000000144,
+        1.5970000000000937,
+        1.55012499999998,
+        2.2582089999999653
+      ]
+    },
+    {
+      "name": "worker start + stop HTTP (fake Chrome)",
+      "coveredRoutes": [
+        "POST /worker/v1/browsers/:id/start",
+        "POST /worker/v1/browsers/:id/stop"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 4.661791999999991,
+      "p50Ms": 3.497959000000037,
+      "p95Ms": 4.090041000000042,
+      "maxMs": 4.177250000000072,
+      "peakRssMiB": 141.296875,
+      "rawMs": [
+        3.770582999999988,
+        3.550999999999931,
+        3.5139580000000024,
+        3.460916999999995,
+        2.1117079999999078,
+        3.497959000000037,
+        3.4802909999999656,
+        3.525166000000013,
+        3.352624999999989,
+        3.318916999999942,
+        3.336541999999895,
+        3.3757080000000315,
+        3.339666999999963,
+        3.729583000000048,
+        3.4659169999999904,
+        3.5009580000000824,
+        4.177250000000072,
+        4.090041000000042,
+        4.0784589999999525,
+        3.5445829999999887
+      ]
+    },
+    {
+      "name": "worker CDP HTTP proxy (fake Chrome version)",
+      "coveredRoutes": [
+        "ALL /worker/v1/browsers/:id/cdp/*"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 4.227583000000095,
+      "p50Ms": 1.8363749999999754,
+      "p95Ms": 2.2084579999999505,
+      "maxMs": 2.3425419999999804,
+      "peakRssMiB": 142.421875,
+      "rawMs": [
+        2.2022499999999354,
+        1.9070839999999407,
+        1.8363749999999754,
+        1.7494580000000042,
+        1.814707999999996,
+        1.8546249999999418,
+        1.8295420000000604,
+        1.9508329999999887,
+        2.029916999999955,
+        1.8318749999999682,
+        1.7767920000000004,
+        1.8725000000000591,
+        2.2084579999999505,
+        1.9249999999999545,
+        1.7810000000000628,
+        1.9679590000000644,
+        1.811083999999937,
+        1.8109580000000278,
+        1.7267080000000306,
+        2.3425419999999804
+      ]
+    },
+    {
+      "name": "worker upload 64 KiB HTTP + byte verification",
+      "coveredRoutes": [
+        "PUT /worker/v1/browsers/:id/uploads/:dir/:name"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "bytes": 65536,
+      "n": 20,
+      "coldMs": 5.794874999999934,
+      "p50Ms": 2.504415999999992,
+      "p95Ms": 3.2274999999999636,
+      "maxMs": 4.162500000000023,
+      "peakRssMiB": 146.765625,
+      "rawMs": [
+        3.2274999999999636,
+        2.620541000000003,
+        2.5216669999999795,
+        2.354165999999964,
+        2.4269579999998996,
+        2.6430420000000368,
+        2.504415999999992,
+        2.6621670000000677,
+        4.162500000000023,
+        1.9033330000000888,
+        1.7570000000000618,
+        2.618082999999956,
+        2.5025419999999485,
+        2.751041999999984,
+        2.3909999999999627,
+        2.5628330000000688,
+        2.4210839999999507,
+        2.3460000000000036,
+        2.55762500000003,
+        2.27312500000005
+      ]
+    },
+    {
+      "name": "worker profile tar download 1 MiB / 64 files",
+      "coveredRoutes": [
+        "GET /worker/v1/browsers/:id/profile"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "payloadBytes": 1048576,
+      "files": 64,
+      "n": 20,
+      "coldMs": 50.68104100000005,
+      "p50Ms": 40.43116699999996,
+      "p95Ms": 52.41450000000009,
+      "maxMs": 56.41229199999998,
+      "peakRssMiB": 167.5,
+      "rawMs": [
+        40.83220800000004,
+        46.153542000000016,
+        48.60862499999985,
+        38.44733300000007,
+        39.23333400000001,
+        41.27558399999998,
+        38.94404200000008,
+        40.67395799999986,
+        37.576041999999916,
+        39.392958000000135,
+        42.66474999999991,
+        42.55108300000006,
+        47.19904199999996,
+        39.905083000000104,
+        52.41450000000009,
+        56.41229199999998,
+        40.43116699999996,
+        39.61712499999999,
+        38.48266699999999,
+        38.1834580000002
+      ]
+    },
+    {
+      "name": "worker profile tar restore 1 MiB / 64 files",
+      "coveredRoutes": [
+        "PUT /worker/v1/browsers/:id/profile"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "payloadBytes": 1048576,
+      "files": 64,
+      "n": 20,
+      "coldMs": 46.77187499999991,
+      "p50Ms": 39.51945800000021,
+      "p95Ms": 77.25816600000007,
+      "maxMs": 167.39649999999983,
+      "peakRssMiB": 172.625,
+      "rawMs": [
+        42.21304199999986,
+        38.72533300000009,
+        39.805875000000015,
+        39.215333999999984,
+        40.968458000000055,
+        39.19579199999998,
+        37.29408400000011,
+        39.51945800000021,
+        36.69029099999989,
+        37.59629199999972,
+        38.43962499999998,
+        46.73970899999995,
+        77.25816600000007,
+        167.39649999999983,
+        47.818040999999994,
+        52.92837499999996,
+        41.84129199999961,
+        43.114915999999994,
+        37.932958999999755,
+        35.818333000000166
+      ]
+    },
+    {
+      "name": "worker export gzip 1 MiB / 64 files",
+      "coveredRoutes": [
+        "GET /worker/v1/browsers/:id/export"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "payloadBytes": 1048576,
+      "files": 64,
+      "n": 20,
+      "coldMs": 77.72270799999978,
+      "p50Ms": 69.7599580000001,
+      "p95Ms": 83.83879200000001,
+      "maxMs": 86.24233300000014,
+      "peakRssMiB": 173.671875,
+      "rawMs": [
+        69.98724999999968,
+        82.63983400000006,
+        69.780667,
+        70.05225000000019,
+        83.83879200000001,
+        86.24233300000014,
+        70.53929100000005,
+        66.58608400000003,
+        67.40079199999991,
+        67.32075000000032,
+        68.76150000000007,
+        67.98304199999984,
+        70.31137499999977,
+        69.7599580000001,
+        68.05712499999981,
+        68.42950000000019,
+        68.36079199999995,
+        72.90266699999984,
+        68.65016700000069,
+        70.06483299999945
+      ]
+    },
+    {
+      "name": "browser move worker to main + back, running fake Chrome, 1 MiB",
+      "coveredRoutes": [
+        "POST /api/v1/browsers/:id/move"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "payloadBytes": 1048576,
+      "files": 64,
+      "n": 20,
+      "coldMs": 183.64587500000016,
+      "p50Ms": 119.57666700000027,
+      "p95Ms": 151.06295899999986,
+      "maxMs": 161.15450000000055,
+      "peakRssMiB": 148.6875,
+      "rawMs": [
+        147.2362920000005,
+        138.6553330000006,
+        147.85249999999996,
+        161.15450000000055,
+        151.06295899999986,
+        118.97712500000034,
+        119.57666700000027,
+        116.22758299999987,
+        114.9575420000001,
+        118.6616669999994,
+        119.48454200000015,
+        118.91049999999996,
+        120.38699999999972,
+        119.62920800000029,
+        126.89866699999948,
+        118.10383300000012,
+        118.5102080000006,
+        119.59099999999944,
+        121.01104200000009,
+        116.83612499999981
+      ]
+    },
+    {
+      "name": "worker profile restore + delete, 1 MiB / 64 files",
+      "coveredRoutes": [
+        "DELETE /worker/v1/browsers/:id"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "payloadBytes": 1048576,
+      "files": 64,
+      "n": 20,
+      "coldMs": 38.12824999999975,
+      "p50Ms": 34.662209000000075,
+      "p95Ms": 36.4770410000001,
+      "maxMs": 37.133749999999964,
+      "peakRssMiB": 160.453125,
+      "rawMs": [
+        34.55787500000042,
+        35.2924579999999,
+        36.161417000000256,
+        37.133749999999964,
+        36.4770410000001,
+        34.115749999999935,
+        33.507291999999325,
+        33.87379199999941,
+        34.61250000000018,
+        34.95600000000013,
+        34.28191700000025,
+        34.74708399999963,
+        33.07087500000034,
+        33.30383299999994,
+        34.662209000000075,
+        34.926916999999776,
+        34.31591600000047,
+        34.93745899999976,
+        34.9390829999993,
+        35.428791000000274
+      ]
+    },
+    {
+      "name": "worker linked bridge artifact GET 1 MiB",
+      "coveredRoutes": [
+        "GET /worker/v1/linked-bridges/:id/files"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "bytes": 1048576,
+      "bridge": "installed MCP child for active membership only; no browser connection",
+      "n": 20,
+      "coldMs": 13.179457999999613,
+      "p50Ms": 12.173125000000255,
+      "p95Ms": 15.158958999999413,
+      "maxMs": 15.526666999999179,
+      "peakRssMiB": 164.84375,
+      "rawMs": [
+        12.173125000000255,
+        15.526666999999179,
+        14.846666999999798,
+        15.158958999999413,
+        12.946375000000444,
+        12.567166999999245,
+        12.007042000000183,
+        12.013208999999733,
+        12.497457999999824,
+        12.156500000000051,
+        11.822124999999687,
+        12.111916999999266,
+        11.913958000000093,
+        11.900125000000116,
+        12.710041999999703,
+        12.659916000000521,
+        13.185583000000406,
+        12.779540999999881,
+        11.767791999999645,
+        11.780499999999847
+      ]
+    }
+  ],
+  "gaps": [
+    "Fake Chrome supplies CDP responses: browser launch/render/encoding/input-to-paint, native desktop and real MCP child startup are NOT measured.",
+    "Real local worker HTTP, archives, uploads and move are measured with fake Chrome; Linux X11 execution and wide-area network/production-sized profiles remain unmeasured.",
+    "Sequential localhost samples measure service overhead, not internet latency or throughput. Rate-limit buckets reset before each sample; authorization, CSRF and data validation still execute."
+  ],
+  "blockedRoutes": [
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/x11",
+      "reason": "Successful execution requires a service-owned Linux Xvfb display and ffmpeg/xdotool. This macOS worker's fake Chrome has no Xvfb; a 409 refusal is not counted as native runtime performance."
+    }
+  ],
+  "workerRouteTimings": [
+    {
+      "route": "GET /healthz",
+      "n": 21,
+      "p50Ms": 1.562041000000022,
+      "p95Ms": 1.7947080000000142,
+      "rawMs": [
+        1.491457999999966,
+        1.5343749999999545,
+        1.49087499999996,
+        1.546291999999994,
+        1.5384590000001026,
+        1.509541000000013,
+        1.5096659999999247,
+        1.797207999999955,
+        1.632333000000017,
+        1.58624999999995,
+        1.5656669999999622,
+        1.5373749999999973,
+        1.649167000000034,
+        1.657291999999984,
+        1.6596250000000055,
+        0.2660409999999729,
+        1.7947080000000142,
+        1.58462499999996,
+        1.5712499999999636,
+        1.562041000000022,
+        1.5583749999999554
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "GET /worker/v1/state",
+      "n": 21,
+      "p50Ms": 1.6355419999999867,
+      "p95Ms": 2.002834000000007,
+      "rawMs": [
+        1.6845420000000786,
+        1.613666999999964,
+        1.585374999999999,
+        1.6355419999999867,
+        1.7477499999999964,
+        1.5182090000000699,
+        1.737875000000031,
+        1.634958000000097,
+        1.8943750000000819,
+        1.5373749999999973,
+        1.634166999999934,
+        2.002834000000007,
+        1.8199170000000322,
+        1.7262499999999363,
+        1.5971250000000055,
+        1.8615419999999858,
+        1.6392499999999472,
+        1.611833000000047,
+        1.5926249999999982,
+        1.545541999999955,
+        2.2503749999999627
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "POST /worker/v1/browsers/:id/start",
+      "n": 22,
+      "p50Ms": 1.7934999999999945,
+      "p95Ms": 2.287083999999936,
+      "rawMs": [
+        2.571707999999944,
+        1.8107919999999922,
+        1.8209580000000187,
+        1.7941669999999021,
+        1.7170419999999922,
+        1.777249999999981,
+        1.8047500000000127,
+        1.7927909999999656,
+        1.7992920000000368,
+        1.6804169999999203,
+        1.6830830000000105,
+        1.7149580000000242,
+        1.68425000000002,
+        1.678792000000044,
+        1.8454169999999976,
+        1.7934999999999945,
+        1.751957999999945,
+        2.287083999999936,
+        2.1922909999999547,
+        2.040124999999989,
+        1.8529170000000477,
+        1.738917000000015
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "POST /worker/v1/browsers/:id/stop",
+      "n": 22,
+      "p50Ms": 1.7063339999999698,
+      "p95Ms": 2.0353750000000446,
+      "rawMs": [
+        2.0353750000000446,
+        1.9444590000000517,
+        1.7164589999999862,
+        1.7063339999999698,
+        1.73112500000002,
+        0.32195899999999256,
+        1.6807919999999967,
+        1.6765829999999369,
+        1.7127919999999222,
+        1.6603749999999309,
+        1.625,
+        1.6106660000000375,
+        1.6805419999999458,
+        1.651083999999969,
+        1.8667910000000347,
+        1.6602080000000115,
+        1.7307919999999513,
+        1.8746249999999236,
+        1.8757909999999356,
+        2.018000000000029,
+        1.6794170000000577,
+        2.2754169999999476
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "GET /worker/v1/browsers/:id/cdp/json/version",
+      "n": 21,
+      "p50Ms": 1.8474169999999503,
+      "p95Ms": 2.3306250000000546,
+      "rawMs": [
+        3.9365420000000313,
+        2.1907079999999723,
+        1.899000000000001,
+        1.8292079999999942,
+        1.7431249999999636,
+        1.8083749999999554,
+        1.8474169999999503,
+        1.8186249999999973,
+        1.9439579999999523,
+        2.017082999999957,
+        1.8231250000000045,
+        1.7693749999999682,
+        1.8639160000000174,
+        2.196207999999956,
+        1.9159170000000358,
+        1.7708749999999327,
+        1.9593340000000126,
+        1.8034579999999778,
+        1.7987920000000486,
+        1.720042000000035,
+        2.3306250000000546
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "PUT /worker/v1/browsers/:id/uploads/:dir/:name",
+      "n": 21,
+      "p50Ms": 2.4508749999999964,
+      "p95Ms": 4.057416999999987,
+      "rawMs": [
+        5.173166999999921,
+        3.1348339999999553,
+        2.521833999999899,
+        2.4508749999999964,
+        2.272583999999938,
+        2.3137080000000196,
+        2.560958000000028,
+        2.426917000000003,
+        2.579541000000063,
+        4.057416999999987,
+        1.7701250000000073,
+        1.6756249999999682,
+        2.553042000000005,
+        2.427915999999982,
+        2.678916999999956,
+        2.320374999999899,
+        2.482291999999916,
+        2.3487499999999955,
+        2.267167000000086,
+        2.4924160000000484,
+        2.2102499999999736
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "GET /worker/v1/browsers/:id/profile",
+      "n": 21,
+      "p50Ms": 31.811000000000035,
+      "p95Ms": 42.85104200000001,
+      "rawMs": [
+        40.60374999999999,
+        31.811000000000035,
+        37.28295800000001,
+        39.91820800000005,
+        29.909834000000046,
+        30.326291000000083,
+        32.554333999999926,
+        30.129292000000078,
+        31.935040999999956,
+        28.552666000000045,
+        30.66579200000001,
+        33.85279199999991,
+        33.947541999999885,
+        38.53212499999995,
+        31.047458000000006,
+        42.85104200000001,
+        47.11979199999996,
+        31.513417000000118,
+        30.984874999999874,
+        29.970125000000053,
+        29.035499999999956
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "PUT /worker/v1/browsers/:id/profile",
+      "n": 42,
+      "p50Ms": 33.62700000000041,
+      "p95Ms": 52.84679199999982,
+      "rawMs": [
+        46.67916600000012,
+        42.14166599999999,
+        38.63608399999998,
+        39.7231670000001,
+        39.150082999999995,
+        40.88325000000009,
+        39.08895799999982,
+        37.225666000000274,
+        39.428959000000305,
+        36.62266600000021,
+        37.52629200000001,
+        38.363374999999905,
+        46.42591700000003,
+        77.16233300000022,
+        167.30333299999984,
+        47.72891600000003,
+        52.84679199999982,
+        41.76283299999977,
+        43.020082999999886,
+        37.86058400000002,
+        35.74375000000009,
+        33.62700000000041,
+        30.010541000000558,
+        31.00654200000008,
+        31.82341699999961,
+        32.26008400000046,
+        31.769124999999804,
+        29.283332999999402,
+        29.25824999999986,
+        29.708999999999833,
+        30.453542000000198,
+        30.534458000000086,
+        29.80633399999988,
+        30.358290999999554,
+        28.60975000000053,
+        29.01154200000019,
+        30.17395800000031,
+        30.633499999999913,
+        30.074125000000095,
+        30.11487500000021,
+        30.091333000000304,
+        30.700292000000445
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "GET /worker/v1/browsers/:id/export",
+      "n": 21,
+      "p50Ms": 61.0615829999997,
+      "p95Ms": 75.03749999999991,
+      "rawMs": [
+        68.82866700000022,
+        60.85462499999994,
+        73.88704099999995,
+        61.14000000000033,
+        61.32074999999986,
+        75.03749999999991,
+        77.5558329999999,
+        61.67858400000023,
+        57.863000000000284,
+        58.82058300000017,
+        58.622249999999894,
+        60.101624999999785,
+        58.90549999999985,
+        61.5607500000001,
+        61.0615829999997,
+        59.50908299999992,
+        59.668709000000035,
+        59.33529200000021,
+        64.08954199999971,
+        59.680624999999964,
+        61.39545799999996
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "DELETE /worker/v1/browsers/:id",
+      "n": 21,
+      "p50Ms": 4.414874999999483,
+      "p95Ms": 4.815833000000566,
+      "rawMs": [
+        4.449708000000101,
+        4.518082999999933,
+        4.257166999999754,
+        4.306791999999405,
+        4.839832999999999,
+        4.6724169999997684,
+        4.797542000000249,
+        4.206416999999419,
+        4.127249999999549,
+        4.130583000000115,
+        4.388541000000259,
+        4.434084000000439,
+        4.360874999999396,
+        4.414874999999483,
+        4.263249999999971,
+        4.456959000000097,
+        4.26299999999992,
+        4.206500000000233,
+        4.7910830000000715,
+        4.815833000000566,
+        4.696874999999636
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    },
+    {
+      "route": "GET /worker/v1/linked-bridges/:id/files",
+      "n": 21,
+      "p50Ms": 3.4619580000007772,
+      "p95Ms": 6.246291999999812,
+      "rawMs": [
+        4.467209000000366,
+        3.4338749999997162,
+        6.310833000000457,
+        3.609875000000102,
+        6.246291999999812,
+        4.119582999999693,
+        3.6376250000002983,
+        2.914249999999811,
+        3.4619580000007772,
+        3.7531669999998485,
+        3.225000000000364,
+        3.0326249999998254,
+        3.3806660000000193,
+        3.304374999999709,
+        2.9944580000001224,
+        3.5174159999996846,
+        3.3839170000001104,
+        3.5474169999997684,
+        3.908042000000023,
+        3.082416999999623,
+        3.185583999999835
+      ],
+      "note": "All explicit successful worker requests, including first observations and setup; move's internal worker requests are excluded."
+    }
+  ]
+}

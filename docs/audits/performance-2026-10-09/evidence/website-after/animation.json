@@ -1,0 +1,46 @@
+{
+  "measuredAt": "2026-10-09T02:44:29.038Z",
+  "base": "http://127.0.0.1:4328",
+  "mode": "4x-fast4g",
+  "animation": [
+    {
+      "position": 0,
+      "frames": 61,
+      "counts": {
+        "film-cursor:style": 61,
+        "BUTTON:style": 61,
+        "film-camera:style": 19
+      }
+    },
+    {
+      "position": 1800,
+      "frames": 61,
+      "counts": {}
+    },
+    {
+      "position": 0,
+      "frames": 62,
+      "counts": {
+        "film-camera:style": 49,
+        "film-cursor:style": 62,
+        "BUTTON:style": 62
+      }
+    },
+    {
+      "position": 6549,
+      "frames": 61,
+      "counts": {}
+    },
+    {
+      "position": 0,
+      "frames": 61,
+      "counts": {
+        "film-cursor:style": 28,
+        "BUTTON:style": 61,
+        "film-cursor:data-ripple": 2,
+        "film-camera:style": 25,
+        "dash:data-view": 1
+      }
+    }
+  ]
+}

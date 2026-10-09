@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:44:08.501Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/share-browser-for-sign-in",
+  "mode": "4x-fast4g",
+  "lcp": 280,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 8.300000011920929,
+  "dcl": 160.69999998807907,
+  "load": 393.69999998807907,
+  "fcp": 280,
+  "transferBytes": 368391,
+  "jsDecodedBytes": 549286,
+  "resources": 21,
+  "domNodes": 236,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

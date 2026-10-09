@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:36.222Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/self-host-browser-docker",
+  "mode": "4x-fast4g",
+  "lcp": 276,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 3.800000011920929,
+  "dcl": 156.60000002384186,
+  "load": 392,
+  "fcp": 276,
+  "transferBytes": 367846,
+  "jsDecodedBytes": 549136,
+  "resources": 21,
+  "domNodes": 211,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

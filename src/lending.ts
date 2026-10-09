@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { config } from "./config.js";
-import { getDb, nowIso } from "./db.js";
+import { getDb, nowIso, prepare } from "./db.js";
 import { Err } from "./errors.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
@@ -108,8 +108,7 @@ export function activeGrant(browserId: string, granteeId: string): GrantRow | nu
 }
 
 export function grantsFor(browserId: string): GrantRow[] {
-  return getDb()
-    .prepare(
+  return prepare(
       `SELECT * FROM browser_grants WHERE browser_id = ? AND revoked_at IS NULL AND expires_at > ?
        ORDER BY created_at`,
     )

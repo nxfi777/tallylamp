@@ -77,6 +77,10 @@ describe("what a worker runs on a browser's display", () => {
   it("refuses ffmpeg that reads anything but this browser's display, or writes anywhere but stdout", () => {
     const shot = ["-nostdin", "-loglevel", "error", "-f", "x11grab", "-video_size", "2560x1600", "-i", ":7.0", "-frames:v", "1", "-c:v", "mjpeg", "-f", "image2pipe", "pipe:1"];
     assert.ok(allowedFfmpeg(shot, ":7"));
+    assert.ok(allowedFfmpeg(["-probesize", "32", ...shot], ":7"), "the desktop's fixed raw-display probe is allowed");
+    for (const value of ["0", "31", "33", "5000000", "32M", "32; touch /tmp/x", "-i"]) {
+      assert.equal(allowedFfmpeg(["-probesize", value, ...shot], ":7"), false, value);
+    }
     for (const args of [
       shot.map((a) => (a === ":7.0" ? ":0.0" : a)), [...shot.slice(0, -1), "/tmp/out.jpg"], [...shot.slice(0, -1), "-y", "pipe:1"],
       ["-i", "/etc/passwd", "pipe:1"], [...shot.slice(0, -1), "-vf", "movie=/etc/passwd", "pipe:1"], shot.filter((a) => a !== "-i" && a !== ":7.0"),
@@ -97,7 +101,7 @@ describe("Full browser and the agent desktop tools, run on another host", () => 
   before(async () => {
     ctx = await startTestServer();
     owner = createAgent({ name: "Desktop on a worker" });
-    id = ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "remote display" }).id;
+    id = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "remote display" })).id;
     rt = await ctx.browsers.ensureRunning(id);
     // Shaped as workers.ts shapes a worker's browser: the worker's display, and its spawner.
     // No Xvfb here at all.
@@ -218,7 +222,7 @@ describe("tunnels and uploads for a browser on a worker", () => {
   });
 
   it("carries a tunnel from Chrome on the worker to the agent's machine, and nothing it was not bound to", async () => {
-    const row = ctx.browsers.create({ principal: admin, via: "control_api", name: "tunnelled", workerId: worker.identity.workerId });
+    const row = (await ctx.browsers.create({ principal: admin, via: "control_api", name: "tunnelled", workerId: worker.identity.workerId }));
     await ctx.browsers.ensureRunning(row.id);
     const { row: tunnel, token } = createTunnel(ctx.browsers, admin, { browserId: row.id, host: "127.0.0.1", port: sitePort });
 
@@ -253,7 +257,7 @@ describe("tunnels and uploads for a browser on a worker", () => {
   });
 
   it("puts a file for upload_file at the same path on the worker, and only one the bridge would take", async () => {
-    const row = ctx.browsers.create({ principal: admin, via: "control_api", name: "uploader", workerId: worker.identity.workerId });
+    const row = (await ctx.browsers.create({ principal: admin, via: "control_api", name: "uploader", workerId: worker.identity.workerId }));
     await ctx.browsers.ensureRunning(row.id);
     const folder = mkdtempSync(path.join(realpathSync(os.tmpdir()), "tl-upload-"));
     const file = path.join(folder, "report.pdf");

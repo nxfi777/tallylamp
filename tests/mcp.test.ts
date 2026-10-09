@@ -58,7 +58,7 @@ describe("MCP saved-profile round trip", () => {
       assert.ok(!result.isError, JSON.stringify(result));
       return JSON.parse(result.content[0].text);
     };
-    const source = ctx.browsers.create({ principal: writer.agent, via: "mcp", name: "Source" });
+    const source = (await ctx.browsers.create({ principal: writer.agent, via: "mcp", name: "Source" }));
     const marker = (id: string) => path.join(ctx.browsers.row(id).profile_path, "profile-fixture");
     writeFileSync(marker(source.id), "v1");
     await call("tallylamp_use_browser", { browserId: source.id });
@@ -78,7 +78,7 @@ describe("MCP saved-profile round trip", () => {
     writeFileSync(marker(loaded.browserId), "new login");
     const updated = await call("tallylamp_update_profile");
     assert.equal(updated.profile.id, initial.profile.id);
-    const future = ctx.browsers.create({ principal: writer.agent, via: "mcp", seedId: initial.profile.id });
+    const future = (await ctx.browsers.create({ principal: writer.agent, via: "mcp", seedId: initial.profile.id }));
     assert.equal(readFileSync(marker(future.id), "utf8"), "new login");
     assert.equal(readFileSync(marker(source.id), "utf8"), "v2", "existing browser remains independent");
     const fork = await call("tallylamp_save_profile", { asNew: true, name: "Separate profile" });
@@ -92,10 +92,10 @@ describe("MCP saved-profile round trip", () => {
   it("does not grant profile export by default or silently create through update", async () => {
     assert.ok(!DEFAULT_AGENT_SCOPES.includes("seed:write"));
     const ordinary = createAgent({ name: "Ordinary agent" });
-    const source = ctx.browsers.create({ principal: ordinary.agent, via: "mcp" });
+    const source = (await ctx.browsers.create({ principal: ordinary.agent, via: "mcp" }));
     await assert.rejects(ctx.browsers.saveProfile(source.id, ordinary.agent), /seed:write/);
     const writer = createAgent({ name: "Unlinked writer", scopes: [...DEFAULT_AGENT_SCOPES, "seed:write"] });
-    const fresh = ctx.browsers.create({ principal: writer.agent, via: "mcp" });
+    const fresh = (await ctx.browsers.create({ principal: writer.agent, via: "mcp" }));
     await assert.rejects(ctx.browsers.saveProfile(fresh.id, writer.agent, { updateOnly: true }), /no saved profile/);
     assert.equal(ctx.browsers.runtime(fresh.id), undefined, "a refused update never starts Chrome");
   });

@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:40.474Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/test-mcp-connector-chatgpt-claude-grok",
+  "mode": "4x-fast4g",
+  "lcp": 292,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 6,
+  "dcl": 157.89999997615814,
+  "load": 398,
+  "fcp": 292,
+  "transferBytes": 388074,
+  "jsDecodedBytes": 549136,
+  "resources": 22,
+  "domNodes": 338,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

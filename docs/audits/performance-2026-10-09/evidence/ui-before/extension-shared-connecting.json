@@ -1,0 +1,65 @@
+{
+  "measuredAt": "2026-10-09T02:42:39.673Z",
+  "base": "http://127.0.0.1:60288",
+  "state": "shared-connecting",
+  "note": "Real panel renderer, documented demo data. Does not exercise extension APIs.",
+  "states": [
+    {
+      "lcp": 180,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 2.200000047683716,
+      "dcl": 164.30000001192093,
+      "load": 216.30000001192093,
+      "fcp": 180,
+      "transferBytes": 1804,
+      "jsDecodedBytes": 0,
+      "resources": 4,
+      "domNodes": 30,
+      "viewport": [
+        375,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "lcp": 176,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 1.7000000476837158,
+      "dcl": 165.10000002384186,
+      "load": 208.70000004768372,
+      "fcp": 176,
+      "transferBytes": 1500,
+      "jsDecodedBytes": 0,
+      "resources": 4,
+      "domNodes": 30,
+      "viewport": [
+        768,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "lcp": 192,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 2.100000023841858,
+      "dcl": 176,
+      "load": 226,
+      "fcp": 192,
+      "transferBytes": 1500,
+      "jsDecodedBytes": 0,
+      "resources": 4,
+      "domNodes": 30,
+      "viewport": [
+        1440,
+        900
+      ],
+      "overflow": false
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:29.408Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/use-your-own-browser-with-an-agent",
+  "mode": "4x-fast4g",
+  "lcp": 288,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 20.299999952316284,
+  "dcl": 169.5999999642372,
+  "load": 403.89999997615814,
+  "fcp": 288,
+  "transferBytes": 356989,
+  "jsDecodedBytes": 487170,
+  "resources": 19,
+  "domNodes": 291,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

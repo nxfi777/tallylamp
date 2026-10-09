@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:32.873Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/deploy-browser-on-railway",
+  "mode": "4x-fast4g",
+  "lcp": 272,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 3.399999976158142,
+  "dcl": 156.30000001192093,
+  "load": 388.39999997615814,
+  "fcp": 272,
+  "transferBytes": 369483,
+  "jsDecodedBytes": 549136,
+  "resources": 21,
+  "domNodes": 261,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

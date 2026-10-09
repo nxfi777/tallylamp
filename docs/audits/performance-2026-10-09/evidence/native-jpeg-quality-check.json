@@ -1,0 +1,56 @@
+[
+  {
+    "file": "linux-lifecycle-after-desktop.jpg",
+    "size": [
+      1280,
+      800
+    ],
+    "jpegQuantizationHash": "810a5accb99cba168a57007ca55b2ae52408881cf012bbc446d4053b9b9f2978",
+    "frameHeaderHex": "080320050003011200021200031200"
+  },
+  {
+    "file": "linux-probe-after-desktop.jpg",
+    "size": [
+      1280,
+      800
+    ],
+    "jpegQuantizationHash": "810a5accb99cba168a57007ca55b2ae52408881cf012bbc446d4053b9b9f2978",
+    "frameHeaderHex": "080320050003011200021200031200"
+  },
+  {
+    "file": "linux-control15-experiment-desktop.jpg",
+    "size": [
+      1280,
+      800
+    ],
+    "jpegQuantizationHash": "810a5accb99cba168a57007ca55b2ae52408881cf012bbc446d4053b9b9f2978",
+    "frameHeaderHex": "080320050003011200021200031200"
+  },
+  {
+    "file": "linux-phase-before-desktop.jpg",
+    "size": [
+      1280,
+      800
+    ],
+    "jpegQuantizationHash": "810a5accb99cba168a57007ca55b2ae52408881cf012bbc446d4053b9b9f2978",
+    "frameHeaderHex": "080320050003011200021200031200"
+  },
+  {
+    "file": "linux-zero-delay-experiment-desktop.jpg",
+    "size": [
+      1280,
+      800
+    ],
+    "jpegQuantizationHash": "810a5accb99cba168a57007ca55b2ae52408881cf012bbc446d4053b9b9f2978",
+    "frameHeaderHex": "080320050003011200021200031200"
+  },
+  {
+    "file": "linux-final-desktop.jpg",
+    "size": [
+      1280,
+      800
+    ],
+    "jpegQuantizationHash": "810a5accb99cba168a57007ca55b2ae52408881cf012bbc446d4053b9b9f2978",
+    "frameHeaderHex": "080320050003011200021200031200"
+  }
+]

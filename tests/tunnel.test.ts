@@ -255,7 +255,7 @@ describe("loopback tunnels", () => {
     // the borrower a browser that can already reach the owner's machine.
     const owner = createAgent({ name: "tunnel owner", scopes: [...DEFAULT_AGENT_SCOPES, "browser:lend", "browser:tunnel"], maxBrowsers: 5 });
     const borrower = createAgent({ name: "tunnel borrower", scopes: [...DEFAULT_AGENT_SCOPES, "browser:borrow"], maxBrowsers: 5 });
-    const row = ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "lent-with-a-tunnel" });
+    const row = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "lent-with-a-tunnel" }));
 
     const origin = http.createServer((_req, res) => res.end("the owner's laptop"));
     await new Promise<void>((r) => origin.listen(0, "127.0.0.1", () => r()));
@@ -296,7 +296,7 @@ describe("loopback tunnels", () => {
   it("does not let a borrower enumerate the owner's private authorities", async () => {
     const owner = createAgent({ name: "listing owner", scopes: [...DEFAULT_AGENT_SCOPES, "browser:lend", "browser:tunnel"], maxBrowsers: 5 });
     const borrower = createAgent({ name: "listing borrower", scopes: [...DEFAULT_AGENT_SCOPES, "browser:borrow"], maxBrowsers: 5 });
-    const row = ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "listing-test" });
+    const row = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "listing-test" }));
     const asked = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     answerRequest(ctx.browsers, owner.agent, { requestId: (asked as { requestId: string }).requestId, decision: "grant" });
 

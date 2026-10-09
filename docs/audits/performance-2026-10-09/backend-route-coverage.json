@@ -1,0 +1,733 @@
+{
+  "boundary": "Successful workflow coverage of all 89 statically enumerated HTTP registrations across 72 local workflows and one separate real Linux worker X11 workflow; not all branches or 89 independent action distributions. Each local workflow has one first observation plus 20 repeated samples. Runtime supplement uses real localhost worker/archive/upload/move transport with explicitly fake Chrome. The Linux X11 route has 20 successful real xdotool samples. Inventory excludes array-defined routes and WebSocket upgrades; other real managed/linked measurements remain separately labeled.",
+  "workflows": 72,
+  "enumeratedRoutes": 89,
+  "coveredRoutes": 89,
+  "routes": [
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/export",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/openapi.json",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/login",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/logout",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/me",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/poll",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/join",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/hello",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/workers",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/join-tokens",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/workers/:id",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/move",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "browser move worker to main + back, running fake Chrome, 1 MiB"
+        }
+      ]
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/links/pair/:code",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/:code/approve",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/:code/deny",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/access",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/access",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/link",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/status",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "PATCH",
+      "route": "/api/v1/browsers/:id",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/sites",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/sites/:siteId",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/start",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/stop",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/restart",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/tunnels",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/tunnels",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/tunnels/:id",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/requests",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/requests/:id/answer",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/lendable",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/grants/:granteeId",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/control",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/control",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/control/heartbeat",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/viewer-ticket",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/guests",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/guests",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/guests/:guestId",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/extensions",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/pinned",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/threads/reset",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/agent-desktop",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/thumbnail",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/agents",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/agents",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "PATCH",
+      "route": "/api/v1/agents/:id",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/agents/:id/rotate",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/seeds",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/seeds",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/seeds/:id",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/seeds/:id/sites",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/seeds/:id/sites",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/seeds/:id",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/audit",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/events",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "SSE connect + matching event receipt + close"
+        }
+      ]
+    },
+    {
+      "source": "server.ts",
+      "method": "GET",
+      "route": "/healthz",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "server.ts",
+      "method": "ALL",
+      "route": "/mcp",
+      "measured": true,
+      "note": "POST initialize plus3 lifecycle tools; GET event stream,DELETE and forwarded DevTools tools not timed here.",
+      "status": "measured"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "GET",
+      "route": "/guest",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "guest HTML HTTP download"
+        }
+      ]
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/guest/api/v1/session",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "GET",
+      "route": "/guest/api/v1/browser",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "DELETE",
+      "route": "/guest/api/v1/session",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/guest/api/v1/start",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/guest/api/v1/control",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "DELETE",
+      "route": "/guest/api/v1/control",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/guest/api/v1/control/heartbeat",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/guest/api/v1/viewer-ticket",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "GET",
+      "route": "/oauth/authorize",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/authorize",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/token",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/revoke",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/register",
+      "measured": true,
+      "status": "measured"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/healthz",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker health HTTP"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/state",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker state HTTP"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/linked-bridges/:id/files",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker linked bridge artifact GET 1 MiB"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/start",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker start + stop HTTP (fake Chrome)"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/stop",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker start + stop HTTP (fake Chrome)"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "DELETE",
+      "route": "/worker/v1/browsers/:id",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker profile restore + delete, 1 MiB / 64 files"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/browsers/:id/export",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker export gzip 1 MiB / 64 files"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/browsers/:id/profile",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker profile tar download 1 MiB / 64 files"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "PUT",
+      "route": "/worker/v1/browsers/:id/profile",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker profile tar restore 1 MiB / 64 files"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/x11",
+      "measured": true,
+      "note": "Local macOS fixture cannot execute native X11; this registration is measured successfully by the separate isolated Linux worker fixture, using real xdotool and its dedicated Xvfb display.",
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "evidence/linux-before.json",
+          "workflow": "POST worker x11 mousemove through process exit",
+          "n": 20
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "PUT",
+      "route": "/worker/v1/browsers/:id/uploads/:dir/:name",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker upload 64 KiB HTTP + byte verification"
+        }
+      ]
+    },
+    {
+      "source": "worker.ts",
+      "method": "ALL",
+      "route": "/worker/v1/browsers/:id/cdp/*",
+      "measured": true,
+      "status": "measured",
+      "evidence": [
+        {
+          "report": "api-runtime-after-final.json",
+          "workflow": "worker CDP HTTP proxy (fake Chrome version)"
+        }
+      ]
+    }
+  ],
+  "environmentBlockedRoutes": 0,
+  "unmeasuredWithoutReason": 0,
+  "reports": [
+    "api-after-final.json",
+    "api-extra-after-final.json",
+    "api-runtime-after-final.json"
+  ],
+  "localEnvironmentBlockedRoutes": 1,
+  "additionalNativeWorkflows": 1
+}

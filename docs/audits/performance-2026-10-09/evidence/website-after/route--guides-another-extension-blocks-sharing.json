@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:44:20.183Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/another-extension-blocks-sharing",
+  "mode": "4x-fast4g",
+  "lcp": 288,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 4.5,
+  "dcl": 161.39999997615814,
+  "load": 395.19999998807907,
+  "fcp": 288,
+  "transferBytes": 369262,
+  "jsDecodedBytes": 549286,
+  "resources": 21,
+  "domNodes": 247,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

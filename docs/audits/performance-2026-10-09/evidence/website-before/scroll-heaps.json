@@ -1,0 +1,30 @@
+{
+  "measuredAt": "2026-10-09T02:33:51.575Z",
+  "base": "http://127.0.0.1:4328",
+  "heaps": [
+    {
+      "usedSize": 4993064,
+      "totalSize": 6029312,
+      "embedderHeapUsedSize": 6300216,
+      "backingStorageSize": 989303
+    },
+    {
+      "usedSize": 5006544,
+      "totalSize": 5767168,
+      "embedderHeapUsedSize": 6353000,
+      "backingStorageSize": 989303
+    },
+    {
+      "usedSize": 5017500,
+      "totalSize": 5767168,
+      "embedderHeapUsedSize": 6308576,
+      "backingStorageSize": 989303
+    },
+    {
+      "usedSize": 5026896,
+      "totalSize": 5767168,
+      "embedderHeapUsedSize": 6089152,
+      "backingStorageSize": 989303
+    }
+  ]
+}

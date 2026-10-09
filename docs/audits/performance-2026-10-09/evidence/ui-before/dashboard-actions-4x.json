@@ -1,0 +1,730 @@
+{
+  "measuredAt": "2026-10-09T02:42:18.394Z",
+  "base": "http://127.0.0.1:60288",
+  "cpu": 4,
+  "latencyMs": 40,
+  "note": "Real DOM and HTTP/SQLite; fake Chrome lifecycle. Programmatic activation; feedbackMs is a paint opportunity, not verified visible acknowledgement. Inspect errors per action.",
+  "actions": [
+    {
+      "name": "navigate /",
+      "feedbackMs": 21.30000001192093,
+      "completionMs": 118.5,
+      "requests": [
+        {
+          "url": "/api/v1/me",
+          "duration": 52.700000047683716,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 52.59999996423721,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 55.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 55.40000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 55.60000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 59,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 59.09999996423721,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "navigate /agents",
+      "feedbackMs": 17,
+      "completionMs": 112.80000001192093,
+      "requests": [
+        {
+          "url": "/api/v1/me",
+          "duration": 52.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 52.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 52.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 53.700000047683716,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 54.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 55.700000047683716,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 57.30000001192093,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "navigate /seeds",
+      "feedbackMs": 13,
+      "completionMs": 111.89999997615814,
+      "requests": [
+        {
+          "url": "/api/v1/me",
+          "duration": 51.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 52.10000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 53,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 54.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 55.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 56,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 57.09999996423721,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "navigate /workers",
+      "feedbackMs": 15.399999976158142,
+      "completionMs": 114.59999996423721,
+      "requests": [
+        {
+          "url": "/api/v1/me",
+          "duration": 55,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 50.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 51.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 52.60000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 53.80000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 55,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 55.89999997615814,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "navigate /security",
+      "feedbackMs": 13.399999976158142,
+      "completionMs": 111.80000001192093,
+      "requests": [
+        {
+          "url": "/api/v1/me",
+          "duration": 51.90000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 51.59999996423721,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 53.09999996423721,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 53.90000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 54.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 56.09999996423721,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 57.89999997615814,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "navigate /pair",
+      "feedbackMs": 12.699999988079071,
+      "completionMs": 111.19999998807907,
+      "requests": [
+        {
+          "url": "/api/v1/me",
+          "duration": 53.299999952316284,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 51.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 51.5,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 52.80000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 53.80000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 54.90000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 55.5,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "navigate /",
+      "feedbackMs": 15.900000035762787,
+      "completionMs": 134.5,
+      "requests": [
+        {
+          "url": "/api/v1/me",
+          "duration": 52.40000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 53.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 70.70000004768372,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 71.70000004768372,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 71.40000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 71.5,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 71.80000001192093,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "filter browsers",
+      "feedbackMs": 13.899999976158142,
+      "completionMs": 13.899999976158142,
+      "requests": [],
+      "pending": 0
+    },
+    {
+      "name": "clear filter",
+      "feedbackMs": 17.200000047683716,
+      "completionMs": 17.200000047683716,
+      "requests": [],
+      "pending": 0
+    },
+    {
+      "name": "edit browser details open",
+      "feedbackMs": 17.299999952316284,
+      "completionMs": 17.299999952316284,
+      "requests": [],
+      "pending": 0
+    },
+    {
+      "name": "edit browser details submit",
+      "feedbackMs": 18,
+      "completionMs": 322.69999998807907,
+      "requests": [
+        {
+          "url": "/api/v1/browsers/f640781275b07a67",
+          "duration": 51.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/me",
+          "duration": 51.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 51.80000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 53.60000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 54.59999996423721,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 55.5,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 56.5,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 57.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/me",
+          "duration": 50.90000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 51.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 53.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 53.60000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 70.5,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 71.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 71.40000003576279,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "record signed-in site open",
+      "feedbackMs": 11.100000023841858,
+      "completionMs": 11.100000023841858,
+      "requests": [],
+      "pending": 0
+    },
+    {
+      "name": "record signed-in site submit",
+      "feedbackMs": 29.299999952316284,
+      "completionMs": 307.5999999642372,
+      "requests": [
+        {
+          "url": "/api/v1/browsers/f640781275b07a67/sites",
+          "duration": 53,
+          "status": 201
+        },
+        {
+          "url": "/api/v1/me",
+          "duration": 50.89999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 51.80000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 53.59999996423721,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 53.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 55.89999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 56.59999996423721,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 57.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/me",
+          "duration": 51.10000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 50.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 52.5,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 52.5,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 55.19999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 55.19999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 55.09999996423721,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "mark needs login",
+      "feedbackMs": 9.100000023841858,
+      "completionMs": 299.19999998807907,
+      "requests": [
+        {
+          "url": "/api/v1/browsers/f640781275b07a67/sites",
+          "duration": 51.39999997615814,
+          "status": 201
+        },
+        {
+          "url": "/api/v1/me",
+          "duration": 50.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 49.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 51.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 52.19999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 53,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 54.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 55.80000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/me",
+          "duration": 52.10000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 52.60000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 55.19999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 55.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 56,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 58.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 58.30000001192093,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "remove site record",
+      "feedbackMs": 18.30000001192093,
+      "completionMs": 301.5,
+      "requests": [
+        {
+          "url": "/api/v1/browsers/f640781275b07a67/sites/be6199491b1c",
+          "duration": 52.69999998807907,
+          "status": 204
+        },
+        {
+          "url": "/api/v1/me",
+          "duration": 50.5,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 53.60000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 54.10000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 54.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 55.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 56.89999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 58.19999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/me",
+          "duration": 52.39999997615814,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 52.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 54,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 54,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 56.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 56.799999952316284,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 58.19999998807907,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    },
+    {
+      "name": "open browser actions",
+      "feedbackMs": 19.19999998807907,
+      "completionMs": 19.19999998807907,
+      "requests": [],
+      "pending": 0
+    },
+    {
+      "name": "view stopped browser",
+      "feedbackMs": 31.900000035762787,
+      "completionMs": 161.10000002384186,
+      "requests": [
+        {
+          "url": "/api/v1/me",
+          "duration": 53.90000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/status",
+          "duration": 51.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/agents",
+          "duration": 51.69999998807907,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers",
+          "duration": 53.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/seeds",
+          "duration": 54.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers/f640781275b07a67",
+          "duration": 55.30000001192093,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/requests",
+          "duration": 63.90000003576279,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/workers",
+          "duration": 101.60000002384186,
+          "status": 200
+        },
+        {
+          "url": "/api/v1/browsers/f640781275b07a67/guests",
+          "duration": 44.19999998807907,
+          "status": 200
+        }
+      ],
+      "pending": 0
+    }
+  ]
+}

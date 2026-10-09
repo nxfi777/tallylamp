@@ -1150,7 +1150,7 @@ export class McpGateway {
         ] };
       }
       if (name === "tallylamp_create_browser") {
-        const row = this.browsers.create({
+        const row = await this.browsers.create({
           principal: p,
           via: "mcp",
           name: typeof args.name === "string" ? args.name : undefined,

@@ -86,19 +86,22 @@ export class CdpClient {
   }
 }
 
-export async function browserWsUrl(cdpHttp: string): Promise<string> {
+export async function browserWsUrl(cdpHttp: string, timeoutMs = 10_000): Promise<string> {
   const start = Date.now();
   let last = "";
-  while (Date.now() - start < 10_000) {
+  while (Date.now() - start < timeoutMs) {
     try {
-      const res = await fetch(`${cdpHttp}/json/version`);
+      // The loop's deadline is useless if a single fetch never returns. Include body reads
+      // in the remaining budget, too; a live socket is not proof Chrome is responsive.
+      const res = await fetch(`${cdpHttp}/json/version`, { signal: AbortSignal.timeout(Math.max(1, timeoutMs - (Date.now() - start))) });
       const j = (await res.json()) as { webSocketDebuggerUrl?: string };
       if (j.webSocketDebuggerUrl) return j.webSocketDebuggerUrl;
       last = JSON.stringify(j);
     } catch (e) {
       last = (e as Error).message;
     }
-    await sleep(100);
+    const remaining = timeoutMs - (Date.now() - start);
+    if (remaining > 0) await sleep(Math.min(100, remaining));
   }
   throw new Error(`could not read CDP version from ${cdpHttp}: ${last}`);
 }

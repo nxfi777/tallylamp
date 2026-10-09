@@ -10,7 +10,7 @@ import { getDb } from "../src/db.js";
 
 let ctx: TestCtx;
 const admin = { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] } as const;
-const create = (name: string, seedId?: string) => ctx.browsers.create({ name, seedId, principal: admin, via: "dashboard" });
+const create = async (name: string, seedId?: string) => (await ctx.browsers.create({ name, seedId, principal: admin, via: "dashboard" }));
 const marker = (id: string) => path.join(ctx.browsers.row(id).profile_path, "fixture.txt");
 
 describe("reusable saved profiles", () => {
@@ -21,8 +21,49 @@ describe("reusable saved profiles", () => {
   });
   after(async () => ctx.close());
 
+  it("reserves pending clone capacity and protects its source until the complete copy is published", async () => {
+    const source = await create("Async source");
+    writeFileSync(marker(source.id), "complete snapshot");
+    const saved = await ctx.browsers.snapshotSeed(source.id, "Async seed", admin);
+    const owner = createAgent({ name: "Clone owner", maxBrowsers: 1, scopes: [...DEFAULT_AGENT_SCOPES, "seed:use"] });
+    const manager = ctx.browsers as unknown as { copyProfile: (from: string, to: string) => Promise<void> };
+    const original = manager.copyProfile;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    manager.copyProfile = async (from, to) => { await gate; await original.call(ctx.browsers, from, to); };
+    const copying = ctx.browsers.create({ principal: owner.agent, via: "mcp", seedId: saved.id, name: "Async copy" });
+    try {
+      assert.equal(ctx.browsers.list({ ownerType: "agent", ownerId: owner.agent.id }).length, 0, "a partial profile is never visible");
+      await assert.rejects(ctx.browsers.create({ principal: owner.agent, via: "mcp", seedId: saved.id }), /max browsers/);
+      await assert.rejects(ctx.browsers.deleteSeed(saved.id, "Async seed", admin), /being copied/);
+      await assert.rejects(ctx.browsers.snapshotSeed(source.id, "New snapshot", admin, { seedId: saved.id }), /being copied/);
+      assert.throws(() => ctx.browsers.editSeedSite(saved.id, { origin: "https://example.com", state: "expected" }, admin), /being copied/);
+      await assert.rejects(ctx.browsers.withExport([], async () => undefined), /busy/);
+      release();
+      const row = await copying;
+      assert.equal(readFileSync(marker(row.id), "utf8"), "complete snapshot");
+    } finally { release(); await copying.catch(() => undefined); manager.copyProfile = original; }
+  });
+
+  it("cleans a failed asynchronous clone and releases the owner's reservation", async () => {
+    const source = await create("Clone failure source");
+    const saved = await ctx.browsers.snapshotSeed(source.id, "Clone failure seed", admin);
+    const owner = createAgent({ name: "Failed clone owner", maxBrowsers: 1, scopes: [...DEFAULT_AGENT_SCOPES, "seed:use"] });
+    const manager = ctx.browsers as unknown as { copyProfile: (from: string, to: string) => Promise<void> };
+    const original = manager.copyProfile;
+    let destination = "";
+    manager.copyProfile = async (_from, to) => { destination = to; writeFileSync(path.join(to, "partial"), "partial"); throw new Error("clone fixture failure"); };
+    try {
+      await assert.rejects(ctx.browsers.create({ principal: owner.agent, via: "mcp", seedId: saved.id }), /clone fixture failure/);
+      assert.equal(existsSync(destination), false);
+      assert.equal(ctx.browsers.list({ ownerType: "agent", ownerId: owner.agent.id }).length, 0);
+    } finally { manager.copyProfile = original; }
+    const row = await ctx.browsers.create({ principal: owner.agent, via: "mcp", seedId: saved.id });
+    assert.ok(row.id, "a failed clone does not consume a browser slot");
+  });
+
   it("saves a running source, resumes it, and clones independent profiles with metadata and site inventory", async () => {
-    const source = create("Source");
+    const source = (await create("Source"));
     writeFileSync(marker(source.id), "original");
     await ctx.browsers.ensureRunning(source.id);
     reportSiteAccess(source.id, { origin: "https://example.com", state: "confirmed" }, admin);
@@ -34,8 +75,8 @@ describe("reusable saved profiles", () => {
     const { seed } = response.body as { seed: { id: string; resumed: boolean } };
     assert.equal(seed.resumed, true);
     assert.ok(ctx.browsers.runtime(source.id));
-    const first = create("First", seed.id);
-    const second = create("Second", seed.id);
+    const first = (await create("First", seed.id));
+    const second = (await create("Second", seed.id));
     assert.notEqual(first.profile_path, second.profile_path);
     assert.deepEqual(JSON.parse(first.metadata_json), { project: "Research", purpose: "References" });
     assert.equal(first.persistent, 1);
@@ -47,7 +88,7 @@ describe("reusable saved profiles", () => {
   });
 
   it("refreshes site observations before a running browser is snapshotted", async () => {
-    const source = create("Just signed in");
+    const source = (await create("Just signed in"));
     await ctx.browsers.ensureRunning(source.id);
     const manager = ctx.browsers as unknown as { siteDetector: { scan: (id: string, pages: unknown[], running: () => boolean, force?: boolean) => Promise<void> } };
     const original = manager.siteDetector.scan;
@@ -64,12 +105,12 @@ describe("reusable saved profiles", () => {
   });
 
   it("updating a saved profile changes future copies only and keeps its id", async () => {
-    const source = create("Update source");
+    const source = (await create("Update source"));
     writeFileSync(marker(source.id), "v1");
     const saved = await ctx.browsers.snapshotSeed(source.id, "Version one", admin);
     assert.equal(saved.resumed, false);
     assert.equal(ctx.browsers.runtime(source.id), undefined);
-    const oldCopy = create("Old copy", saved.id);
+    const oldCopy = (await create("Old copy", saved.id));
     writeFileSync(marker(source.id), "v2");
     const update = await json(`${ctx.url}/api/v1/seeds/${saved.id}`, {
       method: "PUT", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
@@ -77,7 +118,7 @@ describe("reusable saved profiles", () => {
     });
     assert.equal(update.status, 200, JSON.stringify(update.body));
     assert.equal((update.body as { seed: { id: string } }).seed.id, saved.id);
-    const newCopy = create("New copy", saved.id);
+    const newCopy = (await create("New copy", saved.id));
     assert.equal(readFileSync(marker(oldCopy.id), "utf8"), "v1");
     assert.equal(readFileSync(marker(newCopy.id), "utf8"), "v2");
     assert.deepEqual(JSON.parse(newCopy.metadata_json), { project: "Updated" });
@@ -85,7 +126,7 @@ describe("reusable saved profiles", () => {
   });
 
   it("reserves the resume slot, refuses conflicting lifecycle operations, and publishes nothing on copy failure", async () => {
-    const source = create("Failure source");
+    const source = (await create("Failure source"));
     await ctx.browsers.ensureRunning(source.id);
     process.env.TALLYLAMP_MAX_BROWSERS = "1";
     const before = ctx.browsers.listSeeds().length;
@@ -102,7 +143,7 @@ describe("reusable saved profiles", () => {
       await assert.rejects(ctx.browsers.stop(source.id), /being saved/);
       await assert.rejects(ctx.browsers.destroy(source.id, admin), /being saved/);
       await assert.rejects(ctx.browsers.snapshotSeed(source.id, "Duplicate", admin), /busy/);
-      const intruder = create("Other start");
+      const intruder = (await create("Other start"));
       await assert.rejects(ctx.browsers.ensureRunning(intruder.id), /fleet is full/);
       release();
       await assert.rejects(save, /fixture copy failure/);
@@ -112,7 +153,7 @@ describe("reusable saved profiles", () => {
   });
 
   it("requires explicit write authorization to publish or overwrite saved authenticated profiles", async () => {
-    const source = create("Private source");
+    const source = (await create("Private source"));
     const response = await json(`${ctx.url}/api/v1/seeds`, {
       method: "POST", headers: { Authorization: `Bearer ${ctx.agentToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ browserId: source.id, name: "Unauthorized" }),
@@ -123,11 +164,11 @@ describe("reusable saved profiles", () => {
   });
 
   it("lets an authorized agent update a loaded shared profile, but refuses unrelated IDs and human control", async () => {
-    const sharedSource = create("Shared source");
+    const sharedSource = (await create("Shared source"));
     const shared = await ctx.browsers.snapshotSeed(sharedSource.id, "Shared", admin);
     const other = await ctx.browsers.snapshotSeed(sharedSource.id, "Other", admin);
     const writer = createAgent({ name: "Writer", scopes: [...DEFAULT_AGENT_SCOPES, "seed:use", "seed:write"] });
-    const loaded = ctx.browsers.create({ principal: writer.agent, via: "mcp", seedId: shared.id });
+    const loaded = (await ctx.browsers.create({ principal: writer.agent, via: "mcp", seedId: shared.id }));
     const update = await ctx.browsers.saveProfile(loaded.id, writer.agent, { updateOnly: true });
     assert.equal(update.profile.id, shared.id);
     await assert.rejects(ctx.browsers.saveProfile(loaded.id, writer.agent, { profileId: other.id, updateOnly: true }), /only the saved profile linked/);
@@ -138,7 +179,7 @@ describe("reusable saved profiles", () => {
   it("does not allow an agent to export a borrowed browser, even with profile write permission", async () => {
     const owner = createAgent({ name: "Owner", scopes: [...DEFAULT_AGENT_SCOPES, "browser:lend"] });
     const borrower = createAgent({ name: "Borrower", scopes: [...DEFAULT_AGENT_SCOPES, "browser:borrow", "seed:write"] });
-    const source = ctx.browsers.create({ principal: owner.agent, via: "mcp" });
+    const source = (await ctx.browsers.create({ principal: owner.agent, via: "mcp" }));
     const pending = requestBrowser(ctx.browsers, borrower.agent, { browserId: source.id });
     assert.equal(pending.state, "pending");
     await answerRequest(ctx.browsers, owner.agent, { requestId: pending.requestId!, decision: "grant" });
@@ -147,12 +188,12 @@ describe("reusable saved profiles", () => {
   });
 
   it("deletes only the confirmed snapshot and detaches save targets without falling back to an older profile", async () => {
-    const source = create("Delete source");
+    const source = (await create("Delete source"));
     writeFileSync(marker(source.id), "kept browser data");
     reportSiteAccess(source.id, { origin: "https://example.com", state: "confirmed" }, admin);
     const older = await ctx.browsers.snapshotSeed(source.id, "Older", admin);
     const saved = await ctx.browsers.snapshotSeed(source.id, "Delete me", admin);
-    const copy = create("Existing copy", saved.id);
+    const copy = (await create("Existing copy", saved.id));
     await ctx.browsers.ensureRunning(copy.id);
     const response = await json(`${ctx.url}/api/v1/seeds/${saved.id}`, {
       method: "DELETE", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" },
@@ -168,12 +209,12 @@ describe("reusable saved profiles", () => {
     assert.equal(readFileSync(marker(copy.id), "utf8"), "kept browser data");
     assert.equal(readFileSync(marker(source.id), "utf8"), "kept browser data");
     assert.equal(listSiteAccess(copy.id).length, 1);
-    assert.throws(() => create("Cannot reload deleted", saved.id), /not found/);
+    await assert.rejects(create("Cannot reload deleted", saved.id), /not found/);
     assert.equal(getDb().prepare(`SELECT 1 FROM seed_site_access WHERE seed_id = ?`).get(saved.id), undefined);
   });
 
   it("requires current-name confirmation and administrator access before deletion", async () => {
-    const saved = await ctx.browsers.snapshotSeed(create("Confirmation source").id, "Confirm this", admin);
+    const saved = await ctx.browsers.snapshotSeed((await create("Confirmation source")).id, "Confirm this", admin);
     for (const confirmName of [undefined, "Old name"]) {
       const response = await json(`${ctx.url}/api/v1/seeds/${saved.id}`, {
         method: "DELETE", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" }, body: JSON.stringify({ confirmName }),
@@ -190,7 +231,7 @@ describe("reusable saved profiles", () => {
   });
 
   it("keeps failed disk cleanup durable and retries it without restoring the deleted profile", async () => {
-    const saved = await ctx.browsers.snapshotSeed(create("Cleanup source").id, "Cleanup", admin);
+    const saved = await ctx.browsers.snapshotSeed((await create("Cleanup source")).id, "Cleanup", admin);
     const manager = ctx.browsers as unknown as { removeSnapshot: (file: string) => Promise<void> };
     const original = manager.removeSnapshot;
     manager.removeSnapshot = async () => { throw new Error("fixture disk failure"); };
@@ -205,7 +246,7 @@ describe("reusable saved profiles", () => {
   });
 
   it("refuses deletion while the same profile is being updated", async () => {
-    const source = create("Concurrent source");
+    const source = (await create("Concurrent source"));
     const saved = await ctx.browsers.snapshotSeed(source.id, "Concurrent", admin);
     const manager = ctx.browsers as unknown as { copyProfile: (from: string, to: string) => Promise<void> };
     const original = manager.copyProfile;

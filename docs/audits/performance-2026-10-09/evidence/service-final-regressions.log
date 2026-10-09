@@ -1,0 +1,362 @@
+{"ts":"2026-10-09T02:59:20.867Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:20.871Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_b65a3eefd28f100a"}}
+{"ts":"2026-10-09T02:59:20.872Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"87cc6ee42c246d59"}}
+▶ backend request work sharing
+  ✔ shares overlapping page refreshes, then reads a fresh page on the next call (2.488292ms)
+  ✔ coalesces simultaneous thumbnails without retaining completed pixels (18.142666ms)
+  ✔ does not publish a late page response after that runtime has stopped (1.144542ms)
+✔ backend request work sharing (95.58525ms)
+✔ bounds a CDP discovery socket that accepts a request but never sends a response (82.053ms)
+{"ts":"2026-10-09T02:59:21.023Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:21.024Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_16eb350e48cffd95"}}
+{"ts":"2026-10-09T02:59:21.024Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"fd56a4cb1e255fda"}}
+{"ts":"2026-10-09T02:59:21.026Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"4a58a95e3276"}}
+{"ts":"2026-10-09T02:59:21.027Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"admin","target":"4a58a95e3276"}}
+{"ts":"2026-10-09T02:59:21.027Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"07af6b6d41fb5ef6"}}
+✔ waits for an unpublished clone during shutdown and refuses new work (17.53175ms)
+{"ts":"2026-10-09T02:59:21.039Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:21.039Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_c0407e10551b49fb"}}
+{"ts":"2026-10-09T02:59:21.040Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"c7952ca6ff4205c5"}}
+{"ts":"2026-10-09T02:59:21.041Z","level":"info","msg":"audit","extra":{"action":"browser.deleted","actorType":"admin","target":"c7952ca6ff4205c5"}}
+✔ reserves a deleting profile against starts, saves, moves and another delete (13.72675ms)
+{"ts":"2026-10-09T02:59:21.051Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:21.051Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_81c31eda888e752d"}}
+{"ts":"2026-10-09T02:59:21.052Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"42ffc16432c8991b"}}
+{"ts":"2026-10-09T02:59:21.053Z","level":"info","msg":"audit","extra":{"action":"browser.deleted","actorType":"admin","target":"42ffc16432c8991b"}}
+✔ waits for asynchronous delete cleanup before shutdown completes (11.507542ms)
+{"ts":"2026-10-09T02:59:21.062Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:21.063Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_2b218b8214c6312d"}}
+{"ts":"2026-10-09T02:59:21.063Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"250cf01b5a4b0152"}}
+{"ts":"2026-10-09T02:59:21.089Z","level":"info","msg":"reaping idle browser","extra":{"id":"250cf01b5a4b0152"}}
+✔ waits for asynchronous idle reap cleanup before shutdown completes (37.268917ms)
+✔ compiled statement reuse reads live values and cannot cross database resets (4.336834ms)
+{"ts":"2026-10-09T02:59:22.334Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:22.339Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_7001bd24c2d37a7d"}}
+{"ts":"2026-10-09T02:59:22.340Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"a23db27a716d8e38"}}
+{"ts":"2026-10-09T02:59:22.341Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"e822aa7910891585"}}
+{"ts":"2026-10-09T02:59:22.341Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"c15382a51cd23448"}}
+{"ts":"2026-10-09T02:59:22.342Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"781ba157fc09e8a2"}}
+{"ts":"2026-10-09T02:59:22.342Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"d456640bf0babaee"}}
+{"ts":"2026-10-09T02:59:22.342Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"15d57de5f22f5434"}}
+{"ts":"2026-10-09T02:59:22.344Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"acae03cbf20eccc1"}}
+▶ host capacity
+  ✔ counts each occupied local slot once, including queued starts and reserved resumes (4.131334ms)
+{"ts":"2026-10-09T02:59:22.378Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"de559d0a1f74d2d8"}}
+{"ts":"2026-10-09T02:59:22.378Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"51d247411dbcf75d"}}
+{"ts":"2026-10-09T02:59:22.380Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"91ef6be2456fe5cc"}}
+{"ts":"2026-10-09T02:59:22.380Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"0426328a239af104"}}
+  ✔ admits on a browser's measured launch peak, and refuses one it has no room for (29.331083ms)
+{"ts":"2026-10-09T02:59:22.409Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"5b40c394d38865b7"}}
+{"ts":"2026-10-09T02:59:22.409Z","level":"info","msg":"browser start queued for host processes","extra":{"id":"5b40c394d38865b7","need":300,"free":100,"held":0}}
+  ✔ counts concurrent starts, so they cannot all read the same free room (35.393958ms)
+{"ts":"2026-10-09T02:59:23.438Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"6edbc60ebc9c8af7"}}
+{"ts":"2026-10-09T02:59:23.438Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"5de08497a15e3bdb"}}
+  ✔ queues a start until there is room, rather than refusing it outright (1029.134375ms)
+{"ts":"2026-10-09T02:59:23.441Z","level":"info","msg":"audit","extra":{"action":"browser.pinned","actorType":"admin","target":"6edbc60ebc9c8af7"}}
+{"ts":"2026-10-09T02:59:23.468Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_38c5556c6a9b31c7"}}
+{"ts":"2026-10-09T02:59:23.468Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"c7955d042fc7235a"}}
+  ✔ holds room for a stopped pinned browser, so another cannot start into it (29.839417ms)
+{"ts":"2026-10-09T02:59:23.471Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"07894d54bec06ccc"}}
+  ✔ lets only the administrator pin a browser (2.983792ms)
+{"ts":"2026-10-09T02:59:23.496Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"60910395434ad101"}}
+{"ts":"2026-10-09T02:59:23.497Z","level":"info","msg":"audit","extra":{"action":"browser.pinned","actorType":"admin","target":"60910395434ad101"}}
+{"ts":"2026-10-09T02:59:23.497Z","level":"warn","msg":"stopping a browser to free host processes","extra":{"id":"07894d54bec06ccc","name":"idle test","threads":400,"idle":true,"why":"to make room for pinned browser kraken dashboard"}}
+{"ts":"2026-10-09T02:59:23.497Z","level":"info","msg":"audit","extra":{"action":"browser.shed","actorType":"system","target":"07894d54bec06ccc"}}
+{"ts":"2026-10-09T02:59:23.524Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"270d98651177688a"}}
+  ✔ stops an idle unpinned browser to start a pinned one, and tells its owner why (52.757625ms)
+{"ts":"2026-10-09T02:59:23.551Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"9fe2e9aec9ac27ae"}}
+{"ts":"2026-10-09T02:59:23.551Z","level":"info","msg":"browser start queued for host processes","extra":{"id":"9fe2e9aec9ac27ae","need":319,"free":200,"held":0}}
+{"ts":"2026-10-09T02:59:23.853Z","level":"info","msg":"audit","extra":{"action":"browser.pinned","actorType":"admin","target":"9fe2e9aec9ac27ae"}}
+{"ts":"2026-10-09T02:59:24.553Z","level":"warn","msg":"stopping a browser to free host processes","extra":{"id":"270d98651177688a","name":"dray-ai-pages","threads":707,"idle":false,"why":"to make room for pinned browser kraken reader"}}
+{"ts":"2026-10-09T02:59:24.554Z","level":"info","msg":"audit","extra":{"action":"browser.shed","actorType":"system","target":"270d98651177688a"}}
+{"ts":"2026-10-09T02:59:24.595Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"1f2ef95c16c7f1c3"}}
+  ✔ admits as pinned a start that was pinned while it waited (1070.817833ms)
+{"ts":"2026-10-09T02:59:24.598Z","level":"info","msg":"browser thread counts reset","extra":{"id":"1f2ef95c16c7f1c3","name":"oversized","launch":606,"peak":640}}
+{"ts":"2026-10-09T02:59:24.598Z","level":"info","msg":"audit","extra":{"action":"browser.threads_reset","actorType":"admin","target":"1f2ef95c16c7f1c3"}}
+{"ts":"2026-10-09T02:59:24.628Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_17a9f99e6ce4f0ed"}}
+{"ts":"2026-10-09T02:59:24.628Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"72434e16fcabc1f0"}}
+  ✔ forgets a stopped browser's thread counts on reset, so a start it fits is admitted (33.546959ms)
+{"ts":"2026-10-09T02:59:24.632Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"ea4f2f608a7aa2c9"}}
+  ✔ lets only the administrator reset a browser's thread counts (3.764042ms)
+{"ts":"2026-10-09T02:59:24.657Z","level":"info","msg":"browser thread counts reset","extra":{"id":"ea4f2f608a7aa2c9","name":"remeasured","launch":null,"peak":400}}
+{"ts":"2026-10-09T02:59:24.657Z","level":"info","msg":"audit","extra":{"action":"browser.threads_reset","actorType":"admin","target":"ea4f2f608a7aa2c9"}}
+{"ts":"2026-10-09T02:59:24.659Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"f3e6ad24daf2923e"}}
+{"ts":"2026-10-09T02:59:24.659Z","level":"info","msg":"browser start queued for host processes","extra":{"id":"f3e6ad24daf2923e","need":783,"free":500,"held":0}}
+  ✔ measures a running browser again from its reset, and its launch on its next start (26.946ms)
+{"ts":"2026-10-09T02:59:24.963Z","level":"info","msg":"browser thread counts reset","extra":{"id":"f3e6ad24daf2923e","name":"waiting oversized","launch":606,"peak":640}}
+{"ts":"2026-10-09T02:59:24.963Z","level":"info","msg":"audit","extra":{"action":"browser.threads_reset","actorType":"admin","target":"f3e6ad24daf2923e"}}
+{"ts":"2026-10-09T02:59:25.705Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"695e482bf7bacaf0"}}
+{"ts":"2026-10-09T02:59:25.706Z","level":"info","msg":"browser thread counts reset","extra":{"id":"695e482bf7bacaf0","name":"heavy once","launch":606,"peak":640}}
+{"ts":"2026-10-09T02:59:25.706Z","level":"info","msg":"audit","extra":{"action":"browser.threads_reset","actorType":"admin","target":"695e482bf7bacaf0"}}
+{"ts":"2026-10-09T02:59:25.708Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"820ef3f9043be533"}}
+  ✔ admits a waiting start on its new size when its thread counts are reset (1045.65675ms)
+  ✔ names the reset in a refusal only when a reset would let the browser in (2.988667ms)
+{"ts":"2026-10-09T02:59:25.736Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"090ee3f18b3b2d1c"}}
+{"ts":"2026-10-09T02:59:25.737Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"09bcbbf6e1ab3a30"}}
+{"ts":"2026-10-09T02:59:25.737Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"31b5e5d147444b7e"}}
+{"ts":"2026-10-09T02:59:25.738Z","level":"info","msg":"audit","extra":{"action":"browser.pinned","actorType":"admin","target":"09bcbbf6e1ab3a30"}}
+  ✔ never stops a browser that is in use to start an unpinned one (29.704333ms)
+{"ts":"2026-10-09T02:59:25.789Z","level":"warn","msg":"stopping a browser to free host processes","extra":{"id":"31b5e5d147444b7e","name":"dray test","threads":612,"idle":false,"why":"to keep a pinned browser from running out of processes"}}
+{"ts":"2026-10-09T02:59:25.789Z","level":"info","msg":"audit","extra":{"action":"browser.shed","actorType":"system","target":"31b5e5d147444b7e"}}
+{"ts":"2026-10-09T02:59:25.791Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"32e1fbbd2f05bcc8"}}
+{"ts":"2026-10-09T02:59:25.791Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"a7b813b777cfc7a2"}}
+{"ts":"2026-10-09T02:59:25.791Z","level":"info","msg":"audit","extra":{"action":"browser.pinned","actorType":"admin","target":"32e1fbbd2f05bcc8"}}
+  ✔ stops an active unpinned browser that is starving a running pinned one (53.255834ms)
+{"ts":"2026-10-09T02:59:25.850Z","level":"info","msg":"reaping idle browser","extra":{"id":"a7b813b777cfc7a2"}}
+{"ts":"2026-10-09T02:59:25.852Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"f4962301d1f9dd6d"}}
+  ✔ keeps a pinned browser through the idle reaper (60.894875ms)
+{"ts":"2026-10-09T02:59:25.881Z","level":"warn","msg":"browser unhealthy","extra":{"id":"f4962301d1f9dd6d","name":"zygote","reason":"Chrome lost the zygote that starts its renderers, so no new page can load"}}
+{"ts":"2026-10-09T02:59:25.881Z","level":"info","msg":"audit","extra":{"action":"browser.restarted","actorType":"system","target":"f4962301d1f9dd6d"}}
+{"ts":"2026-10-09T02:59:25.905Z","level":"warn","msg":"browser unhealthy","extra":{"id":"f4962301d1f9dd6d","name":"zygote","reason":"test says so"}}
+{"ts":"2026-10-09T02:59:25.906Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"49d2df4dfbf13ebc"}}
+  ✔ restarts a browser that lost its renderer zygote, and stops restarting it after the budget (54.252667ms)
+{"ts":"2026-10-09T02:59:25.929Z","level":"warn","msg":"browser unhealthy","extra":{"id":"49d2df4dfbf13ebc","name":"aborts","reason":"every navigation fails with net::ERR_ABORTED (3 in a row, on example.com, cloudflare.com, pro.kraken.com)"}}
+{"ts":"2026-10-09T02:59:25.929Z","level":"info","msg":"audit","extra":{"action":"browser.restarted","actorType":"system","target":"49d2df4dfbf13ebc"}}
+{"ts":"2026-10-09T02:59:25.953Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"8189d5b624fc888e"}}
+  ✔ treats a streak of net::ERR_ABORTED across hosts as broken, and one site's as the site's (47.070417ms)
+  ✔ reads a navigation's outcome off the bridge's text (0.441958ms)
+{"ts":"2026-10-09T02:59:25.977Z","level":"warn","msg":"host process limit reached: the kernel refused new processes and threads","extra":{"max":1000,"current":991,"refused":412,"running":1,"threads":{"8189d5b624fc888e":null}}}
+{"ts":"2026-10-09T02:59:25.980Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_80a83833f06f8f34"}}
+{"ts":"2026-10-09T02:59:25.980Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"2e010d71d79b3a32"}}
+  ✔ tells the dashboard and every running browser's agent when the kernel refuses processes (26.730583ms)
+{"ts":"2026-10-09T02:59:26.016Z","level":"info","msg":"mcp bound fake browser (no chrome-devtools-mcp child)","extra":{"session":"[redacted]","browser":"2e010d71d79b3a32"}}
+  ✔ delivers a note about the browser on the agent's next tool call, once (43.16575ms)
+✔ host capacity (3730.237666ms)
+✔ a lifecycle action does one refresh and keeps its pending state until rendering finishes (2.508292ms)
+✔ parallel data completions share a paint and a stale frame cannot overwrite another route (0.640333ms)
+✔ live changes refresh immediately after idle, rate-limit bursts, and wait while hidden or a menu is open (1.382166ms)
+{"ts":"2026-10-09T02:59:27.357Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:27.361Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_685862fce702cca1"}}
+{"ts":"2026-10-09T02:59:27.365Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"79bb43774b1ab361"}}
+{"ts":"2026-10-09T02:59:27.402Z","level":"info","msg":"audit","extra":{"action":"browser.renamed","actorType":"admin","target":"79bb43774b1ab361"}}
+{"ts":"2026-10-09T02:59:27.402Z","level":"info","msg":"audit","extra":{"action":"metadata.edited","actorType":"admin","target":"79bb43774b1ab361"}}
+▶ persistence
+  ✔ stopping a persistent browser keeps the profile (71.385334ms)
+{"ts":"2026-10-09T02:59:27.436Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"a21a004fcfaca1ca"}}
+{"ts":"2026-10-09T02:59:27.440Z","level":"info","msg":"audit","extra":{"action":"browser.deleted","actorType":"admin","target":"a21a004fcfaca1ca"}}
+  ✔ deleting removes the profile (9.534917ms)
+{"ts":"2026-10-09T02:59:27.444Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"7529862673722282"}}
+{"ts":"2026-10-09T02:59:27.472Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"cdb2f31b93b8bdaf"}}
+{"ts":"2026-10-09T02:59:27.474Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"37e8c6d26f3a4c95"}}
+{"ts":"2026-10-09T02:59:27.474Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"fd5f87861aa770c0"}}
+{"ts":"2026-10-09T02:59:27.475Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"9d1ba1b9cfe20140"}}
+{"ts":"2026-10-09T02:59:27.475Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"f0493a949dca6da6"}}
+  ✔ enforces fleet limits (30.016625ms)
+{"ts":"2026-10-09T02:59:27.503Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_97644326ae8c64f4"}}
+{"ts":"2026-10-09T02:59:27.503Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"d20253ce66fc6c51"}}
+  ✔ counts in-flight starts against the cap, so concurrent launches cannot overshoot it (29.03225ms)
+{"ts":"2026-10-09T02:59:27.527Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"6b53a332ecb76a31"}}
+{"ts":"2026-10-09T02:59:27.552Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"81d6a17f860f3c3a"}}
+{"ts":"2026-10-09T02:59:27.576Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"072becad0ad8a26d"}}
+{"ts":"2026-10-09T02:59:27.601Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"4c53e982276fa1f2"}}
+{"ts":"2026-10-09T02:59:27.625Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"02e60bf5d300a6ea"}}
+{"ts":"2026-10-09T02:59:27.649Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"7321d94a076198eb"}}
+{"ts":"2026-10-09T02:59:27.672Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"27b743a8e07854fd"}}
+{"ts":"2026-10-09T02:59:27.697Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"bc516a772cf9f242"}}
+{"ts":"2026-10-09T02:59:27.721Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"064778596c8e9e5d"}}
+  ✔ has no cap when TALLYLAMP_MAX_BROWSERS is unset or 0, and no per-agent cap at 0 (248.061916ms)
+✔ persistence (428.209209ms)
+{"ts":"2026-10-09T02:59:28.988Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:28.992Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_3753f59989870a43"}}
+{"ts":"2026-10-09T02:59:28.993Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"6c3da31346a1e875"}}
+{"ts":"2026-10-09T02:59:28.997Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"e1ef4caab933"}}
+{"ts":"2026-10-09T02:59:28.997Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_c0293ef38be75cda"}}
+{"ts":"2026-10-09T02:59:28.999Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"agent","target":"e1ef4caab933"}}
+{"ts":"2026-10-09T02:59:28.999Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"c13bd1543024098b"}}
+{"ts":"2026-10-09T02:59:29.000Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"f31154342eb846b5"}}
+▶ reusable saved profiles
+  ✔ reserves pending clone capacity and protects its source until the complete copy is published (7.610667ms)
+{"ts":"2026-10-09T02:59:29.001Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"9e9949a7daf8"}}
+{"ts":"2026-10-09T02:59:29.001Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_a92c4ebdcb6a2d7e"}}
+{"ts":"2026-10-09T02:59:29.003Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"agent","target":"9e9949a7daf8"}}
+{"ts":"2026-10-09T02:59:29.003Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"b5755f83bb7242b7"}}
+{"ts":"2026-10-09T02:59:29.004Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"789e9f172842b00a"}}
+  ✔ cleans a failed asynchronous clone and releases the owner's reservation (3.584875ms)
+{"ts":"2026-10-09T02:59:29.031Z","level":"info","msg":"audit","extra":{"action":"site.reported","actorType":"admin","target":"789e9f172842b00a"}}
+{"ts":"2026-10-09T02:59:29.039Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"558c896590e4"}}
+{"ts":"2026-10-09T02:59:29.065Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"admin","target":"558c896590e4"}}
+{"ts":"2026-10-09T02:59:29.065Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"5496898ba8192f44"}}
+{"ts":"2026-10-09T02:59:29.066Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"admin","target":"558c896590e4"}}
+{"ts":"2026-10-09T02:59:29.066Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"74558f92d579582d"}}
+{"ts":"2026-10-09T02:59:29.068Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"7e71f9795bf10745"}}
+  ✔ saves a running source, resumes it, and clones independent profiles with metadata and site inventory (64.455125ms)
+{"ts":"2026-10-09T02:59:29.093Z","level":"info","msg":"audit","extra":{"action":"site.reported","actorType":"admin","target":"7e71f9795bf10745"}}
+{"ts":"2026-10-09T02:59:29.094Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"9f68a542306d"}}
+{"ts":"2026-10-09T02:59:29.118Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"f3cc1b26b2e66361"}}
+  ✔ refreshes site observations before a running browser is snapshotted (49.6335ms)
+{"ts":"2026-10-09T02:59:29.120Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"301d2062c404"}}
+{"ts":"2026-10-09T02:59:29.121Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"admin","target":"301d2062c404"}}
+{"ts":"2026-10-09T02:59:29.121Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"2f10e818dd5e2e80"}}
+{"ts":"2026-10-09T02:59:29.125Z","level":"info","msg":"audit","extra":{"action":"seed.updated","actorType":"admin","target":"301d2062c404"}}
+{"ts":"2026-10-09T02:59:29.126Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"admin","target":"301d2062c404"}}
+{"ts":"2026-10-09T02:59:29.127Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"95f15d2c410e87da"}}
+{"ts":"2026-10-09T02:59:29.127Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"506e3e4f21088bf2"}}
+  ✔ updating a saved profile changes future copies only and keeps its id (9.315166ms)
+{"ts":"2026-10-09T02:59:29.154Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"7fa0d0a071041b37"}}
+{"ts":"2026-10-09T02:59:29.178Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"9e14c6a6ff10dfe1"}}
+  ✔ reserves the resume slot, refuses conflicting lifecycle operations, and publishes nothing on copy failure (50.647541ms)
+{"ts":"2026-10-09T02:59:29.181Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"d1d74b94b52270cb"}}
+  ✔ requires explicit write authorization to publish or overwrite saved authenticated profiles (3.0475ms)
+{"ts":"2026-10-09T02:59:29.182Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"ebd8ae1dc753"}}
+{"ts":"2026-10-09T02:59:29.183Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"d344f9454838"}}
+{"ts":"2026-10-09T02:59:29.183Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_02e1b0aa69a2cbaa"}}
+{"ts":"2026-10-09T02:59:29.183Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"agent","target":"ebd8ae1dc753"}}
+{"ts":"2026-10-09T02:59:29.184Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"99dc565921dddba8"}}
+{"ts":"2026-10-09T02:59:29.185Z","level":"info","msg":"audit","extra":{"action":"seed.updated","actorType":"agent","target":"ebd8ae1dc753"}}
+{"ts":"2026-10-09T02:59:29.185Z","level":"info","msg":"audit","extra":{"action":"human.takeover","actorType":"admin","target":"99dc565921dddba8"}}
+{"ts":"2026-10-09T02:59:29.186Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_8a287ec7bc63cfd6"}}
+{"ts":"2026-10-09T02:59:29.186Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_7f3c251f50c43b00"}}
+{"ts":"2026-10-09T02:59:29.187Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"0751d45fddef40f9"}}
+{"ts":"2026-10-09T02:59:29.187Z","level":"info","msg":"audit","extra":{"action":"browser.requested","actorType":"agent","target":"0751d45fddef40f9"}}
+{"ts":"2026-10-09T02:59:29.188Z","level":"info","msg":"audit","extra":{"action":"browser.lent","actorType":"agent","target":"0751d45fddef40f9"}}
+{"ts":"2026-10-09T02:59:29.188Z","level":"info","msg":"audit","extra":{"action":"browser.request.granted","actorType":"agent","target":"0751d45fddef40f9"}}
+{"ts":"2026-10-09T02:59:29.189Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"d0c6255cec3e8147"}}
+{"ts":"2026-10-09T02:59:29.189Z","level":"info","msg":"audit","extra":{"action":"site.reported","actorType":"admin","target":"d0c6255cec3e8147"}}
+  ✔ lets an authorized agent update a loaded shared profile, but refuses unrelated IDs and human control (4.971625ms)
+  ✔ does not allow an agent to export a borrowed browser, even with profile write permission (2.555042ms)
+{"ts":"2026-10-09T02:59:29.190Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"fa28e5c109f9"}}
+{"ts":"2026-10-09T02:59:29.191Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"5bed327856b6"}}
+{"ts":"2026-10-09T02:59:29.192Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"admin","target":"5bed327856b6"}}
+{"ts":"2026-10-09T02:59:29.192Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"708b94e94cd442a6"}}
+{"ts":"2026-10-09T02:59:29.219Z","level":"info","msg":"audit","extra":{"action":"seed.deleted","actorType":"admin","target":"5bed327856b6"}}
+{"ts":"2026-10-09T02:59:29.222Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"cc2a4c2f4562b0a1"}}
+  ✔ deletes only the confirmed snapshot and detaches save targets without falling back to an older profile (33.300833ms)
+{"ts":"2026-10-09T02:59:29.223Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"f0b5f8cce0ff"}}
+{"ts":"2026-10-09T02:59:29.226Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_b23250f53d69f727"}}
+{"ts":"2026-10-09T02:59:29.228Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"9646c380342e5026"}}
+  ✔ requires current-name confirmation and administrator access before deletion (5.770375ms)
+{"ts":"2026-10-09T02:59:29.229Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"57e7d107accc"}}
+{"ts":"2026-10-09T02:59:29.229Z","level":"info","msg":"audit","extra":{"action":"seed.deleted","actorType":"admin","target":"57e7d107accc"}}
+{"ts":"2026-10-09T02:59:29.229Z","level":"warn","msg":"deleted snapshot cleanup will retry","extra":{"id":"57e7d107accc","error":"fixture disk failure"}}
+{"ts":"2026-10-09T02:59:29.230Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"89b1a6902fdfee28"}}
+  ✔ keeps failed disk cleanup durable and retries it without restoring the deleted profile (2.36975ms)
+{"ts":"2026-10-09T02:59:29.231Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"48d5c9845cda"}}
+{"ts":"2026-10-09T02:59:29.232Z","level":"info","msg":"audit","extra":{"action":"seed.updated","actorType":"admin","target":"48d5c9845cda"}}
+  ✔ refuses deletion while the same profile is being updated (2.105583ms)
+✔ reusable saved profiles (277.887208ms)
+{"ts":"2026-10-09T02:59:30.513Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:30.517Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_f45ff54794a51691"}}
+▶ profile site inventory
+  ✔ normalizes a hostname without mistaking cookies for proof (0.544666ms)
+  ✔ detects only visible, explicit sign-out controls without reading storage (2.112125ms)
+  ✔ recognises Google's signed-in account menu without recording account details or trusting lookalike domains (1.208458ms)
+  ✔ prefills the manual form from the viewer's active tab, not the cached URL (1.804625ms)
+  ✔ dashboard Save updates the linked ID; Save as new explicitly posts a separate profile (0.901166ms)
+  ✔ dashboard saved-profile deletion requires confirmation and cancel sends no request (0.498333ms)
+{"ts":"2026-10-09T02:59:30.528Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"a44aa939a56d27df"}}
+{"ts":"2026-10-09T02:59:30.537Z","level":"info","msg":"audit","extra":{"action":"site.reported","actorType":"system","target":"a44aa939a56d27df"}}
+{"ts":"2026-10-09T02:59:30.537Z","level":"info","msg":"audit","extra":{"action":"site.removed","actorType":"admin","target":"a44aa939a56d27df"}}
+  ✔ automatically records a signal once, with system provenance, and respects manual removal (14.521542ms)
+{"ts":"2026-10-09T02:59:30.541Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"8da4eb09af499cae"}}
+{"ts":"2026-10-09T02:59:30.543Z","level":"info","msg":"audit","extra":{"action":"site.reported","actorType":"admin","target":"8da4eb09af499cae"}}
+{"ts":"2026-10-09T02:59:30.545Z","level":"info","msg":"audit","extra":{"action":"browser.renamed","actorType":"admin","target":"8da4eb09af499cae"}}
+{"ts":"2026-10-09T02:59:30.545Z","level":"info","msg":"audit","extra":{"action":"metadata.edited","actorType":"admin","target":"8da4eb09af499cae"}}
+{"ts":"2026-10-09T02:59:30.547Z","level":"info","msg":"audit","extra":{"action":"site.removed","actorType":"admin","target":"8da4eb09af499cae"}}
+  ✔ records, returns and updates signed-in sites with provenance (8.85875ms)
+{"ts":"2026-10-09T02:59:30.549Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"db32017399e9a435"}}
+{"ts":"2026-10-09T02:59:30.551Z","level":"info","msg":"audit","extra":{"action":"site.reported","actorType":"admin","target":"db32017399e9a435"}}
+{"ts":"2026-10-09T02:59:30.555Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"1a0a1379b9fe"}}
+{"ts":"2026-10-09T02:59:30.558Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"admin","target":"1a0a1379b9fe"}}
+{"ts":"2026-10-09T02:59:30.559Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"5bbf2feccd6bffcd"}}
+  ✔ copies a template manifest as expected rather than confirmed (13.614583ms)
+{"ts":"2026-10-09T02:59:30.564Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"f99e2362deb3dc21"}}
+{"ts":"2026-10-09T02:59:30.565Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_2cb257a12694ec5f"}}
+  ✔ does not let another agent edit the profile inventory (5.345666ms)
+{"ts":"2026-10-09T02:59:30.569Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"abc5fc5ff678a7b7"}}
+{"ts":"2026-10-09T02:59:30.572Z","level":"info","msg":"audit","extra":{"action":"site.reported","actorType":"admin","target":"abc5fc5ff678a7b7"}}
+{"ts":"2026-10-09T02:59:30.574Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"c415259b9482"}}
+{"ts":"2026-10-09T02:59:30.579Z","level":"info","msg":"audit","extra":{"action":"seed.site.recorded","actorType":"admin","target":"c415259b9482"}}
+{"ts":"2026-10-09T02:59:30.581Z","level":"info","msg":"audit","extra":{"action":"seed.site.updated","actorType":"admin","target":"c415259b9482"}}
+{"ts":"2026-10-09T02:59:30.585Z","level":"info","msg":"audit","extra":{"action":"seed.used","actorType":"admin","target":"c415259b9482"}}
+{"ts":"2026-10-09T02:59:30.586Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"8b3fa1adc9db0246"}}
+{"ts":"2026-10-09T02:59:30.588Z","level":"info","msg":"audit","extra":{"action":"seed.site.removed","actorType":"admin","target":"c415259b9482"}}
+  ✔ corrects a saved profile's manifest in place, without inventing a confirmation (28.387208ms)
+{"ts":"2026-10-09T02:59:30.598Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"0cdd4521ae467392"}}
+{"ts":"2026-10-09T02:59:30.599Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"c642da4073a6"}}
+{"ts":"2026-10-09T02:59:30.600Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_788051df36b39434"}}
+  ✔ keeps a shared profile's inventory out of reach of agents, including profile writers (8.409208ms)
+  ✔ dashboard site edits post one change at a time and repaint from the server (5.062ms)
+✔ profile site inventory (127.87375ms)
+{"ts":"2026-10-09T02:59:31.880Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:31.884Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_cca062e693d55b29"}}
+{"ts":"2026-10-09T02:59:31.885Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"49867299022d37e2"}}
+{"ts":"2026-10-09T02:59:31.885Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"21b0e99f141e5567"}}
+{"ts":"2026-10-09T02:59:31.886Z","level":"info","msg":"audit","extra":{"action":"site.reported","actorType":"admin","target":"49867299022d37e2"}}
+{"ts":"2026-10-09T02:59:31.889Z","level":"info","msg":"audit","extra":{"action":"seed.created","actorType":"admin","target":"8e91ebd1c823"}}
+▶ portable instance transfer
+  ✔ requires an administrator and validates selections before stopping anything (11.39475ms)
+  ✔ round trips WAL database, profile bytes, saved profiles, downloads and raw agent credentials (101.851083ms)
+  ✔ blocks concurrent starts, saves and deletion while allowing an excluded browser (0.550041ms)
+  ✔ refuses an existing destination without changing its contents (0.75325ms)
+  ✔ rejects corrupt archives and decompressed sizes above the limit without publishing (76.991167ms)
+  ✔ rejects symlinks and traversal paths in uploaded archives (75.467708ms)
+  ✔ reports missing saved profile data and releases export locks (8.009ms)
+  ✔ cleans up and releases locks when the download disconnects (7.426792ms)
+{"ts":"2026-10-09T02:59:32.269Z","level":"info","msg":"audit","extra":{"action":"[redacted]","actorType":"admin"}}
+  ✔ terminates an active archive writer before removing its staging data (46.290875ms)
+{"ts":"2026-10-09T02:59:32.273Z","level":"info","msg":"audit","extra":{"action":"worker.joined","actorType":"worker","target":"wkr_8e74443efe43"}}
+{"ts":"2026-10-09T02:59:32.273Z","level":"info","msg":"worker ready","extra":{"name":"remote","workerId":"wkr_8e74443efe43","main":"http://127.0.0.1:52158","url":"http://127.0.0.1:52170","release":"0.11.4"}}
+{"ts":"2026-10-09T02:59:32.275Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"0b14320356dfeec2"}}
+  ✔ includes worker profiles and downloads without deleting their source (185.788292ms)
+✔ portable instance transfer (608.373834ms)
+{"ts":"2026-10-09T02:59:33.739Z","level":"info","msg":"audit","extra":{"action":"admin.login","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:33.743Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_cde92dddbdf17839"}}
+{"ts":"2026-10-09T02:59:33.745Z","level":"info","msg":"audit","extra":{"action":"[redacted]","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:33.748Z","level":"info","msg":"audit","extra":{"action":"worker.joined","actorType":"worker","target":"wkr_1f2609694e4f"}}
+{"ts":"2026-10-09T02:59:33.750Z","level":"info","msg":"worker ready","extra":{"name":"worker-a","workerId":"wkr_1f2609694e4f","main":"http://127.0.0.1:52178","url":"http://127.0.0.1:52180","release":"0.11.4"}}
+▶ workers
+  ✔ reads a join token, and says so plainly when it is not one (1.204292ms)
+{"ts":"2026-10-09T02:59:33.759Z","level":"info","msg":"audit","extra":{"action":"[redacted]","actorType":"admin"}}
+{"ts":"2026-10-09T02:59:33.763Z","level":"info","msg":"audit","extra":{"action":"worker.joined","actorType":"worker","target":"wkr_76a5561be865"}}
+{"ts":"2026-10-09T02:59:33.764Z","level":"info","msg":"worker ready","extra":{"name":"worker-b","workerId":"wkr_76a5561be865","main":"http://127.0.0.1:52178","url":"http://127.0.0.1:52184","release":"0.11.4"}}
+{"ts":"2026-10-09T02:59:33.770Z","level":"info","msg":"audit","extra":{"action":"worker.removed","actorType":"admin","target":"wkr_76a5561be865"}}
+{"ts":"2026-10-09T02:59:33.771Z","level":"info","msg":"audit","extra":{"action":"[redacted]","actorType":"admin"}}
+  ✔ joins with a token, shows on the dashboard's list, and the token does not work twice (15.842ms)
+  ✔ refuses a worker on another release, a token from elsewhere, and an agent making tokens (4.866625ms)
+{"ts":"2026-10-09T02:59:33.792Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"7dd0af861d5c382e"}}
+  ✔ answers nobody without its secret (15.163792ms)
+{"ts":"2026-10-09T02:59:33.814Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_8e148d7ea9fe8d88"}}
+{"ts":"2026-10-09T02:59:33.814Z","level":"info","msg":"audit","extra":{"action":"agent.created","actorType":"admin","target":"agt_7eb343cd8b21cce2"}}
+{"ts":"2026-10-09T02:59:33.815Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"agent","target":"91815e519c3d507f"}}
+{"ts":"2026-10-09T02:59:33.815Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"a426d61dea8f3df2"}}
+{"ts":"2026-10-09T02:59:33.816Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"df9cf891f68b34e0"}}
+  ✔ starts a browser on the worker and drives it through a local endpoint (22.730666ms)
+  ✔ lets only the administrator choose where a browser runs (0.531208ms)
+  ✔ keeps a new browser on the main instance while it has room, and overflows to a worker when it has not (0.87625ms)
+  ✔ says what does not reach a worker's browser yet, by name: saving it as a saved profile (0.568958ms)
+{"ts":"2026-10-09T02:59:33.857Z","level":"info","msg":"audit","extra":{"action":"browser.moved","actorType":"admin","target":"df9cf891f68b34e0"}}
+{"ts":"2026-10-09T02:59:33.875Z","level":"info","msg":"audit","extra":{"action":"browser.moved","actorType":"admin","target":"df9cf891f68b34e0"}}
+{"ts":"2026-10-09T02:59:33.878Z","level":"info","msg":"audit","extra":{"action":"[redacted]","actorType":"admin"}}
+  ✔ moves a running browser in one step: stops it, copies its profile, and starts it on the new host (61.722209ms)
+{"ts":"2026-10-09T02:59:33.879Z","level":"info","msg":"audit","extra":{"action":"worker.joined","actorType":"worker","target":"wkr_6f606b856c57"}}
+{"ts":"2026-10-09T02:59:33.879Z","level":"info","msg":"worker ready","extra":{"name":"worker-dead","workerId":"wkr_6f606b856c57","main":"http://127.0.0.1:52178","url":"http://127.0.0.1:52204","release":"0.11.4"}}
+{"ts":"2026-10-09T02:59:33.882Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"9c06f6d46420b60d"}}
+{"ts":"2026-10-09T02:59:33.932Z","level":"info","msg":"audit","extra":{"action":"worker.removed","actorType":"admin","target":"wkr_6f606b856c57"}}
+{"ts":"2026-10-09T02:59:33.932Z","level":"info","msg":"audit","extra":{"action":"[redacted]","actorType":"admin"}}
+  ✔ leaves a running browser running where it was when its move fails (54.586916ms)
+{"ts":"2026-10-09T02:59:33.935Z","level":"info","msg":"audit","extra":{"action":"worker.joined","actorType":"worker","target":"wkr_048ee22fc2dc"}}
+{"ts":"2026-10-09T02:59:33.936Z","level":"info","msg":"worker ready","extra":{"name":"worker-gone","workerId":"wkr_048ee22fc2dc","main":"http://127.0.0.1:52178","url":"http://127.0.0.1:52212","release":"0.11.4"}}
+{"ts":"2026-10-09T02:59:33.938Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"81f67212789b50d4"}}
+{"ts":"2026-10-09T02:59:33.939Z","level":"info","msg":"audit","extra":{"action":"worker.removed","actorType":"admin","target":"wkr_048ee22fc2dc"}}
+{"ts":"2026-10-09T02:59:33.940Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"f5da3ed721409d93"}}
+  ✔ keeps a browser whose worker cannot confirm its profile is deleted (7.482ms)
+{"ts":"2026-10-09T02:59:33.944Z","level":"warn","msg":"stopping a browser this instance is not tracking","extra":{"id":"f5da3ed721409d93","worker":"worker-a"}}
+{"ts":"2026-10-09T02:59:34.152Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"051c34b5d35418d5"}}
+{"ts":"2026-10-09T02:59:34.153Z","level":"info","msg":"recovered browser records","extra":{"count":7}}
+{"ts":"2026-10-09T02:59:34.154Z","level":"info","msg":"recovered browser records","extra":{"count":7}}
+{"ts":"2026-10-09T02:59:34.154Z","level":"info","msg":"Chrome thread settings changed; browsers will be measured again","extra":{"from":"cpus=0;renderers=0","to":"cpus=4;renderers=0","cleared":1}}
+{"ts":"2026-10-09T02:59:34.154Z","level":"info","msg":"recovered browser records","extra":{"count":7}}
+{"ts":"2026-10-09T02:59:34.155Z","level":"info","msg":"audit","extra":{"action":"browser.created","actorType":"admin","target":"89f307a87614b423"}}
+  ✔ marks a browser crashed when its worker restarts or stops answering (210.501417ms)
+  ✔ forgets thread measurements when a Chrome thread setting changes, and only then (4.425458ms)
+  ✔ says when a reset would let a browser into its worker's room, and only then (8.312125ms)
+  ✔ relays a refusal as a refusal (3.098625ms)
+✔ workers (465.048542ms)
+ℹ tests 89
+ℹ suites 7
+ℹ pass 89
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14718.578833

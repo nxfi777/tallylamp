@@ -88,6 +88,7 @@ const FFMPEG_VALUES: Record<string, (v: string, display: string) => boolean> = {
   "-loglevel": (v) => v === "error",
   "-threads": (v) => int(v, 16),
   "-filter_threads": (v) => int(v, 16),
+  "-probesize": (v) => v === "32",
   "-f": (v) => v === "x11grab" || v === "image2pipe",
   "-draw_mouse": (v) => v === "0",
   "-framerate": (v) => int(v, 30),

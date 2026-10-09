@@ -1,0 +1,39 @@
+{
+  "label": "after",
+  "timestamp": "2026-10-09T02:46:45.462Z",
+  "node": "v26.8.1",
+  "platform": "darwin",
+  "realChrome": true,
+  "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "settings": {
+    "qualityControl": 70,
+    "qualityWatch": 60,
+    "maxEncodedWidth": 1280
+  },
+  "startupProgressMs": [
+    598.313542,
+    331.3403330000001,
+    489.51904099999956
+  ],
+  "inputProgressMs": [],
+  "results": [
+    {
+      "name": "fresh-profile start to API running",
+      "n": 3,
+      "p50Ms": 489.51904099999956,
+      "p95Ms": 598.313542,
+      "rawMs": [
+        598.313542,
+        331.3403330000001,
+        489.51904099999956
+      ]
+    }
+  ],
+  "gaps": [
+    "Local macOS managed Chrome and localhost transport; not hosted worker/internet latency.",
+    "Input timing ends at receipt of a frame verified to contain that click's visual marker. Client image decode/presentation is not measured.",
+    "Only3 fresh-profile startup samples; not a production cold-start percentile or a cleared OS disk cache.",
+    "Native desktop requires a dedicated Linux Xvfb display, ffmpeg capture and xdotool; not available in this macOS run.",
+    "Run stopped: CDP timeout Page.navigate"
+  ]
+}

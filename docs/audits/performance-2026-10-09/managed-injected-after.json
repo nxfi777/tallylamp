@@ -1,0 +1,175 @@
+{
+  "label": "injected-after",
+  "timestamp": "2026-10-09T02:55:20.439Z",
+  "node": "v26.8.1",
+  "platform": "darwin",
+  "realChrome": true,
+  "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "settings": {
+    "qualityControl": 70,
+    "qualityWatch": 60,
+    "maxEncodedWidth": 1280
+  },
+  "startupProgressMs": [
+    562.440625
+  ],
+  "inputProgressMs": [
+    52.699791000000005,
+    71.18012499999986,
+    59.951500000000124,
+    58.8684159999998,
+    59.11850000000004,
+    57.18320799999992,
+    55.80945800000018,
+    57.2101660000003,
+    60.436709000000064,
+    60.00787500000024,
+    60.55812500000002,
+    61.58041600000024,
+    60.221457999999984,
+    60.585291999999754,
+    61.65687499999967,
+    61.458250000000135,
+    60.11145799999986,
+    56.73170899999968,
+    56.91716699999961,
+    56.4174579999999
+  ],
+  "results": [
+    {
+      "name": "fresh-profile start to API running",
+      "n": 1,
+      "p50Ms": 562.440625,
+      "p95Ms": 562.440625,
+      "rawMs": [
+        562.440625
+      ]
+    },
+    {
+      "name": "fixture injection to ready",
+      "n": 1,
+      "p50Ms": 600.7149160000001,
+      "p95Ms": 600.7149160000001,
+      "rawMs": [
+        600.7149160000001
+      ]
+    },
+    {
+      "name": "real Chrome thumbnail HTTP round trip",
+      "n": 20,
+      "p50Ms": 20.86070800000016,
+      "p95Ms": 21.540750000000116,
+      "rawMs": [
+        21.924209000000246,
+        17.658582999999908,
+        20.979041000000052,
+        21.540750000000116,
+        20.21666600000026,
+        21.11958400000003,
+        20.544167000000016,
+        20.576500000000124,
+        21.027792000000318,
+        21.17925000000014,
+        20.28295799999978,
+        20.718124999999873,
+        21.472208000000137,
+        20.535665999999765,
+        20.150540999999976,
+        21.15166599999975,
+        20.78354199999967,
+        21.005457999999635,
+        20.86070800000016,
+        20.95004199999994
+      ],
+      "bytes": [
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100,
+        8100
+      ]
+    },
+    {
+      "name": "viewer connect to first frame receipt",
+      "n": 1,
+      "p50Ms": 13.968499999999949,
+      "p95Ms": 13.968499999999949,
+      "rawMs": [
+        13.968499999999949
+      ]
+    },
+    {
+      "name": "viewer click to matching frame receipt",
+      "n": 20,
+      "p50Ms": 59.951500000000124,
+      "p95Ms": 61.65687499999967,
+      "rawMs": [
+        52.699791000000005,
+        71.18012499999986,
+        59.951500000000124,
+        58.8684159999998,
+        59.11850000000004,
+        57.18320799999992,
+        55.80945800000018,
+        57.2101660000003,
+        60.436709000000064,
+        60.00787500000024,
+        60.55812500000002,
+        61.58041600000024,
+        60.221457999999984,
+        60.585291999999754,
+        61.65687499999967,
+        61.458250000000135,
+        60.11145799999986,
+        56.73170899999968,
+        56.91716699999961,
+        56.4174579999999
+      ],
+      "frameBytes": [
+        8922,
+        8640,
+        8740,
+        8606,
+        8718,
+        8778,
+        8527,
+        8812,
+        8817,
+        8914,
+        8565,
+        8854,
+        8949,
+        8767,
+        8892,
+        8998,
+        8748,
+        9004,
+        8996,
+        9108
+      ],
+      "correlation": "8-bit black/white marker decoded from the actual streamed image, not an arbitrary next frame"
+    }
+  ],
+  "gaps": [
+    "Local macOS managed Chrome and localhost transport; not hosted worker/internet latency.",
+    "Input timing ends at receipt of a frame verified to contain that click's visual marker. Client image decode/presentation is not measured.",
+    "Only 1 fresh-profile startup samples; not a production cold-start percentile or a cleared OS disk cache.",
+    "Native desktop requires a dedicated Linux Xvfb display, ffmpeg capture and xdotool; not available in this macOS run.",
+    "Fixture injected with Page.setDocumentContent: bypasses the egress proxy/navigation path, whose separate measured attempts timed out."
+  ]
+}

@@ -12,7 +12,7 @@
 // is not part of `npm test`.
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 const OUT = process.argv[2] ?? path.join(os.tmpdir(), "tallylamp-linked-e2e"); mkdirSync(OUT, { recursive: true }); const EXT = path.resolve("extension");
@@ -28,6 +28,17 @@ const PORT = 19000 + Math.floor(Math.random() * 900); const base = `http://127.0
 const startService = () => spawn(process.execPath, ["--import", "tsx", "src/index.ts"], { env: { ...process.env, PORT: String(PORT), HOST: "127.0.0.1", ADMIN_SECRET: "e2e-secret-value-12345", TALLYLAMP_DATA_DIR: data, TALLYLAMP_FAKE_CHROME: "1", TALLYLAMP_PUBLIC_URL: base }, stdio: "ignore" });
 let svc = startService();
 const chromes = []; let failed = 0;
+const timings = [];
+const timed = async (surface, action, run) => {
+  const start = performance.now(); let ok = false;
+  try { const result = await run(); ok = !result?.err && result?.ok !== false; return result; }
+  finally {
+    timings.push({ surface, action, durationMs: performance.now() - start, ok });
+    const file = path.join(OUT, "action-timings.json");
+    writeFileSync(file + ".tmp", JSON.stringify({ measuredAt: new Date().toISOString(), note: "Real Chrome, real extension, local real service and MCP. Artificial sleeps outside each call are excluded; one/few observations per action, not percentiles. Expected permission denials are marked ok:false.", timings }, null, 2));
+    renameSync(file + ".tmp", file);
+  }
+};
 const check = (name, ok, detail = "") => { log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  — " + String(detail).slice(0, 220).replace(/\s+/g, " ") : ""}`); if (!ok) failed++; };
 /** One headless Chrome on a CDP pipe, killed in finally. Returns its `send`. */
 const launch = (dir, flags = []) => {
@@ -36,14 +47,19 @@ const launch = (dir, flags = []) => {
   chromes.push(chrome);
   let id = 0, buf = ""; const waits = new Map();
   chrome.stdio[4].on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\0")) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); if (m.id && waits.has(m.id)) { waits.get(m.id)(m); waits.delete(m.id); } } });
-  return (method, params = {}, sessionId) => new Promise((res, rej) => { const i = ++id; waits.set(i, (m) => (m.error ? rej(new Error(`${method}: ${m.error.message}`)) : res(m.result))); chrome.stdio[3].write(JSON.stringify({ id: i, method, params, sessionId }) + "\0"); });
+  return (method, params = {}, sessionId) => new Promise((res, rej) => {
+    const i = ++id;
+    const timeout = setTimeout(() => { waits.delete(i); rej(new Error(`${method}: timed out after 90 seconds`)); }, 90_000);
+    waits.set(i, (m) => { clearTimeout(timeout); m.error ? rej(new Error(`${method}: ${m.error.message}`)) : res(m.result); });
+    chrome.stdio[3].write(JSON.stringify({ id: i, method, params, sessionId }) + "\0");
+  });
 };
 /** Script in the extension's panel page, which can message its service worker. */
 const panelOf = async (send, extId) => {
   const { targetId } = await send("Target.createTarget", { url: `chrome-extension://${extId}/panel.html` });
   const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
   await sleep(1200);
-  return async (expr) => { const r = await send("Runtime.evaluate", { expression: `(async()=>{${expr}})()`, awaitPromise: true, returnByValue: true }, sessionId); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text); return r.result.value; };
+  return async (expr) => timed("extension", expr.match(/type:\s*["\']([^"\']+)/)?.[1] ?? "panel evaluation", async () => { const r = await send("Runtime.evaluate", { expression: `(async()=>{${expr}})()`, awaitPromise: true, returnByValue: true }, sessionId); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text); return r.result.value; });
 };
 try {
   for (let i = 0; i < 60; i++) { try { await fetch(`${base}/api/v1/openapi.json`); break; } catch { await sleep(250); } }
@@ -107,7 +123,7 @@ try {
   const rpc = (method, params, extra = {}) => fetch(`${base}/mcp`, { method: "POST", headers: { authorization: `Bearer ${agentToken}`, accept: "application/json, text/event-stream", "content-type": "application/json", "MCP-Protocol-Version": "2025-11-25", ...extra }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: AbortSignal.timeout(90_000) });
   const init = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "e2e", version: "1" } });
   const sess = { "MCP-Session-Id": init.headers.get("mcp-session-id") };
-  const call = async (name, args = {}) => { const t = await (await rpc("tools/call", { name, arguments: args }, sess)).text(); const line = t.split("\n").find((l) => l.startsWith("data:")); const m = JSON.parse(line ? line.slice(5) : t); if (m.error) return { err: true, text: m.error.message }; const r = m.result; return { err: Boolean(r.isError), text: r.content.map((c) => c.text ?? `[${c.type}]`).join("\n") }; };
+  const call = async (name, args = {}) => timed("mcp", name, async () => { const t = await (await rpc("tools/call", { name, arguments: args }, sess)).text(); const line = t.split("\n").find((l) => l.startsWith("data:")); const m = JSON.parse(line ? line.slice(5) : t); if (m.error) return { err: true, text: m.error.message }; const r = m.result; return { err: Boolean(r.isError), text: r.content.map((c) => c.text ?? `[${c.type}]`).join("\n") }; });
   const listed = JSON.parse((await call("tallylamp_list_browsers")).text); const b = (listed.browsers ?? listed).find((x) => x.kind === "linked");
   check("agent sees the linked browser, online, with its shared tab", b?.link?.online === true && b.link.sharedTabs.length === 1, JSON.stringify(b?.link));
   const used = await call("tallylamp_use_browser", { browserId: b.id }); check("tallylamp_use_browser binds (real Puppeteer connect through the shim)", !used.err, used.text);

@@ -1,0 +1,974 @@
+{
+  "label": "extra-after-final",
+  "timestamp": "2026-10-09T03:00:21.980Z",
+  "node": "v26.8.1",
+  "platform": "darwin",
+  "arch": "arm64",
+  "cpu": "Apple M4 Pro",
+  "fakeChrome": true,
+  "samples": 20,
+  "fixture": {
+    "seed": "deterministic fleet rows v1",
+    "profiles": "64 files × 16 KiB, 1 MiB total",
+    "sqlite": "temporary on-disk WAL; unchanged durability",
+    "warmup": 1
+  },
+  "routes": [
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/export"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/openapi.json"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/login"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/logout"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/me"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/poll"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/join"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/hello"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/workers"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/workers/join-tokens"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/workers/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/move"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/links/pair/:code"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/:code/approve"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/links/pair/:code/deny"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/access"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/access"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/link"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/status"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "PATCH",
+      "route": "/api/v1/browsers/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/sites"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/sites/:siteId"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/start"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/stop"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/restart"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/tunnels"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/tunnels"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/tunnels/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/requests"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/requests/:id/answer"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/lendable"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/grants/:granteeId"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/control"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/control"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/control/heartbeat"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/viewer-ticket"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/guests"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/guests"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/browsers/:id/guests/:guestId"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/extensions"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/pinned"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/browsers/:id/threads/reset"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/browsers/:id/agent-desktop"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/browsers/:id/thumbnail"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/agents"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/agents"
+    },
+    {
+      "source": "api.ts",
+      "method": "PATCH",
+      "route": "/api/v1/agents/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/agents/:id/rotate"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/seeds"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/seeds"
+    },
+    {
+      "source": "api.ts",
+      "method": "PUT",
+      "route": "/api/v1/seeds/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "POST",
+      "route": "/api/v1/seeds/:id/sites"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/seeds/:id/sites"
+    },
+    {
+      "source": "api.ts",
+      "method": "DELETE",
+      "route": "/api/v1/seeds/:id"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/audit"
+    },
+    {
+      "source": "api.ts",
+      "method": "GET",
+      "route": "/api/v1/events"
+    },
+    {
+      "source": "server.ts",
+      "method": "GET",
+      "route": "/healthz"
+    },
+    {
+      "source": "server.ts",
+      "method": "ALL",
+      "route": "/mcp"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "GET",
+      "route": "/guest"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/session"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "GET",
+      "route": "/browser"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "DELETE",
+      "route": "/session"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/start"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/control"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "DELETE",
+      "route": "/control"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/control/heartbeat"
+    },
+    {
+      "source": "guest-api.ts",
+      "method": "POST",
+      "route": "/viewer-ticket"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "GET",
+      "route": "/oauth/authorize"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/authorize"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/token"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/revoke"
+    },
+    {
+      "source": "oauth.ts",
+      "method": "POST",
+      "route": "/oauth/register"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/healthz"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/state"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/linked-bridges/:id/files"
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/start"
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/stop"
+    },
+    {
+      "source": "worker.ts",
+      "method": "DELETE",
+      "route": "/worker/v1/browsers/:id"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/browsers/:id/export"
+    },
+    {
+      "source": "worker.ts",
+      "method": "GET",
+      "route": "/worker/v1/browsers/:id/profile"
+    },
+    {
+      "source": "worker.ts",
+      "method": "PUT",
+      "route": "/worker/v1/browsers/:id/profile"
+    },
+    {
+      "source": "worker.ts",
+      "method": "POST",
+      "route": "/worker/v1/browsers/:id/x11"
+    },
+    {
+      "source": "worker.ts",
+      "method": "PUT",
+      "route": "/worker/v1/browsers/:id/uploads/:dir/:name"
+    },
+    {
+      "source": "worker.ts",
+      "method": "ALL",
+      "route": "/worker/v1/browsers/:id/cdp/*"
+    }
+  ],
+  "lifecycleTools": [
+    "tallylamp_desktop_screenshot",
+    "tallylamp_desktop_action",
+    "tallylamp_create_browser",
+    "tallylamp_list_browsers",
+    "tallylamp_update_browser",
+    "tallylamp_report_site_access",
+    "tallylamp_save_profile",
+    "tallylamp_update_profile",
+    "tallylamp_list_profile_templates",
+    "tallylamp_use_browser",
+    "tallylamp_screencast_start",
+    "tallylamp_screencast_stop",
+    "tallylamp_stop_browser",
+    "tallylamp_delete_browser",
+    "tallylamp_request_browser",
+    "tallylamp_list_requests",
+    "tallylamp_answer_request",
+    "tallylamp_set_lendable",
+    "tallylamp_open_tunnel",
+    "tallylamp_list_tunnels",
+    "tallylamp_close_tunnel",
+    "tallylamp_select_page",
+    "tallylamp_revoke_grant"
+  ],
+  "results": [
+    {
+      "name": "agent.create",
+      "coveredRoutes": [
+        "POST /api/v1/agents"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 3.5261669999999867,
+      "p50Ms": 2.2038329999999746,
+      "p95Ms": 2.9456669999999576,
+      "maxMs": 3.4287089999999694,
+      "peakRssMiB": 119.390625,
+      "rawMs": [
+        3.4287089999999694,
+        2.9456669999999576,
+        2.489750000000015,
+        2.3103329999999573,
+        2.592708000000016,
+        1.8153330000000096,
+        2.6049170000000004,
+        2.5998749999999973,
+        2.3632920000000013,
+        2.462916000000007,
+        2.2038329999999746,
+        2.1354580000000283,
+        2.272666999999956,
+        2.1747080000000096,
+        2.028415999999993,
+        2.1202090000000453,
+        2.1726249999999823,
+        2.0950829999999883,
+        2.0411659999999756,
+        2.1663750000000164
+      ]
+    },
+    {
+      "name": "browser.thread estimates reset",
+      "coveredRoutes": [
+        "POST /api/v1/browsers/:id/threads/reset"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 2.4739999999999895,
+      "p50Ms": 1.9377920000000017,
+      "p95Ms": 2.149166999999977,
+      "maxMs": 2.2594170000000418,
+      "peakRssMiB": 120.125,
+      "rawMs": [
+        2.149166999999977,
+        1.8886249999999905,
+        1.9780000000000086,
+        1.9763750000000186,
+        1.9193749999999454,
+        2.2594170000000418,
+        1.950834000000043,
+        1.918916999999965,
+        1.9563750000000368,
+        1.838707999999997,
+        1.9035829999999692,
+        2.036541999999997,
+        2.0448749999999905,
+        0.6388750000000414,
+        1.8969589999999812,
+        1.8859580000000165,
+        2.0911669999999845,
+        1.9179169999999885,
+        1.9377920000000017,
+        1.9825830000000337
+      ]
+    },
+    {
+      "name": "browser.disable extension support",
+      "coveredRoutes": [
+        "PUT /api/v1/browsers/:id/extensions"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 2.2412499999999795,
+      "p50Ms": 1.9942089999999553,
+      "p95Ms": 2.1866249999999923,
+      "maxMs": 2.2522920000000113,
+      "peakRssMiB": 121.46875,
+      "rawMs": [
+        1.964207999999985,
+        2.2522920000000113,
+        2.0003750000000196,
+        1.9767909999999915,
+        2.1866249999999923,
+        2.0543330000000424,
+        1.9806250000000318,
+        1.9942089999999553,
+        2.0038749999999936,
+        2.051040999999941,
+        1.9250839999999698,
+        1.918042000000014,
+        2.184792000000016,
+        1.962291999999934,
+        1.983041999999955,
+        2.0627080000000433,
+        2.0207079999998996,
+        1.969500000000039,
+        2.0411659999999756,
+        1.9299170000000458
+      ]
+    },
+    {
+      "name": "browser.disable native agent control",
+      "coveredRoutes": [
+        "PUT /api/v1/browsers/:id/agent-desktop"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 2.1672079999999596,
+      "p50Ms": 2.0584589999999707,
+      "p95Ms": 2.4335420000001022,
+      "maxMs": 2.4898330000000897,
+      "peakRssMiB": 124.625,
+      "rawMs": [
+        1.982582999999977,
+        2.3961249999999836,
+        2.2029999999999745,
+        0.7463330000000497,
+        2.0179170000000113,
+        2.217624999999998,
+        2.1044580000000224,
+        2.4335420000001022,
+        2.130625000000009,
+        2.0584589999999707,
+        1.9610420000000204,
+        1.996499999999969,
+        1.9963330000000497,
+        1.9800000000000182,
+        2.395832999999925,
+        2.1115839999999935,
+        2.08141599999999,
+        2.4898330000000897,
+        2.050041999999962,
+        2.0354579999999487
+      ]
+    },
+    {
+      "name": "pairing.start + pending poll + describe + deny",
+      "coveredRoutes": [
+        "POST /api/v1/links/pair",
+        "POST /api/v1/links/pair/poll",
+        "GET /api/v1/links/pair/:code",
+        "POST /api/v1/links/pair/:code/deny"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 10.61424999999997,
+      "p50Ms": 7.854124999999954,
+      "p95Ms": 11.129290999999967,
+      "maxMs": 14.191291999999976,
+      "peakRssMiB": 126.953125,
+      "rawMs": [
+        7.558625000000006,
+        9.516582999999969,
+        9.255750000000035,
+        9.225834000000077,
+        9.410624999999982,
+        8.243875000000003,
+        7.551958000000013,
+        7.319291000000021,
+        7.15949999999998,
+        7.383291999999983,
+        7.570290999999997,
+        14.191291999999976,
+        11.129290999999967,
+        8.195625000000064,
+        7.854124999999954,
+        10.851208000000042,
+        5.981042000000002,
+        7.053375000000074,
+        7.636291000000028,
+        7.9330830000000105
+      ]
+    },
+    {
+      "name": "pairing.approve + collect + access read/write + unlink + delete",
+      "coveredRoutes": [
+        "POST /api/v1/links/pair/:code/approve",
+        "GET /api/v1/browsers/:id/access",
+        "PUT /api/v1/browsers/:id/access",
+        "DELETE /api/v1/browsers/:id/link"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 13.959124999999972,
+      "p50Ms": 14.192000000000007,
+      "p95Ms": 16.46387500000003,
+      "maxMs": 17.436208999999963,
+      "peakRssMiB": 136.578125,
+      "rawMs": [
+        17.436208999999963,
+        14.528832999999963,
+        16.46387500000003,
+        13.932541999999899,
+        12.56579099999999,
+        13.80108400000006,
+        12.39083299999993,
+        14.9837500000001,
+        12.823166000000015,
+        14.192000000000007,
+        15.295291999999904,
+        15.701749999999947,
+        12.080666999999949,
+        16.238959000000023,
+        13.576875000000086,
+        15.190207999999984,
+        15.36058300000002,
+        13.38170799999989,
+        14.509791999999834,
+        13.697041999999783
+      ]
+    },
+    {
+      "name": "tunnel.create + list + revoke",
+      "coveredRoutes": [
+        "POST /api/v1/browsers/:id/tunnels",
+        "GET /api/v1/browsers/:id/tunnels",
+        "DELETE /api/v1/tunnels/:id"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 6.320541999999932,
+      "p50Ms": 5.75220800000011,
+      "p95Ms": 5.9957090000000335,
+      "maxMs": 6.441291000000092,
+      "peakRssMiB": 137.078125,
+      "rawMs": [
+        5.601750000000038,
+        5.442874999999958,
+        5.9957090000000335,
+        5.748416000000134,
+        5.75220800000011,
+        5.8221249999999145,
+        5.951209000000063,
+        5.866209000000026,
+        5.64774999999986,
+        5.874917000000096,
+        5.7150420000000395,
+        5.867625000000089,
+        5.726458000000093,
+        5.958750000000009,
+        5.887332999999899,
+        5.799291999999923,
+        5.740958999999975,
+        5.738791999999876,
+        5.698540999999977,
+        6.441291000000092
+      ]
+    },
+    {
+      "name": "lending.request + grant read + revoke",
+      "coveredRoutes": [
+        "POST /api/v1/requests/:id/answer",
+        "DELETE /api/v1/browsers/:id/grants/:granteeId"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 5.476750000000038,
+      "p50Ms": 4.493832999999995,
+      "p95Ms": 5.468582999999853,
+      "maxMs": 7.638250000000198,
+      "peakRssMiB": 138.71875,
+      "rawMs": [
+        4.569666999999981,
+        4.76495900000009,
+        4.7085000000001855,
+        4.276083000000199,
+        5.468582999999853,
+        7.638250000000198,
+        4.720500000000129,
+        4.273541000000023,
+        4.554542000000083,
+        4.388958999999886,
+        4.2065000000000055,
+        4.563666000000012,
+        4.6325829999998405,
+        4.257041999999956,
+        4.493832999999995,
+        4.811542000000145,
+        4.462334000000055,
+        4.211583000000019,
+        4.288375000000087,
+        4.158083999999917
+      ]
+    },
+    {
+      "name": "worker.join token + join + hello + remove (local state fixture)",
+      "coveredRoutes": [
+        "POST /api/v1/workers/join-tokens",
+        "POST /api/v1/workers/join",
+        "POST /api/v1/workers/hello",
+        "DELETE /api/v1/workers/:id"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 12.049250000000029,
+      "p50Ms": 10.02624999999989,
+      "p95Ms": 10.715541999999914,
+      "maxMs": 12.949583000000075,
+      "peakRssMiB": 156.046875,
+      "rawMs": [
+        9.47912499999984,
+        8.902250000000095,
+        8.706583000000137,
+        10.581666000000041,
+        10.465708000000177,
+        10.22770800000012,
+        10.073791000000028,
+        8.689834000000019,
+        10.035791000000017,
+        9.970458000000008,
+        9.392499999999927,
+        10.715541999999914,
+        10.412417000000005,
+        8.464791999999989,
+        9.807583000000022,
+        9.804458000000068,
+        10.085000000000036,
+        10.02624999999989,
+        10.195334000000003,
+        12.949583000000075
+      ]
+    },
+    {
+      "name": "OAuth register + consent + code exchange + refresh + revoke",
+      "coveredRoutes": [
+        "POST /oauth/register",
+        "GET /oauth/authorize",
+        "POST /oauth/authorize",
+        "POST /oauth/token",
+        "POST /oauth/revoke"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 17.169458000000077,
+      "p50Ms": 12.70354199999997,
+      "p95Ms": 14.36604199999988,
+      "maxMs": 14.576291999999967,
+      "peakRssMiB": 165.453125,
+      "rawMs": [
+        12.634000000000015,
+        12.771958999999924,
+        12.792707999999948,
+        12.26108400000021,
+        12.286333000000013,
+        12.991207999999915,
+        12.12520900000004,
+        12.494915999999876,
+        12.532875000000104,
+        13.663125000000036,
+        12.70354199999997,
+        14.272208999999975,
+        13.168957999999975,
+        12.682250000000067,
+        14.576291999999967,
+        10.196999999999889,
+        12.87824999999998,
+        13.3510839999999,
+        14.36604199999988,
+        12.58441700000003
+      ]
+    },
+    {
+      "name": "profile.create empty + delete",
+      "coveredRoutes": [
+        "POST /api/v1/seeds",
+        "DELETE /api/v1/seeds/:id"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 9.120165999999926,
+      "p50Ms": 3.8648330000000897,
+      "p95Ms": 6.5033750000000055,
+      "maxMs": 6.619666999999936,
+      "peakRssMiB": 173.515625,
+      "rawMs": [
+        5.187290999999959,
+        4.393792000000076,
+        2.837541000000101,
+        3.705208999999968,
+        4.2289579999999205,
+        3.8648330000000897,
+        4.213042000000087,
+        4.677249999999958,
+        6.5033750000000055,
+        3.456124999999929,
+        3.800042000000076,
+        3.649208000000044,
+        5.616750000000138,
+        6.619666999999936,
+        3.8132080000000315,
+        4.414541999999983,
+        4.198249999999916,
+        3.161208000000215,
+        3.7147910000001048,
+        3.1062919999999394
+      ]
+    },
+    {
+      "name": "guest complete control session (fake Chrome)",
+      "coveredRoutes": [
+        "POST /guest/api/v1/session",
+        "GET /guest/api/v1/browser",
+        "POST /guest/api/v1/start",
+        "POST /guest/api/v1/control",
+        "POST /guest/api/v1/control/heartbeat",
+        "POST /guest/api/v1/viewer-ticket",
+        "DELETE /guest/api/v1/control",
+        "DELETE /guest/api/v1/session"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 52.35395900000003,
+      "p50Ms": 44.8307920000002,
+      "p95Ms": 46.924291999999696,
+      "maxMs": 48.66020800000001,
+      "peakRssMiB": 180.4375,
+      "rawMs": [
+        48.66020800000001,
+        45.26974999999993,
+        46.62745800000016,
+        44.25704200000018,
+        46.07916699999987,
+        45.13579200000004,
+        44.469084000000294,
+        44.8307920000002,
+        44.35383300000012,
+        45.069124999999985,
+        46.02970800000003,
+        44.79012499999999,
+        44.09745800000019,
+        45.007416999999805,
+        44.416499999999814,
+        46.14254200000005,
+        44.644209000000046,
+        46.924291999999696,
+        44.489750000000186,
+        43.699333000000024
+      ]
+    },
+    {
+      "name": "instance.export fixture 1 MiB",
+      "coveredRoutes": [
+        "POST /api/v1/export"
+      ],
+      "comparison": "after only; no before-change measurement",
+      "n": 20,
+      "coldMs": 53.1853329999999,
+      "p50Ms": 50.07291600000008,
+      "p95Ms": 52.99175000000014,
+      "maxMs": 54.83183300000019,
+      "peakRssMiB": 186.328125,
+      "rawMs": [
+        50.00895799999989,
+        50.959249999999884,
+        51.97729199999958,
+        52.99175000000014,
+        50.06587500000023,
+        50.823541000000205,
+        51.31062500000007,
+        49.55179199999975,
+        51.22920899999963,
+        49.667917000000216,
+        50.46050000000014,
+        50.07291600000008,
+        51.12266699999964,
+        54.83183300000019,
+        49.1259170000003,
+        47.1193330000001,
+        49.78699999999981,
+        49.25320899999997,
+        49.4796250000004,
+        50.62587500000018
+      ]
+    }
+  ],
+  "gaps": [
+    "Fake Chrome supplies CDP responses: browser launch/render/encoding/input-to-paint, native desktop and real MCP child startup are NOT measured.",
+    "Worker network/placement/move, real extension pairing/transport, export of production-sized profiles, tunnels and OAuth provider interaction require external fixtures.",
+    "Sequential localhost samples measure service overhead, not internet latency or throughput. Rate-limit buckets reset before each sample; authorization, CSRF and data validation still execute."
+  ]
+}

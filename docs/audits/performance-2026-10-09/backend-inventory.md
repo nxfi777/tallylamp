@@ -1,0 +1,83 @@
+# Backend performance audit, 9 October 2026
+
+## Measurement boundary
+
+`npm run bench:api -- before` / `-- after` runs an isolated service with real Express HTTP, the real MCP protocol, and a temporary on-disk SQLite WAL database. **Chrome is a stand-in.** No production data, real authenticated profiles, or production service configuration was changed. Each of 46 scenarios has one first observation and 20 subsequent samples. JSON files contain every sample, p50/p95, environment details, fixture definition, 89 statically enumerated HTTP routes and all lifecycle-tool names. Errors fail the run; they are not substituted with success values. Results checkpoint after each scenario.
+
+Rate-limit buckets reset outside each timed sample so this measures authorized action cost rather than deliberate throttling. Auth, CSRF, routing and validation remain enabled. Fake screenshots are 8×8 JPEGs; their timings measure protocol overhead **not image encoding or rendering**. Localhost has no internet delay. p95 of 20 observations is descriptive, not a capacity SLO or a production percentile estimate. The first observation is not a controlled cold OS-cache result.
+
+## Measured changes
+
+| Scenario | Before p50 / p95 ms | After p50 / p95 ms | Change |
+| --- | ---: | ---: | --- |
+| Fleet 200, serialize current browser views | 16.66 / 20.67 | 3.50 / 4.61 | Reuse compiled SQL; avoid reloading a browser row already supplied. |
+| Fleet 200, HTTP browser list | 19.25 / 67.04 | 6.90 / 9.75 | Same data, permissions, and response shape. |
+| Fleet 200, HTTP agent list | 3.81 / 13.38 | 1.75 / 3.34 | One grouped SQL count instead of loading full browser rows per agent. |
+| 8 concurrent thumbnail requests | 6.85 / 8.39 | 4.80 / 7.09 | 21 screenshot captures instead of 168 over 21 batches. |
+| 8 concurrent page-info refreshes | 1.79 / 2.02 | 1.49 / 1.99 | One in-flight read shared by poll and tool completions. |
+
+The SQL cache stores **statements, not query results** and belongs to each database connection. It is bounded at 128 entries. Thumbnail sharing is keyed by runtime identity and lasts only until that capture settles: no completed-image cache, image-quality change or reduced refresh frequency. Page refreshes likewise share only in-flight reads, and late results from a stopped runtime are discarded. CDP discovery now bounds the fetch and response body by its advertised 10-second deadline; a server accepting a connection without answering previously bypassed that deadline indefinitely.
+
+The complete action timings are in `api-before.json` and `api-after.json`. A few ms differences elsewhere should not be read as reliable wins; shared-host scheduling, native statement allocation and filesystem variance affect these short samples.
+
+Profile copying and deletion were subsequently measured against the real local filesystem, independently of Chrome. `profile-clone-before.json`, `profile-clone-delete-before.json` and `profile-clone-after.json` retain raw samples (5 per size). The deletion baseline was collected after converting cloning, before converting deletion; it is not another clone baseline.
+
+| Real disk operation, 16 MiB / 1024 files | Before p50 / p95 ms | After p50 / p95 ms |
+| --- | ---: | ---: |
+| Longest service event-loop timer gap during clone | 205.12 / 217.22 | 3.38 / 4.21 |
+| Clone completion | 203.94 / 216.02 | 308.21 / 603.75 |
+| Longest service event-loop timer gap during deletion | 45.45 / 46.31 | 3.79 / 11.50 |
+| Deletion completion | 44.36 / 45.41 | 45.67 / 54.92 |
+
+`create` now awaits filesystem copying instead of blocking the service. This makes other actions responsive while a profile is copied; **copy completion itself was slower in this run**, so this is not a copy-throughput win. The 1 MiB / 64-file clone timer gap fell 12.40 → 1.15 ms. Profile bytes, permissions, cookies and site inventory are preserved. Pending copies reserve agent capacity and browser names; partial browsers remain unpublished. Seed update/delete/inventory edits and export cannot overlap the copy. Failure cleans staged files and releases reservations. Browser deletion and temporary-profile reaping also use asynchronous filesystem removal, prevent conflicting starts/saves/moves, and finish before shutdown releases storage. Tests hold each operation open to verify these boundaries.
+
+Supplemental `api-extra-after.json` adds 13 successful workflows with 20 samples apiece, without inventing before-change values: OAuth registration/consent/PKCE exchange/refresh/revoke (p50 12.55 ms), pairing approval/access/revocation (13.05 ms), full guest control session with fake Chrome (50.75 ms), worker enrollment/hello/removal against a local HTTP state fixture (10.55 ms), tunnel lifecycle (5.77 ms), lending request/grant/revoke (4.22 ms), and real 1 MiB archive export including staging cleanup (61.25 ms). It also covers agent creation, thread-reset and extension/native-control disablement, and profile deletion.
+
+The later `api-runtime-after-final.json` adds 13 successful workflows using an actual isolated worker server in the same process, its own temporary profile directory, real HTTP/tar/gzip/uploads, and explicitly fake Chrome. It covers guest HTML, SSE receipt, worker health/state/start/stop/CDP/profile/export/upload/delete, a running browser moved from worker to main and back, and a 1 MiB artifact fetched through an active installed MCP bridge. The bridge runs alone after all fake runtimes stop and never connects to Chrome. All child processes and temporary data are closed afterward.
+
+| Added workflow | p50 / p95 ms | Boundary |
+|---|---:|---|
+| Guest HTML download | 1.72 / 1.91 | HTTP delivery, not rendered page readiness. |
+| SSE connection through matching event receipt | 0.51 / 0.94 | Event transport; dashboard repaint has separate real measurements. |
+| Worker start plus stop | 3.50 / 4.09 | Real worker routing; fake Chrome. |
+| Worker upload and byte verification, 64 KiB | 2.50 / 3.23 | Successful write and unchanged payload. |
+| Profile tar download, 1 MiB / 64 files | 40.43 / 52.41 | Deterministic pseudorandom payload. |
+| Profile tar restore, 1 MiB / 64 files | 39.52 / 77.26 | Real extraction and byte verification. |
+| Worker gzip export, 1 MiB / 64 files | 69.76 / 83.84 | Full compressed response consumed. |
+| Running browser worker→main→worker move, 1 MiB | 119.58 / 151.06 | Both real archive transfers; fake Chrome restart. |
+| Active bridge artifact download, 1 MiB | 12.17 / 15.16 | Real bridge membership, artifact HTTP and byte verification. |
+
+Together, 72 local timed workflows reach 88 of 89 statically enumerated HTTP registrations. A separate isolated Linux worker measured the remaining X11 route successfully with real xdotool and a dedicated Xvfb display: 20 samples, p50/p95 **3.40 / 8.47 ms**, through process exit. That brings successful registration coverage to **89 of 89**, mapped with evidence in `backend-route-coverage.json`. The local JSON's X11 environment block remains accurate for that macOS fixture; no refusal is counted as a successful native action. The runtime JSON also retains 11 separate worker-request distributions, with setup/first observations explicitly included. This is successful workflow coverage, **not every branch or 89 independent action distributions**. The count excludes array-defined discovery/static routes and WebSocket upgrades. The Linux measurement is in [linux-before.json](evidence/linux-before.json), separate from the fake-Chrome fixture.
+
+## Action surface inventory
+
+- Public/control HTTP: health, discovery documents, OpenAPI, login/logout/session identity, status; browser list/detail/create/update/delete/start/stop/restart; site report/remove; thumbnails; human acquire/heartbeat/release; viewer tickets; extension and desktop enablement; pin/reset thread estimates.
+- Delegation: request inbox and answer; lendable state and grant revocation; guest create/list/revoke and the separate guest session/browser/start/control/heartbeat/viewer-ticket/release endpoints.
+- Persistence: saved profile list/create/update/delete/site inventory; clone from profile; full instance export.
+- Linking: start/poll/describe/approve/deny pairing, linked access read/update, unlink; extension WebSocket connect/hello/heartbeat, tab and CDP multiplexing.
+- Network/fleet: worker join/hello/list/token/remove, browser placement/move, worker state/start/stop/delete/export/profile upload/download/CDP/upload/x11/linked bridge; tunnel create/list/revoke/connect.
+- Identity: agent list/create/update/token rotation; OAuth authorize/consent/code exchange/refresh/revoke/client register; audit/event SSE.
+- MCP lifecycle: the full list is machine-enumerated in the JSON report. Forwarded DevTools tools cover navigation/tabs, DOM snapshots, screenshots, click/fill/type/key/hover/drag/upload, evaluation, console/network inspection, emulation, traces/insights, memory and browser debugging.
+- Live viewer messages: connection to first frame; tab selection/new/close; navigate/reload/history; viewport/fit; mouse/scroll/key/paste; visibility pause/resume; lease heartbeat/release. Native desktop also includes extensions navigation and held-input cleanup.
+
+## Remaining evidence gaps and follow-up priorities
+
+1. **Real managed viewer:** `managed-injected-after.json` records a fresh isolated macOS Chrome, launched by the real BrowserManager through HTTP, with real CDP and viewer WebSocket. 20 thumbnail requests measured 20.86 / 21.54 ms p50/p95. 20 clicks measured 59.95 / 61.66 ms to receipt of a frame verified to contain that click's unique black/white marker. The first frame arrived 13.97 ms after viewer connection began (n = 1). These are localhost measurements; final client image decode/presentation, internet latency, stream quality under congestion and dropped-input rates are still gaps. The injected fixture and PNG are reproducible artifacts. Existing q70 control/q60 watch and 1280-pixel encoding ceiling were unchanged.
+2. **Managed cold-start and platform differences:** the initial 3 macOS new-profile starts reached API `running` in 331.3 / 489.5 / 598.3 ms, but `Page.navigate` to the local HTTP fixture timed out after 8 seconds, and a separate diagnostic timed out after 20 seconds despite explicitly allowing private addresses. No navigation value was imputed. Injecting the same fixture using `Page.setDocumentContent` worked (600.7 ms, n = 1), allowing the real renderer/viewer measurements above while bypassing that unresolved local path. API-running is not renderer-ready. macOS Chrome shutdown took roughly 10–11 seconds in logs and commonly exited code 2; one diagnostic exited 0. Fresh-profile GoogleUpdater activity appeared in diagnostic stderr, but its causal role is unproven. No shutdown timeout/profile-flush shortcut was made. Raw failed runs remain in `managed-after.json` and `managed-diagnostic.json`. The later isolated real Linux worker succeeded: API runtime in 393.7 ms, fixture navigation ready in 39.3 ms, graceful stop in 161.4 ms (each n = 1). Native desktop click-to-matching-frame measured 141.2 / 190.7 ms p50/p95 over 20 clicks. Thus the macOS failure is not evidence of the same failure on the deployed Linux runtime. See the main report for the Linux hidden-capture fix and its before/after results.
+3. **MCP session continuity:** production connector observation lost emulation settings and a completed trace between calls. In installed `chrome-devtools-mcp` 1.8.0, trace parsing reads stored emulation values; a later partial `emulate` explicitly clears omitted CPU/network fields. Server bridge lifetime is one child per HTTP MCP session and browser. The focused regression proves emulate→trace→open tunnel→analyze→close tunnel retains the same child. A reconnect/new MCP session intentionally gets a new child; investigate connector session headers/service logs to distinguish this from a child crash. Sharing mutable DevTools state across unrelated sessions was deliberately not introduced.
+4. **Write amplification remains:** session last-seen, credential last-used, agent last-seen, browser activity/touch and audit are synchronous writes. No durability or timestamp precision was reduced. Their contribution to realistic concurrent-agent throughput remains unmeasured.
+5. **Worker fan-out and remote data:** successful local worker runtime/archive/upload/move paths are now measured above. Worker polling still uses all workers concurrently; browser page polling runs every 4 seconds. Production fleet counts, slow workers, internet transport and egress tunnel throughput still need controlled measurements.
+
+The tab viewer keeps one latest pending frame, acknowledges sent/superseded frames after socket drain, and refines a settled picture separately. Its existing 66 ms control-frame interval is consistent with the roughly 60 ms measured click-to-frame result. Tab switching serializes target detach/attach, enable/start-cast and initial capture; these actions, history/scroll/paste/viewport and tab-viewer watch/hidden-resume still need distinct real distributions.
+
+Native desktop now stops ffmpeg while hidden and restarts with a fresh JPEG parser and first-frame deadline. The isolated Linux fixture confirmed hidden output and encoder CPU fell from 7 frames / 4 CPU ticks per 1.2 seconds to zero. A fixed raw-display input probe of 32 bytes reduces restart delay; control captures at 15 fps and watch retains 6 fps. Final image checks confirmed identical JPEG quantization tables, dimensions and components. The measured tradeoff is greater visible control work: 4 to 11 encoder CPU ticks and 250,696 to 537,244 bytes per 1.2 seconds in the changing-content fixture (100 CPU ticks per second). Watch resume measured 228.04 / 233.02 ms p50/p95 across 3 observations. Those byte rates describe that fixture, not a universal bandwidth requirement. Main and workers must ship together because worker command validation now allows exactly `-probesize 32`; existing matching-release requirements still apply.
+
+Each stale-modifier cleanup release now uses `keyup --delay 0`, removing four artificial sleeps while preserving event ordering and actual operator keydown/keyup behavior. Real worker command timings fell from 55.19 / 57.65 to 4.34 / 5.58 ms p50/p95 (20 samples each). The official [xdotool command parser](https://github.com/jordansissel/xdotool/blob/v3.20160805.1/cmd_key.c#L16) sets a 12 ms default per command, and its [event sender](https://github.com/jordansissel/xdotool/blob/v3.20160805.1/xdo.c#L1415-L1439) retains X synchronization when zero skips the sleep. Serialized input, modifier recovery and lease checks remain intact. An output-flush flag did not materially improve the measured stream and was not adopted. See the [main report](REPORT.md) for final matched Linux input/frame measurements, resume latency and image verification.
+
+## Validation
+
+The dedicated tests cover fresh results after query reuse and DB reset, 8-way thumbnail coalescing with unchanged bytes, new capture after completion, overlapping page refreshes, stale runtime-result suppression and hung CDP discovery. A separate MCP routing test verifies bridge identity persists across emulation, trace and tunnel operations. Existing auth/site/profile/lending/read-access tests exercise the affected state and permission paths. Desktop tests cover local and remote capture cancellation, rapid visibility changes, stale frames/errors/deadlines, unchanged first frames after resume, lease and accepted-input preservation, mode-specific cadence with identical image settings, and exact worker probe validation.
+
+Final verification runs are preserved separately in `api-after-final.json` (46 workflows, 920 repeated samples), `api-extra-after-final.json` (13 workflows, 260 repeated samples) and `api-runtime-after-final.json` (13 workflows, 260 repeated samples), each with additional first observations. The matched baseline and initial after reports remain unchanged. Final fleet-200 browser-list p50/p95 was 5.58 / 6.29 ms; the 1 MiB clone-and-delete workflow was 21.87 / 26.43 ms.
+
+The final service build passed. The complete service suite, including the desktop changes, passed **489 tests in 77 suites**, with no failures or skips, in 155.14 seconds. The log is [service-tests-desktop-final.log](evidence/service-tests-desktop-final.log). The final real Linux run records click-to-matching-frame at 59.49 / 93.80 ms p50/p95, compared with 130.81 / 234.99 ms in the matched phase-varied baseline; first frame was 126.46 ms and control resume was 122.10 ms. See [linux-final.json](evidence/linux-final.json) and the main report for sample counts and the remaining transport/presentation limits.

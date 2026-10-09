@@ -60,8 +60,8 @@ describe("MCP browser routing", { timeout: 10_000 }, () => {
     ctx = await startTestServer();
     gateway = ctx.mcp as unknown as Gateway;
     agent = createAgent({ name: "Shared connection", maxBrowsers: 3, scopes: [...DEFAULT_AGENT_SCOPES, "browser:tunnel"] });
-    a = ctx.browsers.create({ principal: agent.agent, via: "mcp", name: "A" }).id;
-    b = ctx.browsers.create({ principal: agent.agent, via: "mcp", name: "B" }).id;
+    a = (await ctx.browsers.create({ principal: agent.agent, via: "mcp", name: "A" })).id;
+    b = (await ctx.browsers.create({ principal: agent.agent, via: "mcp", name: "B" })).id;
     requestId = 0; calls = []; closes = []; onCall = async () => {};
     // Keep real routing, permission checks, startup coalescing and fake Chrome lifecycle.
     // Only replace the absent fake-Chrome bridge, so assertions observe actual dispatch.
@@ -127,10 +127,26 @@ describe("MCP browser routing", { timeout: 10_000 }, () => {
     assert.equal(attached(a), 0);
   });
 
+  it("preserves the same DevTools bridge across emulation, trace and tunnel management", async () => {
+    ok(await call("emulate", { browserId: a, pageId: 1, cpuThrottlingRate: 4, networkConditions: "Fast 4G" }));
+    const binding = gateway.sessions.get(session)!.bindings.get(a)!;
+    const child = binding.child;
+    ok(await call("performance_start_trace", { browserId: a, pageId: 1, reload: true, autoStop: true }));
+    const tunnel = JSON.parse(text(ok(await call("tallylamp_open_tunnel", { browserId: a, port: 3000 }))));
+    ok(await call("performance_analyze_insight", { browserId: a, insightSetId: "NAVIGATION_0", insightName: "LCPBreakdown" }));
+    assert.equal(gateway.sessions.get(session)!.bindings.get(a), binding);
+    assert.equal(binding.child, child, "tool state belongs to one unchanged child process");
+    assert.deepEqual(closes, []);
+    assert.equal(attached(a), 1);
+    ok(await call("tallylamp_close_tunnel", { tunnelId: tunnel.tunnelId }));
+    assert.equal(binding.child, child);
+    assert.deepEqual(calls.map(c => c.name), ["emulate", "performance_start_trace", "performance_analyze_insight"]);
+  });
+
   it("never falls back to the default for invalid, missing, or unauthorized explicit targets", async () => {
     ok(await call("tallylamp_use_browser", { browserId: a }));
     const other = createAgent({ name: "Other identity" });
-    const forbidden = ctx.browsers.create({ principal: other.agent, via: "mcp" }).id;
+    const forbidden = (await ctx.browsers.create({ principal: other.agent, via: "mcp" })).id;
     for (const browserId of ["", " ", null, 12, "missing-browser", forbidden]) {
       assert.equal((await call("click", { browserId, uid: "1_1" })).isError, true, String(browserId));
     }
@@ -140,7 +156,7 @@ describe("MCP browser routing", { timeout: 10_000 }, () => {
   });
 
   it("authorizes the selected target in both directions between a read grant and an owned browser", async () => {
-    const borrowed = ctx.browsers.create({ principal: adminPrincipal(), via: "dashboard" }).id;
+    const borrowed = (await ctx.browsers.create({ principal: adminPrincipal(), via: "dashboard" })).id;
     const request = requestBrowser(ctx.browsers, agent.agent, { browserId: borrowed, access: "read" });
     assert.equal(request.state, "pending");
     answerRequest(ctx.browsers, adminPrincipal(), { requestId: request.requestId, decision: "grant", access: "read", untilRevoked: true });
@@ -180,7 +196,7 @@ describe("MCP browser routing", { timeout: 10_000 }, () => {
   });
 
   it("rechecks a grant revoked during startup and cleans up the failed binding", async () => {
-    const borrowed = ctx.browsers.create({ principal: adminPrincipal(), via: "dashboard" }).id;
+    const borrowed = (await ctx.browsers.create({ principal: adminPrincipal(), via: "dashboard" })).id;
     const request = requestBrowser(ctx.browsers, agent.agent, { browserId: borrowed, access: "read" });
     assert.equal(request.state, "pending");
     answerRequest(ctx.browsers, adminPrincipal(), { requestId: request.requestId, decision: "grant", access: "read", untilRevoked: true });

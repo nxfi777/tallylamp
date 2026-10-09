@@ -476,8 +476,7 @@ function browserMenu(b) {
           if (!confirm(`Revoke the link to "${b.name}"?\n\nIts extension is disconnected at once, its token stops working, and every shared tab is handed back. To use it again, press Connect in the extension and approve a new code.`)) return;
           await act(async () => {
             await api(`/api/v1/browsers/${b.id}/link`, { method: "DELETE" });
-            await refresh();
-            void render();
+            await render();
           });
         },
       },
@@ -1441,7 +1440,7 @@ function settingsSection(b) {
             if (enabled && !confirm("Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust.\n\nEnable extension support?")) return;
             await api(`/api/v1/browsers/${id}/extensions`, { method: "PUT", body: { enabled } });
             flash(enabled ? "Extension support enabled. Start the browser, take control and open Full browser." : "Extensions disabled on the next start. Their saved data has not been deleted.");
-            await refresh(); void render();
+            await render();
           }) })),
       b.owner.type === "agent" ? settingRow("Allow agent control",
         b.agentDesktopEnabled ? "On. The owning agent can see and use Chrome's own UI, extension popups included. Taking control blocks it."
@@ -1452,7 +1451,7 @@ function settingsSection(b) {
             await api(`/api/v1/browsers/${id}/agent-desktop`, { method: "PUT", body: { enabled } });
             flash(enabled ? "Agent native control allowed. Human takeover still blocks its input." : "Agent native control blocked.", true);
             if (viewer) { viewer.cancel(true); viewer = null; }
-            await refresh(); void render();
+            await render();
           }) }), true) : null,
       b.kind !== "linked" && (state.workers.length || b.worker) ? settingRow("Runs on",
         b.worker
@@ -1473,7 +1472,7 @@ function settingsSection(b) {
             if (on && !confirm("When this host runs short of processes, Tallylamp will stop other browsers to keep this one running, including browsers an agent is using. Their profiles and tabs are kept.\n\nPin this browser?")) return;
             await api(`/api/v1/browsers/${id}/pinned`, { method: "PUT", body: { pinned: on } });
             flash(on ? `${b.name} is pinned.` : `${b.name} is no longer pinned.`);
-            await refresh(); void render();
+            await render();
           }) })) : null,
       // What it is sized at decides whether its next start is admitted, and one heavy run can
       // leave it sized past what it needs. Only where a host has a ceiling to admit against.
@@ -1485,7 +1484,7 @@ function settingsSection(b) {
           // No flash: render() clears it, and the row's own sentence changes to say what follows.
           onClick: () => act(async () => {
             await api(`/api/v1/browsers/${id}/threads/reset`, { method: "POST" });
-            await refresh(); void render();
+            await render();
           }) }, "Reset")) : null,
       settingRow("Lend when idle",
         b.lendable ? "On. A waiting agent can borrow it after a couple of idle minutes, logins included." : "Off. It is lent only when you say so.",
@@ -1495,7 +1494,7 @@ function settingsSection(b) {
             try {
               await api(`/api/v1/browsers/${id}/lendable`, { method: "POST", body: { lendable: on } });
               flash(on ? `${b.name} can now be lent out when idle.` : `${b.name} will only be lent if you say so.`, true);
-              await refresh(); void render();
+              await render();
             } catch (err) {
               el.setAttribute("aria-checked", String(!on)); // put the switch back; the server did not move
               throw err;
@@ -1522,8 +1521,7 @@ function settingsSection(b) {
                 onClick: () => act(async () => {
                   await api(`/api/v1/browsers/${id}/grants/${g.granteeId}`, { method: "DELETE" });
                   flash(`Took ${b.name} back from ${agent ? agent.name : g.granteeId}. Its next call fails.`, true);
-                  await refresh();
-                  void render();
+                  await render();
                 }),
               }, "Revoke"));
           }))) : null,
@@ -1601,8 +1599,7 @@ function guestSection(b, guests) {
                 onClick: () => act(async () => {
                   await api(`/api/v1/browsers/${b.id}/guests/${g.id}`, { method: "DELETE" });
                   flash(`Revoked ${g.label}'s link. Their view closed and control went back.`, true);
-                  await refresh();
-                  void render();
+                  await render();
                 }),
               }, "Revoke"),
             ),
@@ -1647,8 +1644,7 @@ async function shareWithGuest(b) {
   revealToken("Guest link", created.url, {
     note: `Send this to ${created.guest.label} privately. It works once: the first browser to open it can ${answers.access === "control" ? "watch and control" : "watch"} ${b.name} until the link expires or you revoke it. If someone else opens it first, revoke it and make a new one.`,
   });
-  await refresh();
-  void render();
+  await render();
 }
 
 function tunnelSection(tunnels) {
@@ -1668,8 +1664,7 @@ function tunnelSection(tunnels) {
             onClick: () => act(async () => {
               await api(`/api/v1/tunnels/${t.id}`, { method: "DELETE" });
               flash(`Closed the tunnel to ${t.authority}.`, true);
-              await refresh();
-              void render();
+              await render();
             }),
           }, "Close"),
         ),
@@ -2902,7 +2897,7 @@ function editSeedSites(seed) {
     body,
     error,
     h("div", { class: "row modal-foot" }, h("button", { class: "btn primary", type: "button", onClick: () => close() }, "Done")),
-  ], () => { if (touched) void refresh().then(() => render()); });
+  ], () => { if (touched) void render(); });
 }
 
 /**
@@ -3104,7 +3099,6 @@ async function moveBrowser(b) {
   // This page redraws and says how the move went itself, so the live update leaves it be.
   movesFromHere.add(b.id);
   const moving = api(`/api/v1/browsers/${b.id}/move`, { method: "POST", body: { workerId: answers.host === "local" ? null : answers.host } });
-  await refresh();
   await render();
   flash(`Moving ${b.name} to ${target.name}…`, true);
   let message;
@@ -3118,7 +3112,6 @@ async function moveBrowser(b) {
     message = e.message;
     ok = false;
   }
-  await refresh();
   await render();
   movesFromHere.delete(b.id);
   flash(message, ok);
@@ -3219,8 +3212,7 @@ async function editProxy(b) {
   });
   if (answers) {
     flash("Proxy settings saved. Start the browser to use them.", true);
-    await refresh();
-    void render();
+    await render();
   }
 }
 
@@ -3244,8 +3236,7 @@ async function editBrowser(b) {
   if (!answers) return;
   await act(async () => {
     flash(`Saved ${answers.name}.`, true);
-    await refresh();
-    void render();
+    await render();
   });
 }
 
@@ -3279,8 +3270,7 @@ async function addSite(b) {
   if (!answers) return;
   await act(async () => {
     flash(`${result.site.name} recorded. Agents can now find this browser by ${new URL(result.site.origin).hostname}.`, true);
-    await refresh();
-    void render();
+    await render();
   });
 }
 
@@ -3291,8 +3281,7 @@ async function setSiteState(b, site, stateName) {
       body: { origin: site.origin, name: site.name, state: stateName },
     });
     flash(stateName === "confirmed" ? `${site.name} confirmed.` : `${site.name} marked as needing sign-in.`, true);
-    await refresh();
-    void render();
+    await render();
   });
 }
 
@@ -3300,8 +3289,7 @@ async function removeSite(b, site) {
   await act(async () => {
     await api(`/api/v1/browsers/${b.id}/sites/${site.id}`, { method: "DELETE" });
     flash(`${site.name} removed from the profile inventory. Its website session was not changed.`, true);
-    await refresh();
-    void render();
+    await render();
   });
 }
 
@@ -3407,8 +3395,7 @@ async function toggleAgent(a) {
   ) return;
   await act(async () => {
     await api(`/api/v1/agents/${a.id}`, { method: "PATCH", body: { enabled: !a.enabled } });
-    await refresh();
-    void render();
+    await render();
   });
 }
 
@@ -3457,8 +3444,7 @@ async function call(path, button) {
   try {
     await act(async () => {
       await api(path, { method: "POST" });
-      await refresh();
-      void render();
+      await render();
     });
   } finally {
     if (button?.isConnected) {
@@ -3756,12 +3742,18 @@ async function render() {
   busy(true);
   let ok;
   let detailStarted = false;
+  let homePaint = 0;
   const showRoute = (name) => {
     if (seq !== renderSeq) return;
     syncRequestBadges();
     if (r.name === "home") {
       if (!name) homeView();
-      else paintBrowsers();
+      // The six parallel datasets often finish in one frame. Rebuilding every card
+      // for each response multiplies DOM work without showing an intermediate frame.
+      else if (!homePaint) homePaint = requestAnimationFrame(() => {
+        homePaint = 0;
+        if (seq === renderSeq) paintBrowsers();
+      });
     } else if (r.name === "browser") {
       if (!detailStarted) {
         detailStarted = true;
@@ -3806,6 +3798,41 @@ function startEvents() {
   }, 15_000);
   let timer = 0;
   let backoff = 1000;
+  let lastRepaint = -Infinity;
+  let dirty = false;
+  // The first change after an idle period is visible immediately. During a burst retain
+  // the 1.5-second request ceiling, without a trailing debounce that can starve updates.
+  const repaint = () => {
+    timer = 0;
+    if (document.hidden) return;
+    // A repaint replaces the cards, which closes any menu open on them. Hold it until the
+    // menu is gone, rather than pull a menu out from under the pointer.
+    if (openMenu) {
+      timer = setTimeout(repaint, 1500);
+      return;
+    }
+    dirty = false;
+    lastRepaint = performance.now();
+    void refresh().then(() => {
+        // Repaint the cards, not the page. This used to call homeView(), which rebuilds the
+        // whole layout — so an operator typing in the filter lost focus to <body> and had the
+        // caret sent back to the start, roughly every time any agent touched any browser.
+        if (route().name === "home") paintBrowsers();
+        // A worker joining or dropping off is an event too. Not while a dialog is open: the
+        // join token is shown once, and the page behind it can wait.
+        if (route().name === "workers" && !document.querySelector(".modal")) void workersView();
+        const sitesPanel = document.getElementById("profile-sites");
+        const current = sitesPanel && state.browsers.find(b => b.id === sitesPanel.dataset.browserId);
+        if (current) sitesPanel.updateSites(current.signedInSites || []);
+    });
+  };
+  const queueRepaint = () => {
+    dirty = true;
+    if (!timer && !document.hidden) timer = setTimeout(repaint, Math.max(0, 1500 - (performance.now() - lastRepaint)));
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && dirty) queueRepaint();
+  });
   const listen = () => {
     let es;
     try {
@@ -3814,30 +3841,6 @@ function startEvents() {
       return;
     }
     es.onopen = () => { backoff = 1000; };
-    // Refetch at most every 1.5 seconds, and never later than that. This was a debounce, and a
-    // debounce restarted by every event never fires while events keep coming: during a move,
-    // which reports every second, a card sat on its first "under 1 MB" until the move was over.
-    const repaint = () => {
-      timer = 0;
-      // A repaint replaces the cards, which closes any menu open on them. Hold it until the
-      // menu is gone, rather than pull a menu out from under the pointer.
-      if (openMenu) {
-        timer = setTimeout(repaint, 1500);
-        return;
-      }
-      void refresh().then(() => {
-          // Repaint the cards, not the page. This used to call homeView(), which rebuilds the
-          // whole layout — so an operator typing in the filter lost focus to <body> and had the
-          // caret sent back to the start, roughly every time any agent touched any browser.
-          if (route().name === "home") paintBrowsers();
-          // A worker joining or dropping off is an event too. Not while a dialog is open: the
-          // join token is shown once, and the page behind it can wait.
-          if (route().name === "workers" && !document.querySelector(".modal")) void workersView();
-          const sitesPanel = document.getElementById("profile-sites");
-          const current = sitesPanel && state.browsers.find(b => b.id === sitesPanel.dataset.browserId);
-          if (current) sitesPanel.updateSites(current.signedInSites || []);
-      });
-    };
     es.onmessage = (msg) => {
       // A move's progress goes straight into its card and its page, every second, with no
       // refetch and no repaint in between.
@@ -3852,10 +3855,10 @@ function startEvents() {
         const r = route();
         if (ev.type === "browser.moved" && r.name === "browser" && r.id === ev.browserId && !movesFromHere.has(ev.browserId) &&
             !openMenu && !document.querySelector(".modal")) {
-          void refresh().then(() => render());
+          void render();
         }
       } catch { /* not every message is an event */ }
-      if (!timer) timer = setTimeout(repaint, 1500);
+      queueRepaint();
     };
     es.onerror = () => {
       // EventSource retries by itself only while the connection is merely dropped. A closed

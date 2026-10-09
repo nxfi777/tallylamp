@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:44:06.007Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides",
+  "mode": "4x-fast4g",
+  "lcp": 304,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 2.100000023841858,
+  "dcl": 166.9000000357628,
+  "load": 395.10000002384186,
+  "fcp": 304,
+  "transferBytes": 390071,
+  "jsDecodedBytes": 549286,
+  "resources": 27,
+  "domNodes": 299,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

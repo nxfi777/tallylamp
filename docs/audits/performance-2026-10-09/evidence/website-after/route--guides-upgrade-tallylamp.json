@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:44:15.987Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/upgrade-tallylamp",
+  "mode": "4x-fast4g",
+  "lcp": 268,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 2.599999964237213,
+  "dcl": 154.0999999642372,
+  "load": 385.89999997615814,
+  "fcp": 268,
+  "transferBytes": 368136,
+  "jsDecodedBytes": 549286,
+  "resources": 21,
+  "domNodes": 240,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

@@ -61,15 +61,40 @@ function snapshot() {
   };
 }
 
+let publicationPending = false;
+let badgeCount = null;
+let storedState = null;
+let broadcastState = null;
+
 function changed() {
-  chrome.action.setBadgeText({ text: shared.size ? String(shared.size) : "" });
-  chrome.action.setBadgeBackgroundColor({ color: "#b8770c" });
-  chrome.action.setTitle({
-    title: shared.size ? `Tallylamp Link: sharing ${shared.size} tab${shared.size === 1 ? "" : "s"} with your agent` : "Tallylamp Link",
+  // State/permission changes themselves are synchronous. Collapse notifications in this
+  // turn, so one Stop all or a burst of tab metadata events paints the final state once.
+  if (publicationPending) return;
+  publicationPending = true;
+  Promise.resolve().then(() => {
+    publicationPending = false;
+    if (badgeCount !== shared.size) {
+      chrome.action.setBadgeText({ text: shared.size ? String(shared.size) : "" });
+      if (badgeCount === null) chrome.action.setBadgeBackgroundColor({ color: "#b8770c" });
+      chrome.action.setTitle({
+        title: shared.size ? `Tallylamp Link: sharing ${shared.size} tab${shared.size === 1 ? "" : "s"} with your agent` : "Tallylamp Link",
+      });
+      badgeCount = shared.size;
+    }
+    const persisted = { shared: [...shared.values()].map(({ tabId, sites, byAgent }) => ({ tabId, sites, byAgent })), releaseAt };
+    const key = JSON.stringify(persisted);
+    if (storedState !== key) {
+      storedState = key;
+      chrome.storage.session.set(persisted).catch(() => { if (storedState === key) storedState = null; });
+    }
+    const state = snapshot();
+    const signature = JSON.stringify(state);
+    if (broadcastState !== signature) {
+      broadcastState = signature;
+      // Nobody listening just means the panel is closed; opening it requests fresh state.
+      chrome.runtime.sendMessage({ type: "state", state }).catch(() => {});
+    }
   });
-  chrome.storage.session.set({ shared: [...shared.values()].map(({ tabId, sites, byAgent }) => ({ tabId, sites, byAgent })), releaseAt });
-  // Nobody listening just means the panel is closed.
-  chrome.runtime.sendMessage({ type: "state", state: snapshot() }).catch(() => {});
 }
 
 // ---------------------------------------------------------------- pairing
@@ -470,7 +495,9 @@ async function unshare(tabId, reason, { detach = true } = {}) {
 }
 
 async function unshareAll(reason) {
-  for (const tabId of [...shared.keys()]) await unshare(tabId, reason);
+  // Each unshare removes its permission before the first await. Revoke every tab now,
+  // then wait for Chrome's independent detach calls together instead of one round trip each.
+  await Promise.all([...shared.keys()].map(tabId => unshare(tabId, reason)));
 }
 
 // ---------------------------------------------------------------- other extensions' frames
@@ -623,19 +650,33 @@ async function boot() {
   pairing = stored.pairing ?? null;
   const { shared: was = [], releaseAt: deadline } = await chrome.storage.session.get(["shared", "releaseAt"]);
   releaseAt = Number.isFinite(deadline) ? deadline : null;
-  for (const entry of was) {
-    try {
-      const { targetInfo: info } = await chrome.debugger.sendCommand({ tabId: entry.tabId }, "Target.getTargetInfo");
-      // Shared by a version that let the dashboard be shared.
-      if (onServer(info.url, serverHost())) {
-        await chrome.debugger.detach({ tabId: entry.tabId }).catch(() => {});
-        continue;
+  // Check independent attachments four at a time. Keep the persisted tab order, and publish
+  // nothing until every attachment has been verified (including the dashboard exclusion).
+  const restored = new Array(was.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, was.length) }, async () => {
+    while (next < was.length) {
+      const index = next++;
+      const entry = was[index];
+      try {
+        const { targetInfo: info } = await chrome.debugger.sendCommand({ tabId: entry.tabId }, "Target.getTargetInfo");
+        if (onServer(info.url, serverHost())) {
+          await chrome.debugger.detach({ tabId: entry.tabId }).catch(() => {});
+          continue;
+        }
+        const tab = { tabId: entry.tabId, info: { targetId: info.targetId, url: info.url, title: info.title, browserContextId: info.browserContextId }, sites: entry.sites ?? null, byAgent: Boolean(entry.byAgent) };
+        restored[index] = tab;
+        // Register immediately so Chrome's detach/navigation events can revoke this tab
+        // while the other attachment checks are still pending.
+        shared.set(entry.tabId, tab);
+      } catch {
+        /* no longer attached: not shared, whatever the note said */
       }
-      shared.set(entry.tabId, { tabId: entry.tabId, info: { targetId: info.targetId, url: info.url, title: info.title, browserContextId: info.browserContextId }, sites: entry.sites ?? null, byAgent: Boolean(entry.byAgent) });
-    } catch {
-      /* no longer attached: not shared, whatever the note said */
     }
-  }
+  }));
+  const verified = restored.filter(tab => tab && shared.get(tab.tabId) === tab);
+  shared.clear();
+  for (const tab of verified) shared.set(tab.tabId, tab);
   if (pairing) {
     link = "pairing";
     poll();

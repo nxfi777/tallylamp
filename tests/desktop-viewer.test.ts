@@ -32,14 +32,16 @@ describe("desktop input and framing", () => {
     assert.equal(desktopKey("Enter"), "Return");
     assert.deepEqual(desktopInput({ type: "key", event: "rawKeyDown", key: "Tab" }, size), ["keydown", "Tab"]);
     // Each press carries the modifiers really held. Whatever else the display still has down is
-    // stale, and one stale Shift turned every later letter uppercase.
+    // stale, and one stale Shift turned every later letter uppercase. Each cleanup release
+    // skips xdotool's default 12ms sleep without changing the operator's actual key events.
     assert.deepEqual(desktopInput({ type: "key", event: "keyDown", key: "d", modifiers: 0 }, size),
-      ["keyup", "Alt_L", "keyup", "Control_L", "keyup", "Super_L", "keyup", "Shift_L", "keydown", "U0064"]);
-    assert.deepEqual(desktopInput({ type: "key", event: "keyDown", key: "D", modifiers: 8 }, size).slice(-4), ["keyup", "Super_L", "keydown", "U0044"]);
+      ["keyup", "--delay", "0", "Alt_L", "keyup", "--delay", "0", "Control_L", "keyup", "--delay", "0", "Super_L", "keyup", "--delay", "0", "Shift_L", "keydown", "U0064"]);
+    assert.deepEqual(desktopInput({ type: "key", event: "keyDown", key: "D", modifiers: 8 }, size),
+      ["keyup", "--delay", "0", "Alt_L", "keyup", "--delay", "0", "Control_L", "keyup", "--delay", "0", "Super_L", "keydown", "U0044"]);
     assert.deepEqual(desktopInput({ type: "key", event: "rawKeyDown", key: "Shift", modifiers: 8 }, size).slice(-2), ["keydown", "Shift_L"]);
     assert.deepEqual(desktopInput({ type: "key", event: "keyUp", key: "d", modifiers: 0 }, size), ["keyup", "U0064"]);
     assert.deepEqual(desktopInput({ type: "mouse", event: "mousePressed", button: "left", x: 1, y: 1, modifiers: 8 }, size),
-      ["keyup", "Alt_L", "keyup", "Control_L", "keyup", "Super_L", "mousemove", "1", "1", "mousedown", "1"]);
+      ["keyup", "--delay", "0", "Alt_L", "keyup", "--delay", "0", "Control_L", "keyup", "--delay", "0", "Super_L", "mousemove", "1", "1", "mousedown", "1"]);
     assert.equal(desktopKey("CapsLock"), null, "the operator's key already has Caps Lock applied");
     assert.equal(desktopInput({ type: "mouse", event: "mouseMoved", x: -1, y: 0 }, size), null);
     assert.equal(desktopInput({ type: "mouse", event: "mouseMoved", x: Infinity, y: 0 }, size), null);
@@ -80,13 +82,13 @@ describe("extensions and full-browser authorization", () => {
       assert.equal((await setting(true)).status, 200);
       ctx.browsers.releaseControl(id);
       const admin = { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] } as const;
-      const defaulted = ctx.browsers.create({ principal: admin, via: "dashboard" });
+      const defaulted = (await ctx.browsers.create({ principal: admin, via: "dashboard" }));
       assert.equal(defaulted.extensions_enabled, 1, "extension support is on by default on a Full browser host");
       process.env.TALLYLAMP_EXTENSIONS_DEFAULT = "0";
-      assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).extensions_enabled, 0, "the env flag still turns the default off");
+      assert.equal((await ctx.browsers.create({ principal: admin, via: "dashboard" })).extensions_enabled, 0, "the env flag still turns the default off");
       delete process.env.TALLYLAMP_EXTENSIONS_DEFAULT;
       process.env.TALLYLAMP_FAKE_CHROME = "1";
-      assert.equal(ctx.browsers.create({ principal: admin, via: "dashboard" }).extensions_enabled, 0, "no default on a host that cannot show Full browser");
+      assert.equal((await ctx.browsers.create({ principal: admin, via: "dashboard" })).extensions_enabled, 0, "no default on a host that cannot show Full browser");
       process.env.TALLYLAMP_FAKE_CHROME = "0";
       assert.equal((await json(`${ctx.url}/api/v1/browsers/${defaulted.id}/extensions`, { method: "PUT", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: false }) })).status, 200);
       assert.equal(ctx.browsers.row(defaulted.id).extensions_enabled, 0, "a saved choice wins while the default is on");
@@ -156,8 +158,10 @@ describe("extensions and full-browser authorization", () => {
     process.env.TALLYLAMP_FAKE_CHROME = "0";
     const children: Array<EventEmitter & { stdout: PassThrough; killed: boolean; kill: () => boolean }> = [];
     const commands: string[] = [];
-    const fakeSpawn = ((cmd: string) => {
+    const captureArgs: string[][] = [];
+    const fakeSpawn = ((cmd: string, args: string[]) => {
       commands.push(cmd);
+      if (cmd === "ffmpeg") captureArgs.push(args);
       const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), killed: false, kill() { this.killed = true; return true; } });
       children.push(child); return child;
     }) as unknown as typeof spawn;
@@ -168,18 +172,27 @@ describe("extensions and full-browser authorization", () => {
     try {
       const lease = ctx.browsers.acquireControl(id, "human", "admin");
       runDesktopViewer(watch as unknown as WebSocket, ctx.browsers, id, "watch", fakeSpawn);
+      assert.equal(captureArgs[0][captureArgs[0].indexOf("-framerate") + 1], "6", "watch retains its lower capture cost");
       send(watch, { type: "heartbeat", leaseToken: lease.leaseToken });
       send(watch, { type: "key", event: "keyDown", key: "a" });
       assert.deepEqual(commands, ["ffmpeg"]);
       watch.close(4000);
       assert.equal(children[0].killed, true);
       runDesktopViewer(control as unknown as WebSocket, ctx.browsers, id, "control", fakeSpawn);
+      const rateIndex = captureArgs[1].indexOf("-framerate") + 1;
+      assert.equal(captureArgs[1][rateIndex], "15", "interactive control has a shorter frame interval");
+      assert.deepEqual(captureArgs[1].map((value, index) => index === rateIndex ? "6" : value), captureArgs[0], "control changes cadence without reducing image quality or dimensions");
       send(control, { type: "key", event: "keyDown", key: "a" });
       assert.equal(commands.length, 2, "unbound socket cannot type");
       send(control, { type: "heartbeat", leaseToken: lease.leaseToken });
       send(control, { type: "key", event: "keyDown", key: "Shift" });
       send(control, { type: "key", event: "keyDown", key: "b" });
       assert.equal(commands.length, 3, "second input is queued, not spawned concurrently");
+      send(control, { type: "visibility", visible: false });
+      assert.equal(children[1].killed, true, "hiding stops capture");
+      assert.equal(children[2].killed, false, "hiding does not cancel an accepted input");
+      assert.equal(commands.length, 3, "hiding preserves the input queue");
+      assert.equal(ctx.browsers.controlState(id).leaseToken, lease.leaseToken, "capture visibility does not release the lease");
       ctx.browsers.acquireControl(id, "human", "another-admin", { force: true });
       assert.equal(children[2].killed, true, "forced takeover kills in-flight typing");
       const before = commands.length;
@@ -197,4 +210,90 @@ describe("extensions and full-browser authorization", () => {
       ctx.browsers.releaseControl(id);
     }
   });
+
+  for (const remote of [false, true]) {
+    it(`stops ${remote ? "remote" : "local"} capture while hidden and resumes with a fresh frame`, (t) => {
+      const rt = ctx.browsers.runtime(id)!;
+      const original = { xvfb: rt.xvfb, display: rt.display, desktopSpawn: rt.desktopSpawn };
+      rt.xvfb = {} as ChromeRuntime["xvfb"]; rt.display = ":99";
+      process.env.TALLYLAMP_FAKE_CHROME = "0";
+      const sent: Buffer[] = [], errors: string[] = [];
+      const captures: Array<EventEmitter & { stdout: PassThrough; killed: boolean; kill: () => boolean }> = [];
+      const commands: string[][] = [];
+      const firstFrameTimers = new Set<ReturnType<typeof setTimeout>>();
+      const firstFrameCallbacks: Array<() => void> = [];
+      const realSetTimeout = globalThis.setTimeout, realClearTimeout = globalThis.clearTimeout;
+      t.mock.method(globalThis, "setTimeout", (callback: (...args: any[]) => void, delay?: number, ...args: any[]) => {
+        const timer = realSetTimeout(callback, delay, ...args);
+        if (delay === 10_000) { firstFrameTimers.add(timer); firstFrameCallbacks.push(() => callback(...args)); }
+        return timer;
+      });
+      t.mock.method(globalThis, "clearTimeout", (timer: Parameters<typeof clearTimeout>[0]) => {
+        firstFrameTimers.delete(timer as ReturnType<typeof setTimeout>); realClearTimeout(timer);
+      });
+      const fakeSpawn = ((cmd: string, args: string[]) => {
+        assert.equal(cmd, "ffmpeg"); commands.push(args);
+        const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), killed: false,
+          kill() { this.killed = true; if (remote) this.emit("exit", null, "SIGKILL"); return true; } });
+        captures.push(child); return child;
+      }) as unknown as typeof spawn;
+      if (remote) rt.desktopSpawn = fakeSpawn;
+      const ws = Object.assign(new EventEmitter(), { readyState: WebSocket.OPEN, bufferedAmount: 0,
+        send(raw: string | Buffer) { if (Buffer.isBuffer(raw)) sent.push(Buffer.from(raw)); else { const data = JSON.parse(raw); if (data.type === "error") errors.push(data.message); } },
+        ping() {}, close(code: number) { this.emit("close", code); }, terminate() { this.emit("close", 1006); } });
+      const visible = (value: boolean) => ws.emit("message", JSON.stringify({ type: "visibility", visible: value }));
+      const frame = Buffer.from([255, 216, 7, 255, 217]);
+      try {
+        runDesktopViewer(ws as unknown as WebSocket, ctx.browsers, id, "watch", remote ? (() => assert.fail("must use runtime's remote spawner")) as unknown as typeof spawn : fakeSpawn);
+        assert.equal(captures.length, 1);
+        assert.equal(firstFrameTimers.size, 1);
+        // Hiding before the first frame cancels its deadline without closing the viewer.
+        visible(false);
+        assert.equal(captures[0].killed, true);
+        assert.equal(firstFrameTimers.size, 0);
+        firstFrameCallbacks[0]();
+        assert.deepEqual(errors, []);
+        assert.equal(ctx.browsers.viewerCount(id), 0);
+        visible(true); visible(true);
+        assert.equal(captures.length, 1, "wait for the canceled child to close before starting another");
+        visible(false);
+        captures[0].emit("error", new Error("expected canceled remote request"));
+        captures[0].emit("exit", null, "SIGKILL");
+        captures[0].emit("close", null, "SIGKILL");
+        assert.equal(captures.length, 1, "a rapid second hide must not resurrect capture");
+        captures[0].stdout.write(frame);
+        assert.equal(sent.length, 0, "late canceled frames never reach the viewer");
+        visible(true);
+        assert.equal(captures.length, 2);
+        assert.equal(firstFrameTimers.size, 1, "resume gets its own first-frame deadline");
+        firstFrameCallbacks[0]();
+        captures[1].stdout.write(frame);
+        captures[1].stdout.write(frame);
+        assert.equal(sent.length, 1, "unchanged visible frames remain deduplicated");
+        assert.equal(firstFrameTimers.size, 0);
+        // A partial JPEG belongs only to the capture process that produced it.
+        captures[1].stdout.write(Buffer.from([255, 216, 9]));
+        visible(false); visible(true);
+        captures[1].emit("close", null, "SIGKILL");
+        captures[1].stdout.write(Buffer.from([255, 217]));
+        assert.equal(captures.length, 3);
+        captures[2].stdout.write(frame);
+        assert.deepEqual(sent, [frame, frame], "an unchanged desktop still sends a fresh frame after resume");
+        assert.deepEqual(commands[1], commands[0]);
+        assert.deepEqual(commands[2], commands[0], "resolution, JPEG quality and frame cadence stay unchanged");
+        assert.deepEqual(errors, []);
+        assert.equal(ctx.browsers.viewerCount(id), 1);
+        ws.close(1000);
+        assert.equal(captures[2].killed, true);
+        assert.equal(firstFrameTimers.size, 0);
+        captures[2].emit("close", null, "SIGKILL");
+        assert.equal(captures.length, 3, "closing never restarts capture");
+      } finally {
+        ws.close(4000);
+        for (const child of captures) child.emit("close", null, "SIGKILL");
+        Object.assign(rt, original); process.env.TALLYLAMP_FAKE_CHROME = "1";
+        t.mock.restoreAll();
+      }
+    });
+  }
 });

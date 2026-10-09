@@ -1,5 +1,7 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { config } from "./config.js";
+import { prepare } from "./db.js";
+import type { ChromeRuntime } from "./chrome.js";
 import { Err, errorBody, statusOf, AppError } from "./errors.js";
 import {
   DEFAULT_AGENT_SCOPES,
@@ -132,6 +134,9 @@ function asyncRoute(fn: (req: Request, res: Response) => Promise<unknown>) {
 }
 
 export function mountApi(app: Express, browsers: BrowserManager): void {
+  // Share only work that is still in flight. Every later request captures fresh pixels,
+  // and a replacement runtime cannot inherit a stopped browser's capture.
+  const thumbnails = new WeakMap<ChromeRuntime, Promise<Buffer>>();
   app.use("/api/v1", (req, _res, next) => {
     if (browsers.transferInProgress && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !["/login", "/logout"].includes(req.path)) {
       return next(Err.browserUnavailable("an export is in progress; retry when it finishes"));
@@ -314,7 +319,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
       const p = req.principal!;
       if (p.type === "agent") requireScope(p, "browser:create");
       rateLimit(`create:${p.id}`, 20, 8);
-      const row = browsers.create({
+      const row = (await browsers.create({
         principal: p,
         via: p.type === "admin" ? "dashboard" : "control_api",
         name: req.body?.name,
@@ -324,7 +329,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
         proxy: req.body?.proxy,
         // Absent lets placement decide. Only the administrator may say; create() checks.
         ...(req.body && Object.prototype.hasOwnProperty.call(req.body, "workerId") ? { workerId: req.body.workerId === null ? null : String(req.body.workerId) } : {}),
-      });
+      }));
       if (req.body?.start !== false) await browsers.ensureRunning(row.id);
       res.status(201).json({ browser: browsers.publicView(browsers.row(row.id)) });
     }),
@@ -564,7 +569,12 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
         res.status(204).end();
         return;
       }
-      const buf = await captureScreenshot(rt.cdpUrl, 35);
+      let capture = thumbnails.get(rt);
+      if (!capture) {
+        capture = captureScreenshot(rt.cdpUrl, 35).finally(() => thumbnails.delete(rt));
+        thumbnails.set(rt, capture);
+      }
+      const buf = await capture;
       res.setHeader("Content-Type", "image/jpeg");
       res.setHeader("Cache-Control", "no-store");
       res.send(buf);
@@ -573,6 +583,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
 
   api.get("/api/v1/agents", requireAdmin, (req, res) => {
     void req;
+    const counts = new Map((prepare(`SELECT owner_id, COUNT(*) AS count FROM browsers WHERE owner_type = 'agent' GROUP BY owner_id`).all() as Array<{ owner_id: string; count: number }>).map(row => [row.owner_id, row.count]));
     res.json({
       agents: listAgents().map((a) => ({
         id: a.id,
@@ -583,7 +594,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
         createdAt: a.created_at,
         lastSeenAt: a.last_seen_at,
         labels: safeLabels(a.labels_json),
-        browserCount: browsers.list({ ownerType: "agent", ownerId: a.id }).length,
+        browserCount: counts.get(a.id) ?? 0,
       })),
       // The dashboard offers these when it creates an agent and when it edits one, in the
       // consent page's words. `scopes` on create replaces the defaults rather than adding to

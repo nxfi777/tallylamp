@@ -95,7 +95,7 @@ export function desktopInput(msg: Message, size: { width: number; height: number
     const button = msg.button === "left" ? "1" : msg.button === "middle" ? "2" : msg.button === "right" ? "3" : null;
     if (!button || !["mousePressed", "mouseReleased"].includes(String(msg.event))) return null;
     if (msg.event === "mouseReleased") return [...pos, "mouseup", button];
-    return [...staleModifiers(msg).flatMap(k => ["keyup", k]), ...pos, "mousedown", button];
+    return [...staleModifiers(msg).flatMap(k => ["keyup", "--delay", "0", k]), ...pos, "mousedown", button];
   }
   if (msg.type === "scroll") {
     const pos = point();
@@ -110,7 +110,7 @@ export function desktopInput(msg: Message, size: { width: number; height: number
   if (msg.type === "key") {
     const key = desktopKey(msg.key);
     if (!key || !["keyDown", "rawKeyDown", "keyUp"].includes(String(msg.event))) return null;
-    return msg.event === "keyUp" ? ["keyup", key] : [...staleModifiers(msg).flatMap(k => ["keyup", k]), "keydown", key];
+    return msg.event === "keyUp" ? ["keyup", key] : [...staleModifiers(msg).flatMap(k => ["keyup", "--delay", "0", k]), "keydown", key];
   }
   if (msg.type === "paste" && typeof msg.text === "string" && msg.text.length <= 2048) {
     const text = msg.text.replace(/\r/g, "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
@@ -267,10 +267,24 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
       if (releaseWhenIdle && !input && !queue.length) releaseHeldNow();
     });
   };
-  const capture = spawnProcess("ffmpeg", ["-nostdin", "-loglevel", "error", "-threads", "1", "-filter_threads", "1",
-    "-f", "x11grab", "-draw_mouse", "0", "-framerate", "6", "-video_size", `${size.width}x${size.height}`,
-    "-i", `${rt.display}.0`, "-vf", `scale=w=${streamWidth(size.width, stageWidth)}:h=-2`, "-c:v", "mjpeg", "-threads", "1",
-    "-q:v", "6", "-f", "image2pipe", "pipe:1"], { env, stdio: ["ignore", "pipe", "ignore"] });
+  let capture: ChildProcess | null = null;
+  let stoppingCapture: ChildProcess | null = null;
+  let firstFrame: NodeJS.Timeout | undefined;
+  const stopCapture = () => {
+    clearTimeout(firstFrame);
+    firstFrame = undefined;
+    const child = capture;
+    // RemoteProcess.kill emits exit synchronously. Invalidate first so an intentional
+    // pause cannot close the viewer, and late stdout cannot publish a stale frame.
+    capture = null;
+    if (!child) return;
+    stoppingCapture = child;
+    child.once("close", () => {
+      if (stoppingCapture === child) stoppingCapture = null;
+      if (!closed && attached) startCapture();
+    });
+    child.kill("SIGKILL");
+  };
   let pong = true;
   const ping = setInterval(() => { if (!pong) ws.terminate(); else { pong = false; ws.ping(); } }, config.viewerPingMs);
   ping.unref();
@@ -291,7 +305,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     closed = true;
     clearInterval(ping); clearInterval(leaseCheck); clearTimeout(firstFrame);
     hub.off(`browser:${id}`, onEvent);
-    releaseInputs(); capture.kill("SIGKILL"); active.delete(id);
+    releaseInputs(); stopCapture(); active.delete(id);
     if (attached) browsers.detachViewer(id);
     if ((code === 1000 || code === 1001) && validLease()) browsers.releaseControl(id);
   };
@@ -339,8 +353,8 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
       const visible = msg.visible !== false;
       if (visible !== attached) {
         attached = visible;
-        if (visible) browsers.attachViewer(id);
-        else browsers.detachViewer(id);
+        if (visible) { browsers.attachViewer(id); startCapture(); }
+        else { browsers.detachViewer(id); stopCapture(); }
       }
       return;
     }
@@ -377,25 +391,48 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
     pump();
   });
   send({ type: "hello", content: size, surface: "desktop" });
-  const frames = new JpegFrames();
-  let last: Buffer | null = null;
-  const firstFrame = setTimeout(() => { send({ type: "error", message: "Desktop capture did not start. Check ffmpeg and Xvfb, then reopen Full browser." }); ws.close(1008); }, 10_000);
-  firstFrame.unref();
-  capture.stdout!.on("data", (chunk: Buffer) => {
-    try {
-      for (const frame of frames.push(chunk)) {
-        clearTimeout(firstFrame);
-        if (closed || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > DESKTOP_SEND_GATE_BYTES) continue;
-        if (last?.equals(frame)) continue;
-        last = Buffer.from(frame);
-        ws.send(frame, { binary: true });
+  const startCapture = () => {
+    if (closed || !attached || capture || stoppingCapture) return;
+    const child = spawnProcess("ffmpeg", ["-nostdin", "-loglevel", "error", "-threads", "1", "-filter_threads", "1",
+      "-probesize", "32", "-f", "x11grab", "-draw_mouse", "0", "-framerate", mode === "control" ? "15" : "6", "-video_size", `${size.width}x${size.height}`,
+      "-i", `${rt.display}.0`, "-vf", `scale=w=${streamWidth(size.width, stageWidth)}:h=-2`, "-c:v", "mjpeg", "-threads", "1",
+      "-q:v", "6", "-f", "image2pipe", "pipe:1"], { env, stdio: ["ignore", "pipe", "ignore"] });
+    capture = child;
+    // A resumed stream starts at its own JPEG boundary and must send its first frame
+    // even when the desktop has not changed while hidden.
+    const frames = new JpegFrames();
+    let last: Buffer | null = null;
+    firstFrame = setTimeout(() => {
+      if (closed || !attached || capture !== child) return;
+      send({ type: "error", message: "Desktop capture did not start. Check ffmpeg and Xvfb, then reopen Full browser." });
+      ws.close(1008);
+    }, 10_000);
+    firstFrame.unref();
+    child.stdout!.on("data", (chunk: Buffer) => {
+      if (closed || !attached || capture !== child) return;
+      try {
+        for (const frame of frames.push(chunk)) {
+          clearTimeout(firstFrame);
+          firstFrame = undefined;
+          if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > DESKTOP_SEND_GATE_BYTES) continue;
+          if (last?.equals(frame)) continue;
+          last = Buffer.from(frame);
+          ws.send(frame, { binary: true });
+        }
+      } catch { send({ type: "error", message: "Desktop capture failed. Reopen Full browser to try again." }); ws.close(1008); }
+    });
+    child.on("error", (e) => {
+      if (closed || capture !== child) return;
+      log.warn("desktop capture could not start", { browserId: id, error: (e as NodeJS.ErrnoException).code ?? e.message });
+      send({ type: "error", message: spawnFailure("ffmpeg", e) });
+      ws.close(1008);
+    });
+    child.on("exit", () => {
+      if (!closed && capture === child) {
+        send({ type: "error", message: "Desktop capture stopped. Check ffmpeg and Xvfb, then reopen Full browser." });
+        ws.close(1008);
       }
-    } catch { send({ type: "error", message: "Desktop capture failed. Reopen Full browser to try again." }); ws.close(1008); }
-  });
-  capture.on("error", (e) => {
-    log.warn("desktop capture could not start", { browserId: id, error: (e as NodeJS.ErrnoException).code ?? e.message });
-    send({ type: "error", message: spawnFailure("ffmpeg", e) });
-    ws.close(1008);
-  });
-  capture.on("exit", () => { if (!closed) { send({ type: "error", message: "Desktop capture stopped. Check ffmpeg and Xvfb, then reopen Full browser." }); ws.close(1008); } });
+    });
+  };
+  startCapture();
 }

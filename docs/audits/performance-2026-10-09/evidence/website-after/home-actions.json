@@ -1,0 +1,152 @@
+{
+  "measuredAt": "2026-10-09T02:44:04.604Z",
+  "base": "http://127.0.0.1:4328",
+  "mode": "4x-fast4g",
+  "note": "Programmatic DOM activation through shipped handlers; two animation frames to first paint opportunity. Clipboard permission failures count as recovery states. Not hardware input latency.",
+  "actions": [
+    {
+      "name": "Pause the walkthrough",
+      "index": 0,
+      "paintOpportunityMs": 32.69999998807907,
+      "result": "Play the walkthrough"
+    },
+    {
+      "name": "01Every browser, one screen",
+      "index": 1,
+      "paintOpportunityMs": 32.09999996423721,
+      "result": "step"
+    },
+    {
+      "name": "02Watch it live",
+      "index": 2,
+      "paintOpportunityMs": 32.60000002384186,
+      "result": "step"
+    },
+    {
+      "name": "03Take control",
+      "index": 3,
+      "paintOpportunityMs": 33.89999997615814,
+      "result": "step"
+    },
+    {
+      "name": "04Answer the 2FA prompt",
+      "index": 4,
+      "paintOpportunityMs": 33.5,
+      "result": "step"
+    },
+    {
+      "name": "05Hand it back",
+      "index": 5,
+      "paintOpportunityMs": 33.5,
+      "result": "step"
+    },
+    {
+      "name": "Pause the walkthrough",
+      "index": 6,
+      "paintOpportunityMs": 33.19999998807907,
+      "result": "Play the walkthrough"
+    },
+    {
+      "name": "01Open Full browser",
+      "index": 7,
+      "paintOpportunityMs": 31.799999952316284,
+      "result": "step"
+    },
+    {
+      "name": "02Pin your extension",
+      "index": 8,
+      "paintOpportunityMs": 32.60000002384186,
+      "result": "step"
+    },
+    {
+      "name": "03It reads the chat",
+      "index": 9,
+      "paintOpportunityMs": 32.5,
+      "result": "step"
+    },
+    {
+      "name": "04Open the extension",
+      "index": 10,
+      "paintOpportunityMs": 33.10000002384186,
+      "result": "step"
+    },
+    {
+      "name": "05Still there after a restart",
+      "index": 11,
+      "paintOpportunityMs": 33.09999996423721,
+      "result": "step"
+    },
+    {
+      "name": "Claude Code",
+      "index": 12,
+      "paintOpportunityMs": 32.69999998807907,
+      "result": "true"
+    },
+    {
+      "name": "Codex",
+      "index": 13,
+      "paintOpportunityMs": 31.400000035762787,
+      "result": "true"
+    },
+    {
+      "name": "Cursor",
+      "index": 14,
+      "paintOpportunityMs": 33.19999998807907,
+      "result": "true"
+    },
+    {
+      "name": "Any client",
+      "index": 15,
+      "paintOpportunityMs": 33.5,
+      "result": "true"
+    },
+    {
+      "name": "Copy",
+      "index": 16,
+      "paintOpportunityMs": 35.5,
+      "result": "Select to copy"
+    },
+    {
+      "name": "Copy",
+      "index": 17,
+      "paintOpportunityMs": 34.200000047683716,
+      "result": "Select to copy"
+    },
+    {
+      "name": "Do I need to save my browser after signing in?+",
+      "index": 18,
+      "paintOpportunityMs": 35.30000001192093,
+      "result": "Do I need to save my browser after signing in?+"
+    },
+    {
+      "name": "What are profile templates?+",
+      "index": 19,
+      "paintOpportunityMs": 33.60000002384186,
+      "result": "What are profile templates?+"
+    },
+    {
+      "name": "Can each browser use a different proxy?+",
+      "index": 20,
+      "paintOpportunityMs": 34.19999998807907,
+      "result": "Can each browser use a different proxy?+"
+    },
+    {
+      "name": "Can the browser reach localhost or a dev server on my laptop?+",
+      "index": 21,
+      "paintOpportunityMs": 34.60000002384186,
+      "result": "Can the browser reach localhost or a dev server on my laptop?+"
+    },
+    {
+      "name": "What should I know before using sensitive accounts?+",
+      "index": 22,
+      "paintOpportunityMs": 33.60000002384186,
+      "result": "What should I know before using sensitive accounts?+"
+    },
+    {
+      "name": "Can it get past a CAPTCHA or avoid detection?+",
+      "index": 23,
+      "paintOpportunityMs": 33.200000047683716,
+      "result": "Can it get past a CAPTCHA or avoid detection?+"
+    }
+  ]
+}

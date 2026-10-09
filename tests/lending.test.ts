@@ -24,7 +24,7 @@ describe("lending a browser between agents", () => {
   after(async () => ctx.close());
 
   /** A fresh pair of agents and a browser the first one owns, per test. */
-  const setup = (opts?: { ownerScopes?: string[]; borrowerScopes?: string[]; lendable?: boolean }) => {
+  const setup = async (opts?: { ownerScopes?: string[]; borrowerScopes?: string[]; lendable?: boolean }) => {
     owner = createAgent({
       name: "owner",
       scopes: opts?.ownerScopes ?? [...DEFAULT_AGENT_SCOPES, "browser:lend"],
@@ -35,13 +35,13 @@ describe("lending a browser between agents", () => {
       scopes: opts?.borrowerScopes ?? [...DEFAULT_AGENT_SCOPES, "browser:borrow"],
       maxBrowsers: 5,
     });
-    const row = ctx.browsers.create({ principal: owner.agent, via: "mcp", name: `lend-${Math.abs(Date.now() % 99999)}` });
+    const row = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", name: `lend-${Math.abs(Date.now() % 99999)}` }));
     if (opts?.lendable) ctx.browsers.setLendable(row.id, true, owner.agent);
     return ctx.browsers.row(row.id);
   };
 
-  it("refuses an agent that was never granted browser:borrow", () => {
-    const row = setup({ borrowerScopes: [...DEFAULT_AGENT_SCOPES] });
+  it("refuses an agent that was never granted browser:borrow", async () => {
+    const row = (await setup({ borrowerScopes: [...DEFAULT_AGENT_SCOPES] }));
     assert.throws(
       () => requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id }),
       /browser:borrow/,
@@ -49,8 +49,8 @@ describe("lending a browser between agents", () => {
     );
   });
 
-  it("queues a request against a browser its owner has not opted in, and grants nothing meanwhile", () => {
-    const row = setup();
+  it("queues a request against a browser its owner has not opted in, and grants nothing meanwhile", async () => {
+    const row = (await setup());
     const out = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id, reason: "need the login" });
     assert.equal(out.state, "pending");
     assert.equal(activeGrant(row.id, borrower.agent.id), null, "a pending request is not access");
@@ -61,8 +61,8 @@ describe("lending a browser between agents", () => {
     );
   });
 
-  it("asking twice keeps one place in the queue rather than flooding the owner", () => {
-    const row = setup();
+  it("asking twice keeps one place in the queue rather than flooding the owner", async () => {
+    const row = (await setup());
     const a = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     const b = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     assert.equal(a.state, "pending");
@@ -75,8 +75,8 @@ describe("lending a browser between agents", () => {
     assert.equal(inbox(ctx.browsers, owner.agent).filter((r) => r.browser_id === row.id).length, 1);
   });
 
-  it("grants on the owner's answer, and the loan drives but cannot delete", () => {
-    const row = setup();
+  it("grants on the owner's answer, and the loan drives but cannot delete", async () => {
+    const row = (await setup());
     const out = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     assert.equal(out.state, "pending");
     const answered = answerRequest(ctx.browsers, owner.agent, {
@@ -104,8 +104,8 @@ describe("lending a browser between agents", () => {
     );
   });
 
-  it("an owner without browser:lend cannot grant, however willing", () => {
-    const row = setup({ ownerScopes: [...DEFAULT_AGENT_SCOPES] });
+  it("an owner without browser:lend cannot grant, however willing", async () => {
+    const row = (await setup({ ownerScopes: [...DEFAULT_AGENT_SCOPES] }));
     const out = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     assert.throws(
       () => answerRequest(ctx.browsers, owner.agent, { requestId: out.state === "pending" ? out.requestId : "", decision: "grant" }),
@@ -113,8 +113,8 @@ describe("lending a browser between agents", () => {
     );
   });
 
-  it("hands an idle lendable browser over with nobody answering, which is what covers a crashed owner", () => {
-    const row = setup({ lendable: true });
+  it("hands an idle lendable browser over with nobody answering, which is what covers a crashed owner", async () => {
+    const row = (await setup({ lendable: true }));
     // Never started, so it has been idle since it was created -- the same state a crashed
     // owner's browser reaches on its own. No answer from the owner is involved here at all.
     getDb()
@@ -125,8 +125,8 @@ describe("lending a browser between agents", () => {
     assert.ok(activeGrant(row.id, borrower.agent.id));
   });
 
-  it("does not hand over an idle browser its owner never opted in", () => {
-    const row = setup({ lendable: false });
+  it("does not hand over an idle browser its owner never opted in", async () => {
+    const row = (await setup({ lendable: false }));
     getDb()
       .prepare(`UPDATE browsers SET last_activity_at = ? WHERE id = ?`)
       .run(new Date(Date.now() - 3600_000).toISOString(), row.id);
@@ -136,8 +136,8 @@ describe("lending a browser between agents", () => {
     assert.equal(activeGrant(row.id, borrower.agent.id), null, "and the sweep must not either");
   });
 
-  it("never queues behind a human, because a takeover is exclusive", () => {
-    const row = setup({ lendable: true });
+  it("never queues behind a human, because a takeover is exclusive", async () => {
+    const row = (await setup({ lendable: true }));
     ctx.browsers.acquireControl(row.id, "human", "admin", { force: true });
     try {
       const out = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
@@ -148,8 +148,8 @@ describe("lending a browser between agents", () => {
     }
   });
 
-  it("revoking takes the browser back at once", () => {
-    const row = setup();
+  it("revoking takes the browser back at once", async () => {
+    const row = (await setup());
     const out = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     answerRequest(ctx.browsers, owner.agent, {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -161,8 +161,8 @@ describe("lending a browser between agents", () => {
     assert.throws(() => ctx.browsers.assertAccess(borrower.agent, ctx.browsers.row(row.id), "control"));
   });
 
-  it("expires a request nobody ever answered instead of leaving it queued forever", () => {
-    const row = setup();
+  it("expires a request nobody ever answered instead of leaving it queued forever", async () => {
+    const row = (await setup());
     const out = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     const id = out.state === "pending" ? out.requestId : "";
     getDb()
@@ -174,8 +174,8 @@ describe("lending a browser between agents", () => {
     assert.equal(inbox(ctx.browsers, owner.agent).filter((r) => r.id === id).length, 0);
   });
 
-  it("a denial carries the owner's own eta, which is the one estimate it knows best", () => {
-    const row = setup();
+  it("a denial carries the owner's own eta, which is the one estimate it knows best", async () => {
+    const row = (await setup());
     const out = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     const denied = answerRequest(ctx.browsers, owner.agent, {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -253,13 +253,13 @@ describe("asking for any browser rather than a named one", () => {
   });
   after(async () => ctx.close());
 
-  it("ranks every candidate but asks exactly one, so a fan-out cannot land several Chromes", () => {
+  it("ranks every candidate but asks exactly one, so a fan-out cannot land several Chromes", async () => {
     const owner = createAgent({ name: "fan-owner", scopes: [...DEFAULT_AGENT_SCOPES, "browser:lend"], maxBrowsers: 9 });
     const asker = createAgent({ name: "fan-asker", scopes: [...DEFAULT_AGENT_SCOPES, "browser:borrow"], maxBrowsers: 9 });
 
-    const busy = ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "fan-busy" });
-    const idle = ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "fan-idle" });
-    const taken = ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "fan-taken" });
+    const busy = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "fan-busy" }));
+    const idle = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "fan-idle" }));
+    const taken = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "fan-taken" }));
     ctx.browsers.setLendable(idle.id, true, owner.agent);
     getDb().prepare(`UPDATE browsers SET last_activity_at = ? WHERE id = ?`).run(new Date().toISOString(), busy.id);
     getDb()

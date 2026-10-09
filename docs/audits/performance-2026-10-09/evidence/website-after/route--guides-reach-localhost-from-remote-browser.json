@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:44:12.672Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/reach-localhost-from-remote-browser",
+  "mode": "4x-fast4g",
+  "lcp": 284,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 4.600000023841858,
+  "dcl": 166.4000000357628,
+  "load": 400.60000002384186,
+  "fcp": 284,
+  "transferBytes": 368412,
+  "jsDecodedBytes": 549286,
+  "resources": 21,
+  "domNodes": 230,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

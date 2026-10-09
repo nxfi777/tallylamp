@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:38.774Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/chrome-extensions-in-remote-browser",
+  "mode": "4x-fast4g",
+  "lcp": 272,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 6.300000011920929,
+  "dcl": 155.69999998807907,
+  "load": 392.5,
+  "fcp": 272,
+  "transferBytes": 368016,
+  "jsDecodedBytes": 549136,
+  "resources": 21,
+  "domNodes": 245,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

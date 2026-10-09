@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:31.111Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/per-browser-proxy",
+  "mode": "4x-fast4g",
+  "lcp": 284,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 5.699999988079071,
+  "dcl": 160.69999998807907,
+  "load": 396.39999997615814,
+  "fcp": 284,
+  "transferBytes": 368674,
+  "jsDecodedBytes": 549136,
+  "resources": 21,
+  "domNodes": 249,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

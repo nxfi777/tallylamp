@@ -1,0 +1,408 @@
+{
+  "measuredAt": "2026-10-09T02:51:08.079Z",
+  "note": "Real Chrome, real extension, local real service and MCP. Artificial sleeps outside each call are excluded; one/few observations per action, not percentiles. Expected permission denials are marked ok:false.",
+  "timings": [
+    {
+      "surface": "extension",
+      "action": "startPairing",
+      "durationMs": 91.11041700000033,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 33.21174999999994,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 5.4737920000002305,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.8778340000003482,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 258.4739579999996,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 1.405999999999949,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 1.8349169999992228,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "panel evaluation",
+      "durationMs": 0.44891700000061974,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 1.2796669999997903,
+      "ok": false
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 1.2166250000000218,
+      "ok": false
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 9.384082999999919,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "panel evaluation",
+      "durationMs": 15.38866599999983,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 2.3262500000000728,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 1.5261250000003201,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.6820000000006985,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.30825000000004366,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.6926670000002559,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.8576249999996435,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.8152079999999842,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.670458000000508,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.9288749999996071,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "unshareTab",
+      "durationMs": 2.0954579999997804,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "unshareTab",
+      "durationMs": 1.1740420000005543,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "tallylamp_list_browsers",
+      "durationMs": 3.7762910000001284,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "tallylamp_use_browser",
+      "durationMs": 416.70324999999866,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "list_pages",
+      "durationMs": 5.5887500000008,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "take_snapshot",
+      "durationMs": 10.862250000000131,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "click",
+      "durationMs": 259.97512500000084,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "evaluate_script",
+      "durationMs": 221.8221250000006,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "take_screenshot",
+      "durationMs": 17.544707999999446,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "navigate_page",
+      "durationMs": 129.15170800000124,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "navigate_page",
+      "durationMs": 209.96099999999933,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "new_page",
+      "durationMs": 140.7560420000009,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.6745420000006561,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "navigate_page",
+      "durationMs": 214.58437499999854,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "evaluate_script",
+      "durationMs": 18.877791999999317,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.7211669999996957,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "stopAll",
+      "durationMs": 2.7084169999998267,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "list_pages",
+      "durationMs": 5.184375000000728,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "panel evaluation",
+      "durationMs": 0.9974999999994907,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "panel evaluation",
+      "durationMs": 0.7838750000009895,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 1.4475419999998849,
+      "ok": false
+    },
+    {
+      "surface": "extension",
+      "action": "panel evaluation",
+      "durationMs": 0.7870419999999285,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 2.6112079999984417,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 1.2585839999992459,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "startPairing",
+      "durationMs": 24.300750000002154,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 6.605792000002111,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 1.2496250000003783,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 2.6654579999994894,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.7798329999968701,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 177.8417920000029,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 1.4865839999984019,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "panel evaluation",
+      "durationMs": 1.2014170000002196,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 6.844708000000537,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "tallylamp_list_browsers",
+      "durationMs": 3.8266659999972035,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "tallylamp_use_browser",
+      "durationMs": 444.190416999998,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "list_pages",
+      "durationMs": 5.428583000000799,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "take_snapshot",
+      "durationMs": 8.498916000000463,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "getState",
+      "durationMs": 0.5576670000009472,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "panel evaluation",
+      "durationMs": 1.0227090000007593,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 2.983041999999841,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "list_pages",
+      "durationMs": 8.572292000000743,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "take_snapshot",
+      "durationMs": 8.194958000000042,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "panel evaluation",
+      "durationMs": 0.7101660000007541,
+      "ok": true
+    },
+    {
+      "surface": "extension",
+      "action": "shareTab",
+      "durationMs": 1.8943749999998545,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "list_pages",
+      "durationMs": 15.374917000001005,
+      "ok": true
+    },
+    {
+      "surface": "mcp",
+      "action": "take_snapshot",
+      "durationMs": 12.200292000001355,
+      "ok": true
+    }
+  ]
+}

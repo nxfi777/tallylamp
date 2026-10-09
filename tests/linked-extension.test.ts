@@ -25,7 +25,10 @@ async function worker(session: { releaseAt?: number } = {}) {
   const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
   const detached: number[] = [];
   const debuggerCalls: Array<{ tabId: number; method: string }> = [];
+  const publications = { storage: 0, badge: 0, panel: 0 };
   let command: ((method: string) => Promise<unknown>) | undefined;
+  let detach: (() => Promise<void>) | undefined;
+  let updated: (tabId: number, change: Frame, tab: Frame) => void;
   let receive: (msg: Frame, sender: unknown, reply: (value: unknown) => void) => unknown;
   const storedSession: Record<string, unknown> = {
     shared: tabIds.map((tabId) => ({ tabId, sites: null, byAgent: false })), ...session,
@@ -64,16 +67,16 @@ async function worker(session: { releaseAt?: number } = {}) {
     dnsFailure() { this.onerror?.(); this.close(); }
   }
   const chrome = {
-    action: { setBadgeText() {}, setBadgeBackgroundColor() {}, setTitle() {}, setPopup: async () => {} },
+    action: { setBadgeText() { publications.badge++; }, setBadgeBackgroundColor() { publications.badge++; }, setTitle() { publications.badge++; }, setPopup: async () => {} },
     storage: {
       local: {
         get: async () => ({ conn: { server: "https://tallylamp.example", token: "test-token", browserId: "browser", browserName: "Test browser" } }),
         set: async () => {}, remove: async () => {},
       },
-      session: { get: async () => storedSession, set: async (value: object) => { Object.assign(storedSession, value); } },
+      session: { get: async () => storedSession, set: async (value: object) => { publications.storage++; Object.assign(storedSession, value); } },
     },
     runtime: {
-      id: "extension-id", sendMessage: async () => {},
+      id: "extension-id", sendMessage: async () => { publications.panel++; },
       onMessage: { addListener: (listener: typeof receive) => { receive = listener; } }, onStartup: noopEvent,
     },
     debugger: {
@@ -82,10 +85,10 @@ async function worker(session: { releaseAt?: number } = {}) {
         if (method === "Target.getTargetInfo") return { targetInfo: { targetId: `TARGET${tabId}`, url: `https://example.test/${tabId}`, title: `Tab ${tabId}` } };
         return command ? command(method) : {};
       },
-      detach: async ({ tabId }: { tabId: number }) => { detached.push(tabId); },
+      detach: async ({ tabId }: { tabId: number }) => { detached.push(tabId); await detach?.(); },
       onEvent: noopEvent, onDetach: noopEvent,
     },
-    tabs: { onRemoved: noopEvent, onUpdated: noopEvent, ungroup: async () => {} },
+    tabs: { onRemoved: noopEvent, onUpdated: { addListener: (fn: typeof updated) => { updated = fn; } }, ungroup: async () => {} },
     alarms: { create() {}, onAlarm: noopEvent },
     sidePanel: { setPanelBehavior: async () => {} },
   };
@@ -102,7 +105,10 @@ async function worker(session: { releaseAt?: number } = {}) {
   });
   await state();
   return {
-    sockets: Socket.instances, detached, debuggerCalls, state, storedSession, flush,
+    sockets: Socket.instances, detached, debuggerCalls, state, storedSession, flush, publications,
+    update: (tabId: number, change: Frame, tab: Frame) => updated(tabId, change, tab),
+    action: (type: string) => new Promise<unknown>(resolve => receive({ type }, {}, resolve)),
+    setDetach: (callback: typeof detach) => { detach = callback; },
     setCommand: (callback: typeof command) => { command = callback; },
     advance: async (ms: number) => {
       const end = now + ms;
@@ -123,6 +129,34 @@ async function worker(session: { releaseAt?: number } = {}) {
 }
 
 describe("Tallylamp Link worker connection recovery", () => {
+  it("revokes all shares before any pending debugger detach completes", async () => {
+    const ext = await worker();
+    ext.sockets[0].welcome();
+    let finish!: () => void;
+    const pendingDetach = new Promise<void>(resolve => { finish = resolve; });
+    ext.setDetach(() => pendingDetach);
+    const stopped = ext.action("stopAll");
+    try {
+      await ext.flush();
+      assert.deepEqual(ext.detached, tabIds, "independent Chrome detaches start together");
+      assert.deepEqual((await ext.state()).shared, [], "agent permissions end immediately");
+    } finally { finish(); await stopped; }
+  });
+
+  it("publishes a metadata burst once without rewriting share permissions or badges", async () => {
+    const ext = await worker();
+    ext.sockets[0].welcome();
+    await ext.flush();
+    const before = { ...ext.publications };
+    for (let i = 0; i < 100; i++) ext.update(11, { title: `Title ${i}` }, { url: "https://example.test/11", title: `Title ${i}` });
+    await ext.flush();
+    assert.equal(ext.publications.storage, before.storage);
+    assert.equal(ext.publications.badge, before.badge);
+    assert.equal(ext.publications.panel, before.panel + 1);
+    const state = await ext.state() as State & { shared: Array<{ tabId: number; title: string }> };
+    assert.equal(state.shared.find(t => t.tabId === 11)!.title, "Title 99");
+  });
+
   it("restores all three shared tabs after a DNS failure without sharing again", async () => {
     const ext = await worker();
     ext.sockets[0].welcome();
@@ -245,6 +279,28 @@ describe("Tallylamp Link worker connection recovery", () => {
 });
 
 describe("Tallylamp Link panel connection status", () => {
+  it("updates only the countdown text and suspends its timer while hidden", () => {
+    const source = readFileSync(new URL("../extension/panel.js", import.meta.url), "utf8");
+    const code = source.slice(source.indexOf("function updateCountdown()"), source.indexOf('document.addEventListener("visibilitychange"'));
+    let now = 1000;
+    const countdown = { textContent: "" };
+    const timers = new Map<number, () => void>();
+    const document = { visibilityState: "visible", getElementById: () => countdown };
+    const update = vm.runInNewContext(`let tick; ${code}; updateCountdown`, {
+      document, state: { releaseAt: 4000 }, Date: { now: () => now },
+      setInterval: (fn: () => void) => { timers.set(1, fn); return 1; }, clearInterval: (id: number) => timers.delete(id),
+    }) as () => void;
+    update();
+    assert.equal(countdown.textContent, "3s");
+    now = 2000; timers.get(1)!();
+    assert.equal(countdown.textContent, "2s");
+    document.visibilityState = "hidden"; update();
+    assert.equal(timers.size, 0);
+    now = 4000; document.visibilityState = "visible"; update();
+    assert.equal(countdown.textContent, "0s");
+    assert.equal(timers.size, 0, "an elapsed deadline must not loop forever");
+  });
+
   it("shows reconnecting for an attached tab until the server is online", async () => {
     class Element {
       children: Array<Element | string> = [];
@@ -259,7 +315,7 @@ describe("Tallylamp Link panel connection status", () => {
     const render = async (demo: string) => {
       const app = new Element();
       await vm.runInNewContext(`(async () => { ${source}\n })()`, {
-        document: { getElementById: () => app, createElement: () => new Element(), activeElement: null },
+        document: { getElementById: () => app, createElement: () => new Element(), activeElement: null, addEventListener() {} },
         location: { search: `?demo=${demo}` }, URLSearchParams, onServer, siteOf,
         clearInterval: () => {}, setInterval: () => 1,
       });

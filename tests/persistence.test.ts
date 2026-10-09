@@ -73,9 +73,9 @@ describe("persistence", () => {
     assert.equal(ctx.browsers.runningCount(), 0, "the fleet must be empty before the cap is measured");
     process.env.TALLYLAMP_MAX_BROWSERS = "2";
     const principal = { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] } as const;
-    const rows = [1, 2, 3, 4].map((n) =>
+    const rows = await Promise.all([1, 2, 3, 4].map(n =>
       ctx.browsers.create({ principal, via: "control_api", name: `race-${n}`, persistent: false }),
-    );
+    ));
     try {
       // ensureRunning does its cap check synchronously, before start() ever awaits, so firing
       // them in one tick is exactly the interleaving that used to launch four Chromes under a
@@ -103,7 +103,7 @@ describe("persistence", () => {
         else process.env.TALLYLAMP_MAX_BROWSERS = value;
         // Past both old defaults: 4 for the fleet, 2 per agent.
         for (let n = 0; n < 5; n++) {
-          const row = ctx.browsers.create({ principal: agent, via: "control_api", name: `open-${value ?? "unset"}-${n}`, persistent: false });
+          const row = (await ctx.browsers.create({ principal: agent, via: "control_api", name: `open-${value ?? "unset"}-${n}`, persistent: false }));
           rows.push(row);
           await ctx.browsers.ensureRunning(row.id);
         }

@@ -1,0 +1,3134 @@
+{
+  "measuredAt": "2026-10-09T02:35:43.798Z",
+  "note": "Real dashboard async orchestration, simulated 40ms RTT and optional slow worker, rendering stubbed. Not a browser paint benchmark.",
+  "rows": [
+    {
+      "action": "render",
+      "network": {
+        "requestDelayMs": 40,
+        "workerDelayMs": 40
+      },
+      "p50": 88.050209,
+      "p95": 90.484042,
+      "samples": [
+        {
+          "durationMs": 88.67025,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 90.484042,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 87.23695800000002,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 87.47845800000005,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 88.050209,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 87.90508400000004,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 88.12991599999998,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 88.7389169999999,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 86.91449999999998,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 86.39108299999998,
+          "requestCount": 7,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "action": "call",
+      "network": {
+        "requestDelayMs": 40,
+        "workerDelayMs": 40
+      },
+      "p50": 128.10716700000012,
+      "p95": 131.8954580000002,
+      "samples": [
+        {
+          "durationMs": 127.42949999999996,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.76187500000015,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.10716700000012,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 131.45629099999996,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 131.8954580000002,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 126.08529199999998,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.1925409999999,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.90483300000005,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.69212500000003,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.93545799999993,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "action": "setSiteState",
+      "network": {
+        "requestDelayMs": 40,
+        "workerDelayMs": 40
+      },
+      "p50": 128.0190419999999,
+      "p95": 129.87079100000028,
+      "samples": [
+        {
+          "durationMs": 127.498333,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.34112500000037,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.30562499999996,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.5127910000001,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.82533300000023,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.0190419999999,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 126.43862499999977,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 129.87079100000028,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.85958400000027,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.635041,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "action": "removeSite",
+      "network": {
+        "requestDelayMs": 40,
+        "workerDelayMs": 40
+      },
+      "p50": 127.98970800000006,
+      "p95": 131.32150000000001,
+      "samples": [
+        {
+          "durationMs": 126.53883399999995,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 129.1614169999998,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.8169170000001,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.76483300000018,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.54654200000004,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.98970800000006,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.77937500000007,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 131.32150000000001,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 128.494917,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 127.89670800000022,
+          "requestCount": 8,
+          "renders": 2,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "action": "render",
+      "network": {
+        "requestDelayMs": 40,
+        "workerDelayMs": 400
+      },
+      "p50": 447.4018329999999,
+      "p95": 448.2897089999997,
+      "samples": [
+        {
+          "durationMs": 448.2897089999997,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 448.06366700000035,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 446.8287909999999,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 446.9890830000004,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 447.0119999999997,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 447.68845899999997,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 447.79804199999944,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 447.4018329999999,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 447.25316699999894,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 447.3735420000012,
+          "requestCount": 7,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "action": "call",
+      "network": {
+        "requestDelayMs": 40,
+        "workerDelayMs": 400
+      },
+      "p50": 487.9966660000009,
+      "p95": 489.93704199999956,
+      "samples": [
+        {
+          "durationMs": 487.47500000000036,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 486.7873330000002,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 489.2639170000002,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 486.64370899999994,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 489.35004200000003,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 489.6807090000002,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.83320899999853,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.3327499999996,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 489.93704199999956,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.9966660000009,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/start",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "action": "setSiteState",
+      "network": {
+        "requestDelayMs": 40,
+        "workerDelayMs": 400
+      },
+      "p50": 487.61612500000047,
+      "p95": 489.13379200000054,
+      "samples": [
+        {
+          "durationMs": 487.5352920000005,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.3772079999999,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.2512910000005,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 489.13379200000054,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.8037499999991,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.61612500000047,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.3518330000006,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 488.1739579999994,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 486.64120900000125,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 488.4920839999977,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites",
+              "method": "POST"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "action": "removeSite",
+      "network": {
+        "requestDelayMs": 40,
+        "workerDelayMs": 400
+      },
+      "p50": 488.3417079999999,
+      "p95": 489.5973330000015,
+      "samples": [
+        {
+          "durationMs": 488.0967500000006,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.99512499999764,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 488.4992080000011,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 488.9221660000003,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 489.5973330000015,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 488.93204200000037,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 488.0556250000009,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 488.3417079999999,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 488.2612079999999,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "durationMs": 487.4683750000004,
+          "requestCount": 8,
+          "renders": 3,
+          "requests": [
+            {
+              "url": "/api/v1/browsers/fixture/sites/site",
+              "method": "DELETE"
+            },
+            {
+              "url": "/api/v1/me",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/status",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/browsers",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/agents",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/seeds",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/requests",
+              "method": "GET"
+            },
+            {
+              "url": "/api/v1/workers",
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

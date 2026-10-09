@@ -1,9 +1,9 @@
-import { cpSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync } from "node:fs";
 import { cp, rm } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { config, downloadDir, profileDir, seedDir } from "./config.js";
-import { getDb, nowIso } from "./db.js";
+import { getDb, nowIso, prepare } from "./db.js";
 import { Err } from "./errors.js";
 import { log } from "./log.js";
 import { hub } from "./events.js";
@@ -96,11 +96,16 @@ export class BrowserManager {
   private siteDetector = new SiteDetector();
   /** What each runtime was last seen showing, so the page poll can tell a change from a repeat. */
   private lastPage = new WeakMap<ChromeRuntime, string>();
+  private pageRefreshes = new WeakMap<ChromeRuntime, Promise<void>>();
   private runtimes = new Map<string, ChromeRuntime>();
   private windowContents = new Map<string, { width: number; height: number }>();
   private starting = new Map<string, Promise<ChromeRuntime>>();
   private profileSaves = new Map<string, Promise<SavedProfileResult>>();
   private savingSeeds = new Set<string>();
+  // Copying happens off the event loop. Keep snapshots immutable and reserve ownership
+  // and names until the complete profile and its row can be published together.
+  private cloningSeeds = new Map<string, number>();
+  private creating = new Map<string, { ownerType: Principal["type"]; ownerId: string; slug: string; done: Promise<void> }>();
   private resumeReservations = new Set<string>();
   private snapshotCleanup = new Set<string>();
   private mcpAttached = new Map<string, number>();
@@ -125,7 +130,9 @@ export class BrowserManager {
   private exportActive = false;
   private stopping = new Map<string, Promise<void>>();
   private deleting = new Set<string>();
+  private deletions = new Map<string, Promise<void>>();
   private reaping = false;
+  private reaperWork: Promise<void> | null = null;
   /** Where each of those is going and how far along it is, for the dashboard. */
   private movingNow = new Map<string, { to: string; phase: string; copied: number }>();
   private abortedNavs = new Map<string, { count: number; hosts: Set<string> }>();
@@ -142,7 +149,7 @@ export class BrowserManager {
   async withExport<T>(ids: string[], callback: () => Promise<T>): Promise<T> {
     this.assertNoExport();
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
-    if (this.starting.size || this.profileSaves.size || this.savingSeeds.size || this.moving.size ||
+    if (this.creating.size || this.starting.size || this.profileSaves.size || this.savingSeeds.size || this.moving.size ||
         this.stopping.size || this.deleting.size || this.unhealthy.size || this.snapshotCleanup.size || this.reaping) {
       throw Err.browserUnavailable("browsers or saved profiles are busy; retry export when their current operations finish");
     }
@@ -225,7 +232,7 @@ export class BrowserManager {
   }
 
   row(id: string): BrowserRow {
-    const r = getDb().prepare(`SELECT * FROM browsers WHERE id = ?`).get(id) as BrowserRow | undefined;
+    const r = prepare(`SELECT * FROM browsers WHERE id = ?`).get(id) as BrowserRow | undefined;
     if (!r) throw Err.notFound("browser not found");
     return r;
   }
@@ -236,11 +243,10 @@ export class BrowserManager {
 
   list(filter?: { ownerType?: string; ownerId?: string }): BrowserRow[] {
     if (filter?.ownerType && filter.ownerId) {
-      return getDb()
-        .prepare(`SELECT * FROM browsers WHERE owner_type = ? AND owner_id = ? ORDER BY created_at DESC`)
+      return prepare(`SELECT * FROM browsers WHERE owner_type = ? AND owner_id = ? ORDER BY created_at DESC`)
         .all(filter.ownerType, filter.ownerId) as BrowserRow[];
     }
-    return getDb().prepare(`SELECT * FROM browsers ORDER BY created_at DESC`).all() as BrowserRow[];
+    return prepare(`SELECT * FROM browsers ORDER BY created_at DESC`).all() as BrowserRow[];
   }
 
   /**
@@ -343,7 +349,7 @@ export class BrowserManager {
 
   /** Mid-start, mid-save or mid-restart: not something to stop underneath. */
   busy(id: string): boolean {
-    return this.starting.has(id) || this.profileSaves.has(id) || this.unhealthy.has(id) || this.moving.has(id) || this.exporting.has(id);
+    return this.deleting.has(id) || this.starting.has(id) || this.profileSaves.has(id) || this.unhealthy.has(id) || this.moving.has(id) || this.exporting.has(id);
   }
 
   /**
@@ -659,7 +665,7 @@ export class BrowserManager {
     }
   }
 
-  create(input: {
+  async create(input: {
     principal: Principal;
     via: "dashboard" | "control_api" | "mcp";
     name?: string;
@@ -671,7 +677,7 @@ export class BrowserManager {
     clientVersion?: string;
     /** Where it runs: a worker's id, null for this instance, undefined to let placement decide. */
     workerId?: string | null;
-  }): BrowserRow {
+  }): Promise<BrowserRow> {
     this.assertNoExport();
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     const proxy = parseBrowserProxy(input.proxy);
@@ -690,7 +696,8 @@ export class BrowserManager {
       workerId = input.seedId ? null : this.workers.pick();
     }
     if (input.principal.type === "agent") {
-      const own = this.list({ ownerType: "agent", ownerId: input.principal.id }).length;
+      const own = this.list({ ownerType: "agent", ownerId: input.principal.id }).length +
+        [...this.creating.values()].filter(p => p.ownerType === "agent" && p.ownerId === input.principal.id).length;
       // 0 is no per-agent cap.
       if (input.principal.maxBrowsers > 0 && own >= input.principal.maxBrowsers) {
         throw Err.fleetFull(`agent ${input.principal.name} is at max browsers (${input.principal.maxBrowsers})`);
@@ -703,77 +710,103 @@ export class BrowserManager {
       if (input.principal.type === "agent") requireScope(input.principal, "seed:use");
       seed = getDb().prepare(`SELECT path, metadata_json FROM seeds WHERE id = ?`).get(input.seedId) as typeof seed;
       if (!seed) throw Err.notFound("saved profile not found");
+      if (this.savingSeeds.has(input.seedId)) throw Err.browserUnavailable("saved profile is being updated; retry after saving finishes");
     }
     const metadata = sanitizeMetadata({ ...(seed ? JSON.parse(seed.metadata_json) : {}), ...sanitizeMetadata(input.metadata) });
     const id = randomBytes(8).toString("hex");
     const name = input.name?.trim() || metadata.project || metadata.purpose || `browser-${id.slice(0, 6)}`;
     let slug = slugify(name, `b-${id.slice(0, 8)}`);
-    if (this.bySlug(slug)) slug = `${slug}-${id.slice(0, 4)}`;
+    if (this.bySlug(slug) || [...this.creating.values()].some(p => p.slug === slug)) slug = `${slug}-${id.slice(0, 4)}`;
     if (!isValidName(slug)) slug = `b-${id.slice(0, 8)}`;
     const persistent = input.persistent !== false;
     const profile = profileDir(id);
-    // On a worker the profile is made there, at its first start. Nothing is kept here.
-    if (!workerId) {
-      mkdirSync(profile, { recursive: true });
-      mkdirSync(downloadDir(id), { recursive: true });
-    }
-    if (input.seedId) {
-      // A seed is a whole authenticated profile, so cloning one is a credential transfer and
-      // is gated separately from browser:create. Checked before the copy so a refusal cannot
-      // leave a seeded profile on disk.
-      cpSync(seed!.path, profile, { recursive: true });
-      clearSingletonLocks(profile);
+    let finish!: () => void;
+    this.creating.set(id, { ownerType: input.principal.type, ownerId: input.principal.id, slug,
+      done: new Promise<void>(resolve => { finish = resolve; }) });
+    if (input.seedId) this.cloningSeeds.set(input.seedId, (this.cloningSeeds.get(input.seedId) ?? 0) + 1);
+    let published = false;
+    try {
+      // On a worker the profile is made there, at its first start. Nothing is kept here.
+      if (!workerId) {
+        mkdirSync(profile, { recursive: true });
+        mkdirSync(downloadDir(id), { recursive: true });
+      }
+      if (input.seedId) {
+        // A seed is a whole authenticated profile, so cloning one is a credential transfer and
+        // is gated separately from browser:create. Checked before the copy so a refusal cannot
+        // leave a seeded profile on disk.
+        await this.copyProfile(seed!.path, profile);
+        clearSingletonLocks(profile);
+        audit({
+          actorType: input.principal.type,
+          actorId: input.principal.id,
+          action: "seed.used",
+          targetType: "seed",
+          targetId: input.seedId,
+          detail: { browserId: id },
+        });
+      }
+      getDb()
+        .prepare(
+          `INSERT INTO browsers(
+            id, name, slug, owner_type, owner_id, created_by_type, created_by_principal_id, created_via,
+            created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json, agent_desktop_enabled, extensions_enabled, worker_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          id,
+          name.slice(0, 80),
+          slug,
+          input.principal.type,
+          input.principal.id,
+          input.principal.type,
+          input.principal.id,
+          input.via,
+          nowIso(),
+          persistent ? 1 : 0,
+          profile,
+          input.seedId ?? null,
+          input.clientName ?? null,
+          input.clientVersion ?? null,
+          JSON.stringify(metadata),
+          JSON.stringify(metadata.labels ?? {}),
+          proxy ? JSON.stringify(proxy) : null,
+          // Native desktop access and extensions both need this host's X display.
+          input.principal.type === "agent" && config.agentDesktopDefault ? 1 : 0,
+          config.extensionsDefault ? 1 : 0,
+          workerId,
+        );
+      if (input.seedId) restoreSiteAccess(input.seedId, id);
+      published = true;
       audit({
         actorType: input.principal.type,
         actorId: input.principal.id,
-        action: "seed.used",
-        targetType: "seed",
-        targetId: input.seedId,
-        detail: { browserId: id },
+        action: "browser.created",
+        targetType: "browser",
+        targetId: id,
+        detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault,
+          extensionsEnabled: config.extensionsDefault, worker: workerId },
       });
+      hub.emitEvent("browser.created", { name, slug, owner: input.principal.id }, id);
+      return this.row(id);
+    } catch (error) {
+      if (!published) {
+        getDb().prepare(`DELETE FROM browsers WHERE id = ?`).run(id);
+        if (!workerId) await Promise.all([
+          rm(profile, { recursive: true, force: true }),
+          rm(downloadDir(id), { recursive: true, force: true }),
+        ]).catch(cleanup => log.warn("failed browser creation cleanup", { id, error: (cleanup as Error).message }));
+      }
+      throw error;
+    } finally {
+      if (input.seedId) {
+        const readers = (this.cloningSeeds.get(input.seedId) ?? 1) - 1;
+        if (readers) this.cloningSeeds.set(input.seedId, readers);
+        else this.cloningSeeds.delete(input.seedId);
+      }
+      this.creating.delete(id);
+      finish();
     }
-    getDb()
-      .prepare(
-        `INSERT INTO browsers(
-          id, name, slug, owner_type, owner_id, created_by_type, created_by_principal_id, created_via,
-          created_at, persistent, status, profile_path, seed_id, client_name, client_version, metadata_json, labels_json, proxy_json, agent_desktop_enabled, extensions_enabled, worker_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        id,
-        name.slice(0, 80),
-        slug,
-        input.principal.type,
-        input.principal.id,
-        input.principal.type,
-        input.principal.id,
-        input.via,
-        nowIso(),
-        persistent ? 1 : 0,
-        profile,
-        input.seedId ?? null,
-        input.clientName ?? null,
-        input.clientVersion ?? null,
-        JSON.stringify(metadata),
-        JSON.stringify(metadata.labels ?? {}),
-        proxy ? JSON.stringify(proxy) : null,
-        // Native desktop access and extensions both need this host's X display.
-        input.principal.type === "agent" && config.agentDesktopDefault ? 1 : 0,
-        config.extensionsDefault ? 1 : 0,
-        workerId,
-      );
-    if (input.seedId) restoreSiteAccess(input.seedId, id);
-    audit({
-      actorType: input.principal.type,
-      actorId: input.principal.id,
-      action: "browser.created",
-      targetType: "browser",
-      targetId: id,
-      detail: { via: input.via, persistent, agentDesktopEnabled: input.principal.type === "agent" && config.agentDesktopDefault,
-        extensionsEnabled: config.extensionsDefault, worker: workerId },
-    });
-    hub.emitEvent("browser.created", { name, slug, owner: input.principal.id }, id);
-    return this.row(id);
   }
 
   /**
@@ -856,6 +889,7 @@ export class BrowserManager {
    */
   async moveTo(id: string, workerId: string | null, principal: Principal): Promise<BrowserRow & { restarted: boolean }> {
     this.assertNoExport();
+    if (this.deleting.has(id)) throw Err.browserUnavailable("this browser is being deleted");
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can move a browser");
     const row = this.row(id);
     this.assertManaged(id, "moving");
@@ -946,6 +980,7 @@ export class BrowserManager {
   }
 
   private async ensureRunningInternal(id: string): Promise<ChromeRuntime> {
+    if (this.deleting.has(id)) throw Err.browserUnavailable("this browser is being deleted");
     if (this.exporting.has(id)) throw Err.browserUnavailable("this browser is being exported; retry when export finishes");
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     if (this.moving.has(id)) throw Err.browserUnavailable("this browser is being moved to another host; retry when that finishes");
@@ -1147,9 +1182,13 @@ export class BrowserManager {
 
   async destroy(id: string, principal: Principal): Promise<void> {
     this.assertNoExport();
+    if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
+    if (this.deleting.has(id)) throw Err.browserUnavailable("this browser is being deleted");
     this.deleting.add(id);
-    try { await this.performDestroy(id, principal); }
-    finally { this.deleting.delete(id); }
+    const work = this.performDestroy(id, principal);
+    this.deletions.set(id, work);
+    try { await work; }
+    finally { this.deleting.delete(id); this.deletions.delete(id); }
   }
 
   private async performDestroy(id: string, principal: Principal): Promise<void> {
@@ -1174,8 +1213,7 @@ export class BrowserManager {
     deleteSiteAccessForBrowser(id);
     this.siteDetector.forget(id);
     getDb().prepare(`DELETE FROM browsers WHERE id = ?`).run(id);
-    rmSync(row.profile_path, { recursive: true, force: true });
-    rmSync(downloadDir(id), { recursive: true, force: true });
+    await this.removeBrowserFiles(id, row.profile_path);
     audit({
       actorType: principal.type,
       actorId: principal.id,
@@ -1184,6 +1222,13 @@ export class BrowserManager {
       targetId: id,
     });
     hub.emitEvent("browser.deleted", {}, id);
+  }
+
+  protected async removeBrowserFiles(id: string, profile: string): Promise<void> {
+    await Promise.all([
+      rm(profile, { recursive: true, force: true }),
+      rm(downloadDir(id), { recursive: true, force: true }),
+    ]);
   }
 
   async restart(id: string): Promise<ChromeRuntime> {
@@ -1317,8 +1362,7 @@ export class BrowserManager {
   }
 
   controlState(id: string): ControlState {
-    const row = getDb()
-      .prepare(`SELECT controller_type, controller_id, acquired_at, expires_at, lease_token FROM control_leases WHERE browser_id = ?`)
+    const row = prepare(`SELECT controller_type, controller_id, acquired_at, expires_at, lease_token FROM control_leases WHERE browser_id = ?`)
       .get(id) as
       | { controller_type: string; controller_id: string; acquired_at: string; expires_at: string; lease_token: string }
       | undefined;
@@ -1446,8 +1490,17 @@ export class BrowserManager {
   async refreshPageInfo(id: string): Promise<void> {
     const rt = this.runtimes.get(id);
     if (!rt) return;
+    const pending = this.pageRefreshes.get(rt);
+    if (pending) return pending;
+    const refresh = this.readPageInfo(id, rt).finally(() => this.pageRefreshes.delete(rt));
+    this.pageRefreshes.set(rt, refresh);
+    return refresh;
+  }
+
+  private async readPageInfo(id: string, rt: ChromeRuntime): Promise<void> {
     try {
       const pages = await listPages(rt.cdpUrl);
+      if (this.runtimes.get(id) !== rt) return;
       void this.siteDetector.scan(id, pages, () => this.runtimes.get(id) === rt);
       const page = pages.find((p) => p.type === "page") ?? pages[0];
       if (!page) return;
@@ -1504,7 +1557,7 @@ export class BrowserManager {
       proxy: proxyView(parseBrowserProxy(row.proxy_json ? JSON.parse(row.proxy_json) : null)),
       extensionsEnabled: Boolean(row.extensions_enabled),
       agentDesktopEnabled: Boolean(row.agent_desktop_enabled),
-      savedProfileId: this.linkedProfile(row.id)?.id ?? null,
+      savedProfileId: row.seed_id && prepare(`SELECT id FROM seeds WHERE id = ?`).get(row.seed_id) ? row.seed_id : null,
       savingProfile: this.profileSaves.has(row.id),
       signedInSites: listSiteAccess(row.id),
       url: row.current_url,
@@ -1588,10 +1641,12 @@ export class BrowserManager {
   }
 
   async reapIdle(): Promise<void> {
-    if (this.exportActive || this.reaping) return;
+    if (this.exportActive || this.reaping || this.shuttingDown) return;
     this.reaping = true;
-    try { await this.performReapIdle(); }
-    finally { this.reaping = false; }
+    const work = this.performReapIdle();
+    this.reaperWork = work;
+    try { await work; }
+    finally { this.reaping = false; this.reaperWork = null; }
   }
 
   private async performReapIdle(): Promise<void> {
@@ -1601,7 +1656,7 @@ export class BrowserManager {
       // A start in flight owns a freshly created proxy that is not yet paired with a runtime;
       // stopping underneath it would close the new listener and leave Chrome pointed at a
       // dead port.
-      if (this.starting.has(id) || this.profileSaves.has(id)) continue;
+      if (this.deleting.has(id) || this.starting.has(id) || this.profileSaves.has(id)) continue;
       if (rt.chrome.exitCode !== null) {
         this.runtimes.delete(id);
         this.windowContents.delete(id);
@@ -1643,26 +1698,29 @@ export class BrowserManager {
           : config.idleTtlMs;
       if (ttl > 0 && now - last > ttl) {
         log.info("reaping idle browser", { id });
-        await this.stop(id);
-        if (row.persistent === 0) {
-          // The row is about to go, taking with it the only handle anyone had on its
-          // tunnels; they would otherwise stay bound to an id that no longer resolves.
-          dropTunnelsFor(id);
-          if (row.worker_id) {
-            // A temporary profile on a worker. If the worker cannot be asked now, keep the
-            // record, so the next sweep tries again instead of forgetting the profile exists.
-            try {
-              await this.workers.deleteBrowser(row);
-            } catch (e) {
-              log.warn("could not delete a temporary profile on its worker; will retry", { id, error: (e as Error).message });
-              continue;
+        if (row.persistent === 0) this.deleting.add(id);
+        try {
+          await this.stop(id);
+          if (row.persistent === 0) {
+            // The row is about to go, taking with it the only handle anyone had on its
+            // tunnels; they would otherwise stay bound to an id that no longer resolves.
+            dropTunnelsFor(id);
+            if (row.worker_id) {
+              // A temporary profile on a worker. If the worker cannot be asked now, keep the
+              // record, so the next sweep tries again instead of forgetting the profile exists.
+              try {
+                await this.workers.deleteBrowser(row);
+              } catch (e) {
+                log.warn("could not delete a temporary profile on its worker; will retry", { id, error: (e as Error).message });
+                continue;
+              }
             }
+            await this.removeBrowserFiles(id, row.profile_path);
+            getDb().prepare(`DELETE FROM browser_tunnels WHERE browser_id = ?`).run(id);
+            deleteSiteAccessForBrowser(id);
+            getDb().prepare(`DELETE FROM browsers WHERE id = ?`).run(id);
           }
-          rmSync(row.profile_path, { recursive: true, force: true });
-          getDb().prepare(`DELETE FROM browser_tunnels WHERE browser_id = ?`).run(id);
-          deleteSiteAccessForBrowser(id);
-          getDb().prepare(`DELETE FROM browsers WHERE id = ?`).run(id);
-        }
+        } finally { this.deleting.delete(id); }
       }
     }
   }
@@ -1670,6 +1728,7 @@ export class BrowserManager {
   async snapshotSeed(browserId: string, name: string, principal: Principal,
     options: { seedId?: string; metadata?: unknown } = {}): Promise<SavedProfileResult> {
     this.assertNoExport();
+    if (this.deleting.has(browserId)) throw Err.browserUnavailable("this browser is being deleted");
     this.assertManaged(browserId, "saving a profile");
     this.assertLocal(browserId, "Saving a profile");
     // Publishing makes every login reusable. A loan grants driving, never export.
@@ -1691,6 +1750,7 @@ export class BrowserManager {
       throw Err.browserUnavailable("browser is busy; retry when its current operation finishes");
     }
     if (options.seedId && this.savingSeeds.has(options.seedId)) throw Err.browserUnavailable("saved profile is already being updated");
+    if (options.seedId && this.cloningSeeds.has(options.seedId)) throw Err.browserUnavailable("saved profile is being copied; retry after copying finishes");
     const previous = options.seedId
       ? getDb().prepare(`SELECT path, metadata_json FROM seeds WHERE id = ?`).get(options.seedId) as { path: string; metadata_json: string } | undefined
       : undefined;
@@ -1784,6 +1844,7 @@ export class BrowserManager {
     if (!seed) throw Err.notFound("saved profile not found");
     if (confirmName !== seed.name) throw Err.invalid("confirm the current saved profile name before deleting; reload if it changed");
     if (this.savingSeeds.has(id)) throw Err.browserUnavailable("saved profile is being updated; retry after saving finishes");
+    if (this.cloningSeeds.has(id)) throw Err.browserUnavailable("saved profile is being copied; retry after copying finishes");
     this.assertSnapshotPath(seed.path);
     const db = getDb();
     db.exec("BEGIN IMMEDIATE");
@@ -1825,6 +1886,7 @@ export class BrowserManager {
     if (principal.type !== "admin") throw Err.unauthorized("only an administrator can edit a shared saved profile's recorded sites");
     if (!getDb().prepare(`SELECT 1 FROM seeds WHERE id = ?`).get(id)) throw Err.notFound("saved profile not found");
     if (this.savingSeeds.has(id)) throw Err.browserUnavailable("saved profile is being updated; retry after saving finishes");
+    if (this.cloningSeeds.has(id)) throw Err.browserUnavailable("saved profile is being copied; retry after copying finishes");
   }
 
   private assertSnapshotPath(snapshotPath: string): void {
@@ -1889,7 +1951,12 @@ export class BrowserManager {
     this.shuttingDown = true;
     this.capacity.stopSampling();
     this.workers.stopPolling();
+    await Promise.allSettled([...this.creating.values()].map(p => p.done));
     await Promise.allSettled([...this.profileSaves.values()]);
+    const removing = [...this.deletions.values(), ...(this.reaperWork ? [this.reaperWork] : [])];
+    for (const result of await Promise.allSettled(removing)) {
+      if (result.status === "rejected") log.warn("shutdown profile removal failed", { error: (result.reason as Error).message });
+    }
     const ids = [...this.runtimes.keys()];
     for (const id of ids) {
       try {

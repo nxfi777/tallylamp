@@ -1,0 +1,132 @@
+{
+  "measuredAt": "2026-10-09T02:33:03.130Z",
+  "base": "http://127.0.0.1:4328",
+  "mode": {
+    "name": "normal",
+    "cpu": 1,
+    "latency": 0,
+    "throughput": -1
+  },
+  "runs": [
+    {
+      "cache": "cold",
+      "lcp": 76,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 4.100000023841858,
+      "dcl": 40.40000003576279,
+      "load": 41.60000002384186,
+      "fcp": 76,
+      "transferBytes": 396989,
+      "jsDecodedBytes": 532688,
+      "resources": 21,
+      "domNodes": 1045,
+      "viewport": [
+        768,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "cache": "warm",
+      "lcp": 56,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 4,
+      "dcl": 30,
+      "load": 43.5,
+      "fcp": 56,
+      "transferBytes": 16503,
+      "jsDecodedBytes": 532688,
+      "resources": 20,
+      "domNodes": 1045,
+      "viewport": [
+        768,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "cache": "cold",
+      "lcp": 64,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 3.400000035762787,
+      "dcl": 43.60000002384186,
+      "load": 43.69999998807907,
+      "fcp": 64,
+      "transferBytes": 396989,
+      "jsDecodedBytes": 532688,
+      "resources": 21,
+      "domNodes": 1045,
+      "viewport": [
+        768,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "cache": "warm",
+      "lcp": 48,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 3.5,
+      "dcl": 25.399999976158142,
+      "load": 38.89999997615814,
+      "fcp": 48,
+      "transferBytes": 16503,
+      "jsDecodedBytes": 532688,
+      "resources": 20,
+      "domNodes": 1045,
+      "viewport": [
+        768,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "cache": "cold",
+      "lcp": 44,
+      "cls": 0.000005692070945096928,
+      "tasks": [],
+      "events": [],
+      "ttfb": 3,
+      "dcl": 56.39999997615814,
+      "load": 56.59999996423721,
+      "fcp": 44,
+      "transferBytes": 396989,
+      "jsDecodedBytes": 532688,
+      "resources": 21,
+      "domNodes": 1045,
+      "viewport": [
+        768,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "cache": "warm",
+      "lcp": 40,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 2.199999988079071,
+      "dcl": 25.5,
+      "load": 39.10000002384186,
+      "fcp": 40,
+      "transferBytes": 16503,
+      "jsDecodedBytes": 532688,
+      "resources": 20,
+      "domNodes": 1045,
+      "viewport": [
+        768,
+        900
+      ],
+      "overflow": false
+    }
+  ]
+}

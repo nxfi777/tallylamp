@@ -1,0 +1,10 @@
+{
+  "measuredAt": "2026-10-09T02:55:37.188Z",
+  "note": "T3 collaborative browser; actual local HTTP/SQLite plus live EventSource. MutationObserver detection, not physical-screen presentation. Before one observation, after three separated by idle 1.6s. Shared-machine lab, no CPU/network throttling.",
+  "before": 1515.0999999642372,
+  "after": [
+    12.100000023841858,
+    14.399999976158142,
+    19
+  ]
+}

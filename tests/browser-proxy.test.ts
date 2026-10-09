@@ -100,17 +100,17 @@ describe("per-browser proxy lifecycle", () => {
     const count = ctx.browsers.list().length;
     assert.equal((await api("/browsers", "POST", { proxy: { server: "socks5://proxy:1080" }, start: false })).status, 400);
     assert.equal(ctx.browsers.list().length, count);
-    const row = ctx.browsers.create({ principal: admin, via: "dashboard", proxy });
+    const row = (await ctx.browsers.create({ principal: admin, via: "dashboard", proxy }));
     assert.equal((await api(`/browsers/${row.id}`, "PATCH", { proxy: { server: "http://a:b@proxy" } })).status, 400);
     assert.deepEqual(JSON.parse(ctx.browsers.row(row.id).proxy_json!), proxy);
   });
 
   it("keeps browser routes separate and does not copy them into saved profiles", async () => {
-    const source = ctx.browsers.create({ principal: admin, via: "dashboard", proxy });
-    const direct = ctx.browsers.create({ principal: admin, via: "dashboard" });
+    const source = (await ctx.browsers.create({ principal: admin, via: "dashboard", proxy }));
+    const direct = (await ctx.browsers.create({ principal: admin, via: "dashboard" }));
     assert.equal(direct.proxy_json, null);
     const saved = await ctx.browsers.saveProfile(source.id, admin, { name: "Profile without proxy" });
-    const copy = ctx.browsers.create({ principal: admin, via: "dashboard", seedId: saved.id });
+    const copy = (await ctx.browsers.create({ principal: admin, via: "dashboard", seedId: saved.id }));
     assert.equal(copy.proxy_json, null);
     assert.deepEqual(JSON.parse(ctx.browsers.row(source.id).proxy_json!), proxy);
   });
@@ -118,7 +118,7 @@ describe("per-browser proxy lifecycle", () => {
   it("allows only an owner/admin with control permission to update a stopped browser", async () => {
     const owner = createAgent({ name: "Proxy owner" });
     const other = createAgent({ name: "Unrelated agent" });
-    const row = ctx.browsers.create({ principal: owner.agent, via: "mcp" });
+    const row = (await ctx.browsers.create({ principal: owner.agent, via: "mcp" }));
     assert.equal((await api(`/browsers/${row.id}`, "PATCH", { proxy }, other.token)).status, 403);
     assert.equal((await api(`/browsers/${row.id}`, "PATCH", { proxy }, owner.token)).status, 200);
     assert.throws(() => ctx.browsers.updateProxy(row.id, null, { ...owner.agent, scopes: ["browser:read:own"] }));
@@ -133,10 +133,10 @@ describe("per-browser proxy lifecycle", () => {
     await ctx.browsers.stop(row.id);
   });
 
-  it("does not let a borrower alter the owner's route", () => {
+  it("does not let a borrower alter the owner's route", async () => {
     const owner = createAgent({ name: "Lending proxy owner", scopes: [...DEFAULT_AGENT_SCOPES, "browser:lend"] });
     const borrower = createAgent({ name: "Proxy borrower", scopes: [...DEFAULT_AGENT_SCOPES, "browser:borrow"] });
-    const row = ctx.browsers.create({ principal: owner.agent, via: "mcp", proxy });
+    const row = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", proxy }));
     const request = requestBrowser(ctx.browsers, borrower.agent, { browserId: row.id });
     assert.equal(request.state, "pending");
     answerRequest(ctx.browsers, owner.agent, { requestId: request.state === "pending" ? request.requestId : "", decision: "grant" });

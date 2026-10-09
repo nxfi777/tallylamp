@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:37.933Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/self-hosted-browser-for-ai-agents",
+  "mode": "4x-fast4g",
+  "lcp": 276,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 6.399999976158142,
+  "dcl": 157.29999995231628,
+  "load": 392.19999998807907,
+  "fcp": 276,
+  "transferBytes": 372707,
+  "jsDecodedBytes": 549136,
+  "resources": 22,
+  "domNodes": 232,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

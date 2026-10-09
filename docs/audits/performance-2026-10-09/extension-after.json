@@ -1,0 +1,959 @@
+{
+  "label": "after",
+  "timestamp": "2026-10-09T02:38:28.336Z",
+  "node": "v26.8.1",
+  "samples": 20,
+  "mode": "shipped worker in VM; simulated 5ms Chrome API round trip; not end-to-end browser latency",
+  "results": [
+    {
+      "name": "restore16 shared tabs",
+      "n": 20,
+      "p50Ms": 23.842833999999982,
+      "p95Ms": 25.65395799999999,
+      "rawMs": [
+        23.778875,
+        24.179209,
+        22.686291999999995,
+        23.880832999999996,
+        24.72937499999999,
+        24.296208000000007,
+        24.484708000000012,
+        22.766333000000003,
+        26.36908299999999,
+        24.90145899999999,
+        23.714499999999987,
+        22.99116700000002,
+        22.84824999999995,
+        24.935415999999975,
+        23.660292000000027,
+        23.842833999999982,
+        23.524541,
+        23.62345799999997,
+        25.65395799999999,
+        24.321624999999983
+      ],
+      "operations": [
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 3,
+          "broadcasts": 2,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 16
+        }
+      ]
+    },
+    {
+      "name": "getState",
+      "n": 20,
+      "p50Ms": 0.007457999999928688,
+      "p95Ms": 0.009042000000022199,
+      "rawMs": [
+        0.05725000000001046,
+        0.007041000000072017,
+        0.006999999999948159,
+        0.0061670000000049185,
+        0.007833000000005086,
+        0.008459000000016204,
+        0.00537500000007185,
+        0.004792000000065855,
+        0.008999999999900865,
+        0.007540999999946507,
+        0.005957999999964159,
+        0.007457999999928688,
+        0.009042000000022199,
+        0.008958000000006905,
+        0.007458000000042375,
+        0.007500000000050022,
+        0.008249999999975444,
+        0.007457999999928688,
+        0.005999999999971806,
+        0.005708000000026914
+      ],
+      "operations": [
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 0,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        }
+      ]
+    },
+    {
+      "name": "share tab + unshare",
+      "n": 20,
+      "p50Ms": 23.407749999999965,
+      "p95Ms": 24.350500000000125,
+      "rawMs": [
+        24.742917000000034,
+        21.43454200000008,
+        24.344749999999976,
+        20.211250000000064,
+        24.11454100000003,
+        22.64429199999995,
+        23.407749999999965,
+        24.32325000000003,
+        22.926000000000045,
+        23.32083399999999,
+        23.681459000000018,
+        24.31812500000001,
+        23.800749999999994,
+        24.350500000000125,
+        22.56166600000006,
+        22.319208000000117,
+        23.269792000000052,
+        23.90000000000009,
+        22.919750000000022,
+        23.511083999999983
+      ],
+      "operations": [
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        },
+        {
+          "sessionWrites": 2,
+          "badgeCalls": 4,
+          "broadcasts": 2,
+          "detachCalls": 1,
+          "detachPeak": 1,
+          "getTargets": 1
+        }
+      ]
+    },
+    {
+      "name": "stopAll16 shared tabs",
+      "n": 20,
+      "p50Ms": 5.582000000000107,
+      "p95Ms": 6.380165999999917,
+      "rawMs": [
+        5.582000000000107,
+        5.708374999999933,
+        5.358999999999924,
+        5.219875000000002,
+        5.251042000000098,
+        5.777332999999999,
+        5.389625000000024,
+        6.348375000000033,
+        6.421000000000049,
+        6.357750000000124,
+        5.289874999999938,
+        6.380165999999917,
+        5.130125000000135,
+        6.092916999999943,
+        6.359708000000182,
+        6.364125000000058,
+        5.285708999999997,
+        5.238790999999992,
+        5.533083999999917,
+        6.374249999999847
+      ],
+      "operations": [
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 1,
+          "badgeCalls": 2,
+          "broadcasts": 1,
+          "detachCalls": 16,
+          "detachPeak": 16,
+          "getTargets": 0
+        }
+      ]
+    },
+    {
+      "name": "100 title updates,16 shared tabs",
+      "n": 20,
+      "p50Ms": 0.07750000000032742,
+      "p95Ms": 0.2634169999998903,
+      "rawMs": [
+        0.2634169999998903,
+        0.07216700000003584,
+        0.07450000000017099,
+        0.07529199999999037,
+        0.3970839999999498,
+        0.07512500000007094,
+        0.07154199999990851,
+        0.07958299999995688,
+        0.07937500000002728,
+        0.07908300000008239,
+        0.0850839999998243,
+        0.08220900000014808,
+        0.07750000000032742,
+        0.08112500000015643,
+        0.07779100000016115,
+        0.0762920000001941,
+        0.07249999999976353,
+        0.07749999999987267,
+        0.09383299999990413,
+        0.06141699999989214
+      ],
+      "operations": [
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        },
+        {
+          "sessionWrites": 0,
+          "badgeCalls": 0,
+          "broadcasts": 1,
+          "detachCalls": 0,
+          "detachPeak": 0,
+          "getTargets": 0
+        }
+      ]
+    }
+  ]
+}

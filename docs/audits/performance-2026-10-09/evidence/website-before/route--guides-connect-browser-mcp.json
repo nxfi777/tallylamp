@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:33.709Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/connect-browser-mcp",
+  "mode": "4x-fast4g",
+  "lcp": 272,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 2.100000023841858,
+  "dcl": 157.30000001192093,
+  "load": 391.5,
+  "fcp": 272,
+  "transferBytes": 368113,
+  "jsDecodedBytes": 549136,
+  "resources": 21,
+  "domNodes": 240,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

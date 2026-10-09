@@ -227,7 +227,7 @@ describe("linked browsers", () => {
     const managed = [];
     // TALLYLAMP_MAX_BROWSERS is 4 in the harness. All four still start beside the linked one.
     for (let i = 0; i < 4; i++) {
-      const row = ctx.browsers.create({ principal: admin, via: "dashboard", name: `managed-${i}` });
+      const row = (await ctx.browsers.create({ principal: admin, via: "dashboard", name: `managed-${i}` }));
       await ctx.browsers.ensureRunning(row.id);
       managed.push(row.id);
     }

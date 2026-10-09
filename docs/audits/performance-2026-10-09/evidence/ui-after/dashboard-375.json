@@ -1,0 +1,21 @@
+{
+  "measuredAt": "2026-10-09T02:43:03.482Z",
+  "base": "http://127.0.0.1:60288",
+  "lcp": 268,
+  "cls": 0.07514341595936214,
+  "tasks": [],
+  "events": [],
+  "ttfb": 3.699999988079071,
+  "dcl": 114.60000002384186,
+  "load": 117.40000003576279,
+  "fcp": 148,
+  "transferBytes": 200487,
+  "jsDecodedBytes": 197487,
+  "resources": 10,
+  "domNodes": 460,
+  "viewport": [
+    375,
+    900
+  ],
+  "overflow": false
+}

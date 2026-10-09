@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:26.862Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/browser-agent-login-handoff",
+  "mode": "4x-fast4g",
+  "lcp": 344,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 3.600000023841858,
+  "dcl": 160.70000004768372,
+  "load": 403.9000000357628,
+  "fcp": 344,
+  "transferBytes": 368378,
+  "jsDecodedBytes": 549136,
+  "resources": 21,
+  "domNodes": 247,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

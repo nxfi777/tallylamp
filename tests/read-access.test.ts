@@ -105,17 +105,17 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   /** A managed browser the human operator owns and signed in themselves. */
-  const adminBrowser = (name: string) =>
-    ctx.browsers.create({ principal: adminPrincipal(), via: "dashboard", name }).id;
+  const adminBrowser = async (name: string) =>
+    (await ctx.browsers.create({ principal: adminPrincipal(), via: "dashboard", name })).id;
 
-  const fresh = (name: string) => {
+  const fresh = async (name: string) => {
     reader = createAgent({ name, scopes: [...DEFAULT_AGENT_SCOPES], maxBrowsers: 2 });
-    browserId = adminBrowser(`op-${Math.abs(Date.now() % 99999)}-${name}`);
+    browserId = (await adminBrowser(`op-${Math.abs(Date.now() % 99999)}-${name}`));
     return { reader, browserId };
   };
 
   it("1. files the request on default scopes, and gets nothing until it is answered", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-a");
+    const { reader: agent, browserId: id } = (await fresh("daemon-a"));
     assert.ok(
       !agent.agent.scopes.includes("browser:borrow"),
       "the point of this case is an agent nobody has edited first",
@@ -139,7 +139,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("2. binds read-only once the operator approves, and the reading tools go through", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-b");
+    const { reader: agent, browserId: id } = (await fresh("daemon-b"));
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id, reason: "one page" });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -164,7 +164,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("2b. keeps tools discoverable for other browsers when the default has read access", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-b2");
+    const { reader: agent, browserId: id } = (await fresh("daemon-b2"));
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -196,7 +196,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("3. refuses every mutating tool there is, including ones added after this was written", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-c");
+    const { reader: agent, browserId: id } = (await fresh("daemon-c"));
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -235,7 +235,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("4. takes no control lease and moves nobody's tab", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-d");
+    const { reader: agent, browserId: id } = (await fresh("daemon-d"));
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -287,7 +287,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("5. keeps reading while a person is driving, because looking is not a mutation", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-e");
+    const { reader: agent, browserId: id } = (await fresh("daemon-e"));
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -316,7 +316,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("6. approving a control request at read gives read, and says so", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-f");
+    const { reader: agent, browserId: id } = (await fresh("daemon-f"));
     const out = requestBrowser(ctx.browsers, agent.agent, {
       browserId: id,
       access: "control",
@@ -348,8 +348,8 @@ describe("an agent asking the operator to read one of their browsers", () => {
     assert.match(again.text, /"access":"read"/, again.text.slice(0, 300));
   });
 
-  it("6b. a reader can ask for control, and keeps reading while it waits", () => {
-    const { reader: agent, browserId: id } = fresh("daemon-g");
+  it("6b. a reader can ask for control, and keeps reading while it waits", async () => {
+    const { reader: agent, browserId: id } = (await fresh("daemon-g"));
     const first = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: first.state === "pending" ? first.requestId : "",
@@ -375,7 +375,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("7. an until-revoked grant survives a reaped session; revoking it bites on the next call", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-h");
+    const { reader: agent, browserId: id } = (await fresh("daemon-h"));
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -410,7 +410,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("7b. a timed grant lapses on its own, and the next call fails the same way", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-i");
+    const { reader: agent, browserId: id } = (await fresh("daemon-i"));
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -429,8 +429,8 @@ describe("an agent asking the operator to read one of their browsers", () => {
   });
 
   it("8. is a grant on one browser and nothing else, and never permits delete or stop", async () => {
-    const { reader: agent, browserId: id } = fresh("daemon-j");
-    const other = adminBrowser("operator-other");
+    const { reader: agent, browserId: id } = (await fresh("daemon-j"));
+    const other = (await adminBrowser("operator-other"));
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",
@@ -465,9 +465,9 @@ describe("an agent asking the operator to read one of their browsers", () => {
     assert.equal(ctx.browsers.row(id).id, id);
   });
 
-  it("9. bounds the asking, so an inbox cannot be flooded by a retry loop", () => {
+  it("9. bounds the asking, so an inbox cannot be flooded by a retry loop", async () => {
     const spammer = createAgent({ name: "spammer", scopes: [...DEFAULT_AGENT_SCOPES], maxBrowsers: 2 });
-    const ids = [adminBrowser("flood-1"), adminBrowser("flood-2"), adminBrowser("flood-3"), adminBrowser("flood-4")];
+    const ids = [(await adminBrowser("flood-1")), (await adminBrowser("flood-2")), (await adminBrowser("flood-3")), (await adminBrowser("flood-4"))];
 
     // Re-asking for the same browser is free: it keeps one place in the queue, as promised.
     const a = requestBrowser(ctx.browsers, spammer.agent, { browserId: ids[0]! });
@@ -491,8 +491,8 @@ describe("an agent asking the operator to read one of their browsers", () => {
     assert.equal((refusal as { code?: string }).code, "lend_request_throttled");
   });
 
-  it("never hands an operator's browser over on idleness alone, however long it sits", () => {
-    const { reader: agent, browserId: id } = fresh("daemon-k");
+  it("never hands an operator's browser over on idleness alone, however long it sits", async () => {
+    const { reader: agent, browserId: id } = (await fresh("daemon-k"));
     // Marked lendable and idle for an hour: every condition the auto-grant rule looks at.
     ctx.browsers.setLendable(id, true, adminPrincipal());
     getDb()
@@ -505,9 +505,9 @@ describe("an agent asking the operator to read one of their browsers", () => {
     assert.equal(activeGrant(id, agent.agent.id), null, "and the sweep must not do it either");
   });
 
-  it("is not offered up to an agent that merely asked for any browser", () => {
-    const { reader: agent } = fresh("daemon-l");
-    const mine = adminBrowser("operator-private");
+  it("is not offered up to an agent that merely asked for any browser", async () => {
+    const { reader: agent } = (await fresh("daemon-l"));
+    const mine = (await adminBrowser("operator-private"));
     ctx.browsers.setLendable(mine, true, adminPrincipal());
     const out = requestBrowser(ctx.browsers, agent.agent, { reason: "anything will do" });
     assert.notEqual(
@@ -517,10 +517,10 @@ describe("an agent asking the operator to read one of their browsers", () => {
     );
   });
 
-  it("still refuses an agent-owned browser to an agent without browser:borrow", () => {
+  it("still refuses an agent-owned browser to an agent without browser:borrow", async () => {
     const owner = createAgent({ name: "peer-owner", scopes: [...DEFAULT_AGENT_SCOPES, "browser:lend"], maxBrowsers: 3 });
     const asker = createAgent({ name: "peer-asker", scopes: [...DEFAULT_AGENT_SCOPES], maxBrowsers: 3 });
-    const peer = ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "peer-browser" });
+    const peer = (await ctx.browsers.create({ principal: owner.agent, via: "mcp", name: "peer-browser" }));
     // Asking the operator needs no scope; asking a peer for its live logins still does.
     assert.throws(() => requestBrowser(ctx.browsers, asker.agent, { browserId: peer.id }), /browser:borrow/);
   });
@@ -531,7 +531,7 @@ describe("a grant outlives the service that issued it", () => {
     let ctx = await startTestServer({ keepDataDir: true });
     const dir = ctx.dataDir;
     const agent = createAgent({ name: "survivor", scopes: [...DEFAULT_AGENT_SCOPES], maxBrowsers: 2 });
-    const id = ctx.browsers.create({ principal: adminPrincipal(), via: "dashboard", name: "restarted" }).id;
+    const id = (await ctx.browsers.create({ principal: adminPrincipal(), via: "dashboard", name: "restarted" })).id;
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id, reason: "across a deploy" });
     answerRequest(ctx.browsers, adminPrincipal(), {
       requestId: out.state === "pending" ? out.requestId : "",

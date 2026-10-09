@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:44:15.162Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/guides/browser-memory-and-idle-timeouts",
+  "mode": "4x-fast4g",
+  "lcp": 280,
+  "cls": 0,
+  "tasks": [],
+  "events": [],
+  "ttfb": 2,
+  "dcl": 167.19999998807907,
+  "load": 399.39999997615814,
+  "fcp": 280,
+  "transferBytes": 368902,
+  "jsDecodedBytes": 549286,
+  "resources": 21,
+  "domNodes": 244,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

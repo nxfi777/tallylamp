@@ -104,7 +104,7 @@ function banners() {
     out.push(h("div", { class: "banner warn", role: "alert" },
       h("div", { class: "grow" },
         `Can't reach ${state.host}. Trying again.`,
-        secs !== null && state.shared.length ? ` Your shared tabs will be handed back in ${secs}s if it stays unreachable.` : "",
+        secs !== null && state.shared.length ? [" Your shared tabs will be handed back in ", h("span", { id: "release-countdown" }, `${secs}s`), " if it stays unreachable."] : "",
       ),
       h("button", { class: "link", onclick: () => ask("retry") }, "Try now"),
     ));
@@ -250,8 +250,22 @@ function render() {
   const focused = document.activeElement?.id;
   app.replaceChildren(bar(), state.link === "unpaired" ? unpaired() : state.link === "pairing" ? pairingScreen() : paired());
   if (focused) document.getElementById(focused)?.focus();
-  if (state.link === "offline" && state.releaseAt) tick = setInterval(render, 1000);
+  updateCountdown();
 }
+
+function updateCountdown() {
+  clearInterval(tick);
+  const countdown = document.getElementById("release-countdown");
+  if (!countdown || !state?.releaseAt) return;
+  const update = () => {
+    const secs = Math.max(0, Math.ceil((state.releaseAt - Date.now()) / 1000));
+    countdown.textContent = `${secs}s`;
+    if (!secs) clearInterval(tick);
+  };
+  update();
+  if (document.visibilityState !== "hidden" && state.releaseAt > Date.now()) tick = setInterval(update, 1000);
+}
+document.addEventListener("visibilitychange", updateCountdown);
 
 // ---------------------------------------------------------------- start
 
@@ -302,8 +316,11 @@ if (demo) {
   // The panel outlives the tab it was opened on. Every switch re-asks which tab is in front,
   // and a new tab starts from the safe choices again: site limit on, no "Shared." still showing
   // from the tab before.
+  let followSequence = 0;
   const followTab = async () => {
+    const sequence = ++followSequence;
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (sequence !== followSequence) return;
     if (tab?.id !== activeTab?.id) {
       justShared = false;
       limitToSite = true;
@@ -312,10 +329,14 @@ if (demo) {
     render();
   };
   chrome.tabs.onActivated.addListener(followTab);
-  chrome.tabs.onUpdated.addListener((tabId, change) => {
-    if (tabId === activeTab?.id && (change.url || change.title || change.favIconUrl)) followTab();
+  chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+    if (tabId === activeTab?.id && (change.url || change.title || change.favIconUrl)) {
+      activeTab = tab;
+      render();
+    }
   });
-  const res = await chrome.runtime.sendMessage({ type: "getState" });
-  state = res.state;
-  await followTab();
+  await Promise.all([
+    chrome.runtime.sendMessage({ type: "getState" }).then(res => { state = res.state; render(); }),
+    followTab(),
+  ]);
 }

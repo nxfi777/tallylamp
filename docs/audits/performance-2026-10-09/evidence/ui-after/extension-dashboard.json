@@ -1,0 +1,65 @@
+{
+  "measuredAt": "2026-10-09T02:43:18.323Z",
+  "base": "http://127.0.0.1:60288",
+  "state": "dashboard",
+  "note": "Real panel renderer, documented demo data. Does not exercise extension APIs.",
+  "states": [
+    {
+      "lcp": 172,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 1.800000011920929,
+      "dcl": 156.9000000357628,
+      "load": 206.80000001192093,
+      "fcp": 172,
+      "transferBytes": 1804,
+      "jsDecodedBytes": 0,
+      "resources": 4,
+      "domNodes": 28,
+      "viewport": [
+        375,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "lcp": 176,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 1.5999999642372131,
+      "dcl": 160.69999998807907,
+      "load": 211.19999998807907,
+      "fcp": 176,
+      "transferBytes": 1500,
+      "jsDecodedBytes": 0,
+      "resources": 4,
+      "domNodes": 28,
+      "viewport": [
+        768,
+        900
+      ],
+      "overflow": false
+    },
+    {
+      "lcp": 176,
+      "cls": 0,
+      "tasks": [],
+      "events": [],
+      "ttfb": 2,
+      "dcl": 160.29999995231628,
+      "load": 210.29999995231628,
+      "fcp": 176,
+      "transferBytes": 1500,
+      "jsDecodedBytes": 0,
+      "resources": 4,
+      "domNodes": 28,
+      "viewport": [
+        1440,
+        900
+      ],
+      "overflow": false
+    }
+  ]
+}

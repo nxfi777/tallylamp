@@ -1,9 +1,24 @@
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { config, dbPath } from "./config.js";
 
 let db: DatabaseSync | undefined;
+const statements = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
+
+/** Reuse compiled SQL, never results. A reset/reopened database gets its own bounded cache. */
+export function prepare(sql: string): StatementSync {
+  const database = getDb();
+  let cache = statements.get(database);
+  if (!cache) statements.set(database, cache = new Map());
+  let statement = cache.get(sql);
+  if (!statement) {
+    statement = database.prepare(sql);
+    if (cache.size >= 128) cache.delete(cache.keys().next().value!);
+    cache.set(sql, statement);
+  }
+  return statement;
+}
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;

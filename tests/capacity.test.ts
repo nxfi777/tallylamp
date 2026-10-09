@@ -29,8 +29,8 @@ function usage(threads: number, rendererZygotes = 1): Usage {
 /** What each fake browser "uses", standing in for /proc, which the fake Chrome has none of. */
 let measured = new Map<string, Usage>();
 
-function browser(name: string) {
-  return ctx.browsers.create({ principal: admin, via: "control_api", name, persistent: true });
+async function browser(name: string) {
+  return (await ctx.browsers.create({ principal: admin, via: "control_api", name, persistent: true }));
 }
 
 function idle(id: string) {
@@ -69,13 +69,13 @@ describe("host capacity", () => {
   });
   afterEach(stopAll);
 
-  it("counts each occupied local slot once, including queued starts and reserved resumes", () => {
-    const live = browser("slot-live");
-    const queued = browser("slot-queued");
-    const reserved = browser("slot-reserved");
-    const stopped = browser("slot-stopped");
-    const linked = browser("slot-linked");
-    const worker = browser("slot-worker");
+  it("counts each occupied local slot once, including queued starts and reserved resumes", async () => {
+    const live = (await browser("slot-live"));
+    const queued = (await browser("slot-queued"));
+    const reserved = (await browser("slot-reserved"));
+    const stopped = (await browser("slot-stopped"));
+    const linked = (await browser("slot-linked"));
+    const worker = (await browser("slot-worker"));
     getDb().prepare(`UPDATE browsers SET kind = 'linked' WHERE id = ?`).run(linked.id);
     getDb().prepare(`UPDATE browsers SET worker_id = ? WHERE id = ?`).run("test-worker", worker.id);
 
@@ -97,7 +97,7 @@ describe("host capacity", () => {
   });
 
   it("admits on a browser's measured launch peak, and refuses one it has no room for", async () => {
-    const b = browser("kraken");
+    const b = (await browser("kraken"));
     // 1000 - 700 - 50 headroom leaves 250, short of the 300 assumed for a browser never measured.
     pids(700);
     await assert.rejects(ctx.browsers.ensureRunning(b.id), (e: { code?: string; message?: string }) =>
@@ -110,7 +110,7 @@ describe("host capacity", () => {
   });
 
   it("counts concurrent starts, so they cannot all read the same free room", async () => {
-    const rows = [1, 2, 3, 4].map((n) => browser(`burst-${n}`));
+    const rows = await Promise.all([1, 2, 3, 4].map(n => browser(`burst-${n}`)));
     // 850 of room after headroom fits two browsers of 300, not four.
     pids(100);
     const settled = await Promise.allSettled(rows.map((r) => ctx.browsers.ensureRunning(r.id)));
@@ -120,7 +120,7 @@ describe("host capacity", () => {
 
   it("queues a start until there is room, rather than refusing it outright", async () => {
     process.env.TALLYLAMP_ADMISSION_WAIT_SEC = "10";
-    const b = browser("patient");
+    const b = (await browser("patient"));
     pids(900);
     const events: string[] = [];
     const listen = (ev: TallyEvent) => { if (ev.browserId === b.id) events.push(ev.type); };
@@ -144,9 +144,9 @@ describe("host capacity", () => {
   });
 
   it("holds room for a stopped pinned browser, so another cannot start into it", async () => {
-    const pinned = browser("production");
+    const pinned = (await browser("production"));
     ctx.browsers.recordThreads(pinned.id, 200, 220); // needs 275 to start
-    const test = browser("test");
+    const test = (await browser("test"));
     await json(`${ctx.url}/api/v1/browsers/${pinned.id}/pinned`, {
       method: "PUT", headers: { Cookie: ctx.cookie, "Content-Type": "application/json" }, body: JSON.stringify({ pinned: true }),
     });
@@ -161,7 +161,7 @@ describe("host capacity", () => {
 
   it("lets only the administrator pin a browser", async () => {
     const { agent, token } = createAgent({ name: "Pinner", scopes: DEFAULT_AGENT_SCOPES, maxBrowsers: 2 });
-    const own = ctx.browsers.create({ principal: agent, via: "control_api", name: "mine" });
+    const own = (await ctx.browsers.create({ principal: agent, via: "control_api", name: "mine" }));
     const r = await json(`${ctx.url}/api/v1/browsers/${own.id}/pinned`, {
       method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ pinned: true }),
     });
@@ -170,14 +170,14 @@ describe("host capacity", () => {
   });
 
   it("stops an idle unpinned browser to start a pinned one, and tells its owner why", async () => {
-    const test = browser("idle test");
+    const test = (await browser("idle test"));
     pids(100);
     await ctx.browsers.ensureRunning(test.id);
     idle(test.id);
     measured.set(test.id, usage(400));
     await ctx.browsers.capacity.sampleNow();
 
-    const pinned = browser("kraken dashboard");
+    const pinned = (await browser("kraken dashboard"));
     ctx.browsers.setPinned(pinned.id, true, admin);
     ctx.browsers.recordThreads(pinned.id, 187, 190);
     // 1000 - 800 - 50 = 150 free, and the pinned browser needs 259. Stopping the idle one's
@@ -203,12 +203,12 @@ describe("host capacity", () => {
     // 29 September, 17:09: the reader's start was already queued, unpinned, when it was
     // pinned, and in 0.9.0 it went on waiting as unpinned until it failed.
     process.env.TALLYLAMP_ADMISSION_WAIT_SEC = "10";
-    const busy = browser("dray-ai-pages");
+    const busy = (await browser("dray-ai-pages"));
     pids(100);
     await ctx.browsers.ensureRunning(busy.id);
     measured.set(busy.id, usage(707));
     await ctx.browsers.capacity.sampleNow();
-    const reader = browser("kraken reader");
+    const reader = (await browser("kraken reader"));
     ctx.browsers.recordThreads(reader.id, 235, 243); // needs 319
     pids(800);
     const drop = (ev: TallyEvent) => { if (ev.type === "browser.stopped" && ev.browserId === busy.id) pids(100); };
@@ -229,7 +229,7 @@ describe("host capacity", () => {
 
   it("forgets a stopped browser's thread counts on reset, so a start it fits is admitted", async () => {
     // A browser measured at 606 is sized at 606 * 1.25 + 25 = 783, and refused the 450 free.
-    const b = browser("oversized");
+    const b = (await browser("oversized"));
     ctx.browsers.recordThreads(b.id, 606, 640);
     pids(500);
     await assert.rejects(ctx.browsers.ensureRunning(b.id), (e: { message?: string }) => /needs about 783/.test(e.message ?? ""));
@@ -246,7 +246,7 @@ describe("host capacity", () => {
 
   it("lets only the administrator reset a browser's thread counts", async () => {
     const { agent, token } = createAgent({ name: "Resetter", scopes: DEFAULT_AGENT_SCOPES, maxBrowsers: 2 });
-    const own = ctx.browsers.create({ principal: agent, via: "control_api", name: "measured" });
+    const own = (await ctx.browsers.create({ principal: agent, via: "control_api", name: "measured" }));
     ctx.browsers.recordThreads(own.id, 606, 640);
     const r = await json(`${ctx.url}/api/v1/browsers/${own.id}/threads/reset`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     assert.ok(r.status === 401 || r.status === 403, `status ${r.status}`);
@@ -254,7 +254,7 @@ describe("host capacity", () => {
   });
 
   it("measures a running browser again from its reset, and its launch on its next start", async () => {
-    const b = browser("remeasured");
+    const b = (await browser("remeasured"));
     pids(100);
     await ctx.browsers.ensureRunning(b.id);
     measured.set(b.id, usage(400));
@@ -274,7 +274,7 @@ describe("host capacity", () => {
 
   it("admits a waiting start on its new size when its thread counts are reset", async () => {
     process.env.TALLYLAMP_ADMISSION_WAIT_SEC = "10";
-    const b = browser("waiting oversized");
+    const b = (await browser("waiting oversized"));
     ctx.browsers.recordThreads(b.id, 606, 640); // needs 783, with 450 free
     pids(500);
     const started = ctx.browsers.ensureRunning(b.id);
@@ -288,7 +288,7 @@ describe("host capacity", () => {
   it("names the reset in a refusal only when a reset would let the browser in", async () => {
     // An agent cannot reset a browser, so the refusal is how it learns to ask somebody who can.
     const hint = /That estimate comes from an earlier start\. If it needs less now, the administrator can reset its thread counts on its page\./;
-    const b = browser("heavy once");
+    const b = (await browser("heavy once"));
     ctx.browsers.recordThreads(b.id, 606, 640); // sized at 783
     const refusal = () => ctx.browsers.ensureRunning(b.id).then(() => assert.fail("the start was admitted"), (e: Error) => e.message);
     pids(500); // 450 of room: 783 does not fit, and the 300 of a browser never measured would
@@ -300,12 +300,12 @@ describe("host capacity", () => {
   });
 
   it("never stops a browser that is in use to start an unpinned one", async () => {
-    const busy = browser("active test");
+    const busy = (await browser("active test"));
     pids(100);
     await ctx.browsers.ensureRunning(busy.id);
     measured.set(busy.id, usage(400));
     await ctx.browsers.capacity.sampleNow();
-    const other = browser("another test");
+    const other = (await browser("another test"));
     pids(800);
     await assert.rejects(ctx.browsers.ensureRunning(other.id), (e: { message?: string }) =>
       /largest running browsers are active test \(400\)/.test(e.message ?? ""));
@@ -313,8 +313,8 @@ describe("host capacity", () => {
   });
 
   it("stops an active unpinned browser that is starving a running pinned one", async () => {
-    const pinned = browser("pinned reader");
-    const hog = browser("dray test");
+    const pinned = (await browser("pinned reader"));
+    const hog = (await browser("dray test"));
     pids(100);
     ctx.browsers.setPinned(pinned.id, true, admin);
     await ctx.browsers.ensureRunning(pinned.id);
@@ -341,8 +341,8 @@ describe("host capacity", () => {
   it("keeps a pinned browser through the idle reaper", async () => {
     process.env.TALLYLAMP_IDLE_TTL_SEC = "1";
     try {
-      const pinned = browser("keep me");
-      const plain = browser("reap me");
+      const pinned = (await browser("keep me"));
+      const plain = (await browser("reap me"));
       pids(100);
       ctx.browsers.setPinned(pinned.id, true, admin);
       await ctx.browsers.ensureRunning(pinned.id);
@@ -359,7 +359,7 @@ describe("host capacity", () => {
 
   it("restarts a browser that lost its renderer zygote, and stops restarting it after the budget", async () => {
     process.env.TALLYLAMP_UNHEALTHY_RESTARTS = "1";
-    const b = browser("zygote");
+    const b = (await browser("zygote"));
     pids(100);
     await ctx.browsers.ensureRunning(b.id);
     const first = ctx.browsers.runtime(b.id);
@@ -390,7 +390,7 @@ describe("host capacity", () => {
 
   it("treats a streak of net::ERR_ABORTED across hosts as broken, and one site's as the site's", async () => {
     process.env.TALLYLAMP_UNHEALTHY_RESTARTS = "3";
-    const b = browser("aborts");
+    const b = (await browser("aborts"));
     pids(100);
     await ctx.browsers.ensureRunning(b.id);
     const first = ctx.browsers.runtime(b.id);
@@ -420,7 +420,7 @@ describe("host capacity", () => {
   });
 
   it("tells the dashboard and every running browser's agent when the kernel refuses processes", async () => {
-    const b = browser("witness");
+    const b = (await browser("witness"));
     pids(100, 0);
     await ctx.browsers.capacity.sampleNow(); // baseline refusal count
     await ctx.browsers.ensureRunning(b.id);
@@ -444,7 +444,7 @@ describe("host capacity", () => {
 
   it("delivers a note about the browser on the agent's next tool call, once", async () => {
     const { agent, token } = createAgent({ name: "Noted", scopes: DEFAULT_AGENT_SCOPES, maxBrowsers: 2 });
-    const own = ctx.browsers.create({ principal: agent, via: "mcp", name: "noted" });
+    const own = (await ctx.browsers.create({ principal: agent, via: "mcp", name: "noted" }));
     pids(100);
     const post = (method: string, params: unknown, extra: Record<string, string> = {}) =>
       json(`${ctx.url}/mcp`, {

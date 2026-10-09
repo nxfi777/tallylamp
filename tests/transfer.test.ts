@@ -29,9 +29,9 @@ describe("portable instance transfer", () => {
     getDb().exec("INSERT INTO meta(key, value) VALUES ('schema_version', '7')");
     temp = mkdtempSync(path.join(os.tmpdir(), "tallylamp-transfer-"));
     archive = path.join(temp, "export.tar.gz");
-    const local = ctx.browsers.create({ principal: admin, via: "control_api", name: "Laptop", workerId: null,
-      metadata: { project: "personal", purpose: "Saved sessions" } });
-    const cloud = ctx.browsers.create({ principal: admin, via: "control_api", name: "Kraken", workerId: null });
+    const local = (await ctx.browsers.create({ principal: admin, via: "control_api", name: "Laptop", workerId: null,
+      metadata: { project: "personal", purpose: "Saved sessions" } }));
+    const cloud = (await ctx.browsers.create({ principal: admin, via: "control_api", name: "Kraken", workerId: null }));
     browserId = local.id;
     cloudId = cloud.id;
     mkdirSync(path.join(local.profile_path, "Default"), { recursive: true });
@@ -187,7 +187,7 @@ describe("portable instance transfer", () => {
       join: ctx.browsers.workers.createJoinToken(admin).token, selfUrl: `http://127.0.0.1:${port}`, name: "remote" });
     try {
       await ctx.browsers.workers.poll();
-      const browser = ctx.browsers.create({ principal: admin, via: "control_api", name: "Worker browser", workerId: worker.identity.workerId });
+      const browser = (await ctx.browsers.create({ principal: admin, via: "control_api", name: "Worker browser", workerId: worker.identity.workerId }));
       await ctx.browsers.ensureRunning(browser.id);
       const profile = path.join(workerDir, "profiles", browser.id);
       const downloads = path.join(workerDir, "downloads", browser.id);

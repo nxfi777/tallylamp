@@ -425,7 +425,8 @@ describe("profile site inventory", () => {
       },
       openModal: (_title: string, _build: unknown, close: () => void) => { onClose = close; return { close() {}, box: {} }; },
       refresh: async () => { refreshed += 1; return true; },
-      render: async () => {},
+      // render owns one refresh; a separate refresh before it would double the request.
+      render: async () => { refreshed += 1; },
     };
     runInNewContext(`${code}\neditSeedSites(seed)`, sandbox);
 

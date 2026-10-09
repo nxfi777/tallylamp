@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { getDb, nowIso } from "./db.js";
+import { getDb, nowIso, prepare } from "./db.js";
 import { Err } from "./errors.js";
 import type { Principal } from "./auth.js";
 import { audit } from "./audit.js";
@@ -79,8 +79,7 @@ function cleanState(input: unknown): SiteAccessState {
 }
 
 export function listSiteAccess(browserId: string): SiteAccessView[] {
-  const rows = getDb()
-    .prepare(`SELECT * FROM browser_site_access WHERE browser_id = ? ORDER BY name COLLATE NOCASE, origin`)
+  const rows = prepare(`SELECT * FROM browser_site_access WHERE browser_id = ? ORDER BY name COLLATE NOCASE, origin`)
     .all(browserId) as SiteAccessRow[];
   return rows.map(view);
 }

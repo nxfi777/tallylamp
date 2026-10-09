@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-10-09T02:33:41.214Z",
+  "base": "http://127.0.0.1:4328",
+  "route": "/performance-missing-route",
+  "mode": "4x-fast4g",
+  "lcp": 176,
+  "cls": 7.562080037937243e-7,
+  "tasks": [],
+  "events": [],
+  "ttfb": 6.400000035762787,
+  "dcl": 159,
+  "load": 318,
+  "fcp": 176,
+  "transferBytes": 346016,
+  "jsDecodedBytes": 532688,
+  "resources": 17,
+  "domNodes": 72,
+  "viewport": [
+    1440,
+    900
+  ],
+  "overflow": false
+}

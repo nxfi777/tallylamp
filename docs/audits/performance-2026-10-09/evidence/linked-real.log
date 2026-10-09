@@ -1,0 +1,40 @@
+PASS  extension loads unpacked in real Chrome  — lekgfedikakchmjoflghboehhpnfcfbe
+PASS  reconnecting panel at 375px pauses the control claim without overflow  — Tallylamp Link Connecting M Inbox (3) · Example Mail mail.example.com only Reconnecting. Your agent can use this tab again once the connection returns. Stop sharing this tab Chrome on macOS · tallylamp.example.com Discon
+PASS  reconnecting panel at 768px pauses the control claim without overflow  — Tallylamp Link Connecting M Inbox (3) · Example Mail mail.example.com only Reconnecting. Your agent can use this tab again once the connection returns. Stop sharing this tab Chrome on macOS · tallylamp.example.com Discon
+PASS  reconnecting panel at 1440px pauses the control claim without overflow  — Tallylamp Link Connecting M Inbox (3) · Example Mail mail.example.com only Reconnecting. Your agent can use this tab again once the connection returns. Stop sharing this tab Chrome on macOS · tallylamp.example.com Discon
+PASS  popup -> worker: pairing started, code shown  — "7SBR-E44D"
+PASS  dashboard approves the code  — 201
+PASS  extension collects its token and connects  — online
+PASS  sharing an extension page is refused with a human sentence  — Chrome doesn't let extensions control this page. Open a normal website to share it.
+PASS  sharing the Tallylamp dashboard itself is refused  — This is your Tallylamp dashboard, where you approve what agents ask for. An agent here could approve its own requests, so it can't be shared.
+PASS  chrome.debugger attaches and the tab is shared  — [{"tabId":963292574,"url":"http://127.0.0.1:63929/","title":"Linked e2e page","sites":["127.0.0.1"],"byAgent":false}]
+PASS  a dropped link pauses access but retains all three shared tabs  — offline, 3 tabs
+PASS  reconnect restores all three tabs on both sides without resharing  — online, 3 local / 3 server tabs
+PASS  agent sees the linked browser, online, with its shared tab  — {"id":"4fa1ac804988daa0","deviceName":"Chrome on macOS","online":true,"sharedTabs":[{"url":"http://127.0.0.1:63929/","title":"Linked e2e page"}],"connectedAt":"2026-10-09T02:50:41.148Z","lastSeenAt":"2026-10-09T02:50:41.
+PASS  tallylamp_use_browser binds (real Puppeteer connect through the shim)  — {"browserId":"cb4a62a0d95d4577","bound":true,"access":"control"}
+PASS  list_pages shows the real tab  — ## Pages 1: Linked e2e page (http://127.0.0.1:63929/) [selected]
+PASS  take_snapshot reads the real accessibility tree  — ## Latest page snapshot uid=1_0 RootWebArea "Linked e2e page" url="http://127.0.0.1:63929/" uid=1_1 heading "Hello from a real tab" level="1" uid=1_2 button "Press me" uid=1_3 button "Choose file" value="No file ch
+PASS  click lands on the real button  — Successfully clicked on the element
+PASS  evaluate_script sees the click's effect  — Script ran on page and returned: ```json "clicked" ```
+PASS  take_screenshot returns an image  — Took a screenshot of the current page's viewport. [image]
+PASS  navigate_page within the shared site works  — Successfully navigated to http://127.0.0.1:63929/two. ## Pages 1: Second page (http://127.0.0.1:63929/two) [selected]
+PASS  navigating off the shared site is refused by the extension  — Unable to navigate in the selected page: Protocol error (Page.navigate): Page.navigate is not allowed on a linked browser: this tab was shared for 127.0.0.1 only, and example.com is a different site. Ask the person at th
+PASS  new_page opens an agent tab in the person's browser  — ## Pages 1: Second page (http://127.0.0.1:63929/two) 2: Second page (http://127.0.0.1:63929/two) [selected]
+PASS  the agent's tab is tracked as opened by agent  — [["http://127.0.0.1:63929/two",false],["http://127.0.0.1:63929/two",true]]
+PASS  navigate_page to the linked server's dashboard is refused  — Unable to navigate in the selected page: Protocol error (Page.navigate): Page.navigate is not allowed on a linked browser: that is the Tallylamp dashboard, where the person at this browser approves what agents ask for..
+PASS  a script that walks a shared tab onto the dashboard gets it handed back  — A shared tab opened your Tallylamp dashboard, so it was handed back. Agents can't use the page where their requests are approved. ["http://127.0.0.1:63929/two"]
+PASS  after Stop, the agent has no pages left
+PASS  after Stop, the debugger is detached from every tab
+PASS  a tab holding another extension's frame is refused, naming that extension  — Another extension has put a frame inside 127.0.0.1, and Chrome won't let an extension control a page with a different extension's frame in it. Stop that extension running on 127.0.0.1, reload the page, then share again.
+PASS  a tab whose frame arrives later still shares at first
+PASS  when the frame arrives, sharing stops with a notice that says why  — Sharing stopped. Another extension has put a frame inside 127.0.0.1, and Chrome won't let an extension control a page with a different extension's frame in it. Stop that extension running on 127.0.0.1, reload the page, t
+PASS  with the flag on, Chrome lets a tab holding another extension's frame share  — online
+PASS  the agent still reads the page around the frame  — ## Latest page snapshot uid=1_0 RootWebArea "Linked e2e page" url="http://127.0.0.1:63929/?vault" uid=1_1 heading "Hello from a real tab" level="1" uid=1_2 button "Press me" uid=1_3 button "Choose file" value="No f
+PASS  but not the text inside the other extension's frame  — ## Latest page snapshot uid=1_0 RootWebArea "Linked e2e page" url="http://127.0.0.1:63929/?vault" uid=1_1 heading "Hello from a real tab" level="1" uid=1_2 button "Press me" uid=1_3 button "Choose file" value="No f
+PASS  no debugger session is left inside the other extension's frame
+PASS  the panel says a flag let the frame through, naming the extension  — Another extension has a frame inside 127.0.0.1. Chrome let the tab share anyway, which usually means its "Extensions on chrome-extension:// URLs" flag is on. Your agent has been kept out of that frame. {"id":"cecllodpmmn
+PASS  a frame that arrives while the tab is shared is kept out too
+PASS  and the agent can still read that page  — ## Latest page snapshot uid=2_0 RootWebArea "Linked e2e page" url="http://127.0.0.1:63929/?late" uid=2_1 heading "Hello from a real tab" level="1" uid=2_2 button "Press me" uid=2_3 button "Choose file" value="No fi
+PASS  a cross-site frame that loads after the agent connected is snapshotted, frame included  — 29ms ## Latest page snapshot uid=3_0 RootWebArea "Cross-site" url="http://127.0.0.1:63929/?crosssite" uid=3_1 heading "Hello from a real tab" level="1" uid=3_2 Iframe uid=3_3 RootWebArea "Second page" url="http:/
+
+ALL PASSED
