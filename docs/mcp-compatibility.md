@@ -44,13 +44,18 @@ tools accept a `browserId`; it is optional for driving tools such as
 browser without changing the session's default browser. Calls for different
 browsers can run concurrently. Agents using the same browser in one session
 share its selected tab; a browser ID selects a target and does not grant access.
+The client must also dispatch requests concurrently; a client that queues all
+tool calls still executes them in sequence.
 
 For example, two agents sharing a session can call:
 
 ```json
-{"name":"navigate_page","arguments":{"browserId":"BROWSER_A","url":"https://example.com"}}
-{"name":"take_snapshot","arguments":{"browserId":"BROWSER_B"}}
+{"name":"navigate_page","arguments":{"browserId":"BROWSER_A","pageId":1,"url":"https://example.com"}}
+{"name":"take_snapshot","arguments":{"browserId":"BROWSER_B","pageId":1}}
 ```
+
+Use each browser's page ID from `list_pages`; the example assumes both have
+page `1`.
 
 `tallylamp_create_browser` and `tallylamp_use_browser` still set the session's
 default browser. Calls that omit `browserId` use that shared default. Each agent

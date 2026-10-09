@@ -45,6 +45,22 @@ on the persistent volume.
 The existing Tallylamp Link extension remains compatible. This release changes
 MCP routing on the server; its extension package carries the matching version.
 
-Use the digest produced by the release workflow when pinning the image. See the
-[Railway upgrade instructions](railway.md#releasing-and-upgrading) for backups
-and deployment settings.
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/37870141574)
+passed application, headed Chrome, and running-container checks before
+publishing the tested image. Its anonymous registry access, digest, version
+and source-revision labels were verified, along with the extension zip's
+manifest version. Pin this Linux amd64 artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:e58b007ebb32deb4cdaf5006e02254ae3c751125ae5c8a4a4d3d61c52ba807d4
+```
+
+After deploying that artifact, a live test sent concurrent calls through one
+MCP session to two temporary browsers. Browser B responded in 131 ms while
+browser A's delayed call took 2.62 seconds, and each returned its own page.
+Changing the default did not redirect the explicit call. The temporary
+browsers were removed and their test credential revoked afterward. A client
+that queues calls can still limit concurrency before requests reach the server.
+
+See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
+backups and deployment settings.
