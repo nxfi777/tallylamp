@@ -163,7 +163,7 @@ describe("an agent asking the operator to read one of their browsers", () => {
     }
   });
 
-  it("2b. advertises only the tools a reader can actually call", async () => {
+  it("2b. keeps tools discoverable for other browsers when the default has read access", async () => {
     const { reader: agent, browserId: id } = fresh("daemon-b2");
     const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id });
     answerRequest(ctx.browsers, adminPrincipal(), {
@@ -188,9 +188,9 @@ describe("an agent asking the operator to read one of their browsers", () => {
     const text = typeof listed.body === "string" ? listed.body : JSON.stringify(listed.body);
     const names = [...text.matchAll(/\\?"name\\?":\\?"([a-z_]+)\\?"/g)].map((m) => m[1]!);
     assert.ok(names.length > 5, text.slice(0, 300));
-    for (const tool of MUTATING_TOOLS) {
-      assert.ok(!names.includes(tool), `${tool} must not be offered to a reader that cannot call it`);
-    }
+    assert.ok(names.includes("navigate_page"), "the shared session may also target an owned browser");
+    const refused = await mcp(ctx, agent.token, "navigate_page", { browserId: id, url: "https://example.com" }, session);
+    assert.match(refused.text, /grant_level_insufficient/, "discovery must not grant write access");
     assert.ok(names.includes("tallylamp_select_page"), "but the read-safe way to change tab must be");
     assert.ok(names.includes("tallylamp_request_browser"), "and the way to ask for more");
   });
@@ -211,6 +211,12 @@ describe("an agent asking the operator to read one of their browsers", () => {
     assert.ok(MUTATING_TOOLS.size > 15, "sanity: the set is the real one");
     for (const tool of MUTATING_TOOLS) {
       const res = await mcp(ctx, agent.token, tool, {}, session);
+      if (tool === "tallylamp_close_tunnel") {
+        // This operation is addressed by tunnelId, not the session's default browser.
+        // An absent tunnel ID identifies no browser whose grant can be consulted.
+        assert.match(res.text, /not_found/);
+        continue;
+      }
       assert.ok(
         res.text.includes("grant_level_insufficient") || res.text.includes("unauthorized"),
         `${tool} must be refused under a read grant, got: ${res.text.slice(0, 200)}`,
