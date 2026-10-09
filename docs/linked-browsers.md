@@ -83,6 +83,16 @@ Pairing, the link token and the socket are in `src/linked.ts`. The token (`tl_ln
 
 Set `TALLYLAMP_LINK_TRACE=1` to log every CDP method crossing the shim. When a client hangs while connecting, that log shows which message it is waiting for.
 
+## Worker offloading
+
+When workers are connected, each new MCP control bridge automatically runs on
+an available worker. This offloads its Node process and threads; Chrome stays
+on your machine, and the extension connection stays on the main instance.
+The linked browser is never moved to a worker. Existing bridges are placed
+again when their connections are recreated. With no worker available, the main instance
+runs the bridge if it has room. `TALLYLAMP_PLACEMENT=local` disables offloading.
+See [workers](workers.md#what-works-on-a-worker) for placement and recovery.
+
 ## Working on the extension
 
 Load the `extension` folder of this repo instead of the release zip, and press the reload arrow on its card at `chrome://extensions` after each change. If your checkout is on an external drive, run `make extension` and load the copy it puts in `~/Desktop/tallylamp-link` instead. Chrome drops an unpacked extension whose folder is missing when it starts. Run `make extension` again after pulling changes.

@@ -3,6 +3,7 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { lstat, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -20,10 +21,13 @@ import { forwardHttp, forwardUpgrade } from "./relay.js";
 import { hostLooksPrivate } from "./ssrf.js";
 import { MAX_CHUNK, TunnelMux } from "./tunnels.js";
 import { allowedFfmpeg, allowedXdotool, xFrame, X_ERROR, X_EXIT, X_STDOUT } from "./x11-remote.js";
+import { acceptLinkedBridge, LINKED_BRIDGE_THREADS } from "./linked-bridge.js";
+import { bridgeFilesDir } from "./bridge-files.js";
 
 /**
  * A worker: this image started with TALLYLAMP_JOIN. It runs Chrome for another Tallylamp
- * instance (the main instance) and serves nothing else: no dashboard, no database, no MCP.
+ * instance (the main instance), with no dashboard, database or agent-facing MCP endpoint.
+ * It also runs linked-browser control bridges over authenticated session channels.
  *
  * Why it exists. Railway caps a container at 1,000 processes and threads and will not raise
  * it, but the cap is per container. A worker is another container, so another 1,000, holding
@@ -44,7 +48,7 @@ export type WorkerBrowserState = {
   rendererZygotes: number | null;
   startedAt: string;
 };
-export type WorkerState = { version: string; name: string; pids: PidLimit | null; fullBrowser: boolean; browsers: WorkerBrowserState[] };
+export type WorkerState = { version: string; name: string; pids: PidLimit | null; fullBrowser: boolean; browsers: WorkerBrowserState[]; linkedBridges?: Array<{ id: string; threads: number | null }>; linkedBridgeFilesRoot?: string };
 export type WorkerStartRequest = {
   estimate?: number;
   /** What the start would need had its thread counts been reset: the main instance's default. */
@@ -137,6 +141,13 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   let identity: Identity | null = null;
   const running = new Map<string, Entry>();
   const starting = new Map<string, { need: number; promise: Promise<Entry> }>();
+  const bridges = new Map<string, ReturnType<typeof acceptLinkedBridge>>();
+  let closing = false;
+  // Reserve the part of a starting bridge that has not appeared in the cgroup count yet.
+  const bridgeHeadroom = () => {
+    const procs = bridges.size ? scanProcesses() : null;
+    return [...bridges.values()].reduce((n, b) => n + Math.max(0, LINKED_BRIDGE_THREADS - (procs?.find((p) => p.pid === b.pid)?.threads ?? 0)), 0);
+  };
 
   // The main instance's socket for each running browser's tunnels (tunnels.ts, serveTunnelDials).
   const tunnels = new Map<string, TunnelMux>();
@@ -174,7 +185,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
     const pids = readPidLimit();
     if (pids) {
       const pending = [...starting.values()].reduce((n, s) => n + s.need, 0);
-      const room = pids.max - pids.current - config.processHeadroom - pending;
+      const room = pids.max - pids.current - config.processHeadroom - pending - bridgeHeadroom();
       if (room < need) {
         throw new Refused(429, "fleet_full",
           `Worker ${opts.name} is out of room: ${pids.current} of ${pids.max} processes and threads are in use, and this browser needs about ${need}. ` +
@@ -214,12 +225,14 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   };
 
   const state = (): WorkerState => {
-    const procs = running.size ? scanProcesses() : null;
+    const procs = running.size || bridges.size ? scanProcesses() : null;
     return {
       version: config.release,
       name: opts.name,
       pids: readPidLimit(),
       fullBrowser: config.fullBrowser,
+      linkedBridges: [...bridges].map(([id, b]) => ({ id, threads: procs?.find((p) => p.pid === b.pid)?.threads ?? null })),
+      linkedBridgeFilesRoot: bridgeFilesDir(""),
       browsers: [...running].map(([id, e]) => {
         const alive = e.rt.chrome.exitCode === null;
         // The test fake's "Chrome" is this very process; counting it would count the worker.
@@ -265,6 +278,17 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   });
 
   app.get("/worker/v1/state", (_req, res) => res.json(state()));
+
+  app.get("/worker/v1/linked-bridges/:id/files", route(async (req, res) => {
+    const id = req.params.id!;
+    if (!/^[0-9a-f]{32}$/.test(id) || !bridges.has(id)) throw new Refused(404, "not_found", "control bridge is gone");
+    if (typeof req.query.path !== "string") throw new Refused(400, "invalid_request", "missing artifact path");
+    const directory = await realpath(bridgeFilesDir(id));
+    const file = await realpath(path.resolve(directory, req.query.path));
+    if (!file.startsWith(directory + path.sep) || !(await lstat(file)).isFile()) throw new Refused(403, "forbidden", "artifact is outside this control bridge");
+    res.setHeader("X-Tallylamp-Extension", path.extname(file));
+    res.sendFile(file);
+  }));
 
   app.post("/worker/v1/browsers/:id/start", express.json({ limit: "64kb" }), route(async (req, res) => {
     const e = await start(browserId(req), (req.body ?? {}) as WorkerStartRequest);
@@ -427,7 +451,38 @@ export async function startWorker(opts: WorkerOptions): Promise<{
 
   const server = http.createServer(app);
   const tunnelSockets = new WebSocketServer({ noServer: true, maxPayload: MAX_CHUNK + 64 * 1024 });
+  const bridgeSockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
   server.on("upgrade", (req, socket, head) => {
+    const bridge = /^\/worker\/v1\/linked-bridges\/([0-9a-f]{32})\/mcp$/.exec(req.url ?? "");
+    if (bridge) {
+      const refuse = (status: number, message: string) => {
+        socket.end(`HTTP/1.1 ${status} ${message}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+      };
+      if (!authorized(req.headers.authorization)) return refuse(403, "Forbidden");
+      if (closing) return refuse(503, "Service Unavailable");
+      if (bridges.has(bridge[1]!)) return refuse(409, "Conflict");
+      const pids = readPidLimit();
+      const pending = [...starting.values()].reduce((n, s) => n + s.need, 0);
+      if (pids && pids.max - pids.current - config.processHeadroom - pending - bridgeHeadroom() < LINKED_BRIDGE_THREADS) {
+        return refuse(429, "Too Many Requests");
+      }
+      const directory = bridgeFilesDir(bridge[1]!);
+      try {
+        mkdirSync(directory, { recursive: true, mode: 0o700 });
+      } catch (error) {
+        log.warn("could not prepare linked bridge directory", { error: (error as Error).message });
+        return refuse(503, "Service Unavailable");
+      }
+      bridgeSockets.handleUpgrade(req, socket, head, (ws) => {
+        const child = acceptLinkedBridge(ws, directory);
+        bridges.set(bridge[1]!, child);
+        void child.closed.then(async () => {
+          await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+          if (bridges.get(bridge[1]!) === child) bridges.delete(bridge[1]!);
+        });
+      });
+      return;
+    }
     const t = /^\/worker\/v1\/browsers\/([0-9a-f]{16})\/tunnel$/.exec(req.url ?? "");
     if (t) {
       const id = t[1]!;
@@ -465,6 +520,9 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   const port = typeof addr === "object" && addr ? addr.port : opts.port;
 
   const close = async () => {
+    closing = true;
+    await Promise.all([...bridges.values()].map((b) => b.close()));
+    bridgeSockets.close();
     for (const id of [...running.keys()]) await drop(id).catch((e) => log.warn("worker stop failed", { id, error: (e as Error).message }));
     server.closeAllConnections?.();
     await new Promise<void>((resolve) => server.close(() => resolve()));

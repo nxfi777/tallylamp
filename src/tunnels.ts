@@ -459,6 +459,11 @@ export async function dialTunnel(browserId: string, host: string, port: number):
  * what it dials is dialTunnel, so a worker can reach only what a binding already allows.
  */
 export function serveTunnelDials(ws: WebSocket, browserId: string): void {
+  serveDials(ws, (host, port) => dialTunnel(browserId, host, port));
+}
+
+/** Serve only the destinations admitted by this channel's owner. */
+export function serveDials(ws: WebSocket, dial: (host: string, port: number) => Promise<Duplex | null>): () => void {
   const streams = new Map<number, Duplex>();
   const send = (type: number, id: number, payload?: Buffer) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(encode(type, id, payload), { binary: true });
@@ -474,7 +479,7 @@ export function serveTunnelDials(ws: WebSocket, browserId: string): void {
         send(F_ERROR, id, Buffer.from("not a host:port", "utf8"));
         return;
       }
-      dialTunnel(browserId, m[1]!, Number(m[2])).then((peer) => {
+      dial(m[1]!, Number(m[2])).then((peer) => {
         if (!peer) return send(F_NONE, id);
         if (ws.readyState !== WebSocket.OPEN) return void peer.destroy();
         streams.set(id, peer);
@@ -495,11 +500,13 @@ export function serveTunnelDials(ws: WebSocket, browserId: string): void {
     if (f.type === F_DATA) peer.write(f.payload);
     else if (f.type === F_CLOSE) peer.end();
   });
-  ws.on("close", () => {
+  const close = () => {
     for (const peer of streams.values()) peer.destroy();
     streams.clear();
-  });
+  };
+  ws.on("close", close);
   ws.on("error", () => undefined);
+  return close;
 }
 
 export function tunnelIsConnected(tunnelId: string): boolean {

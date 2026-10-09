@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -10,8 +11,6 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { Request, Response } from "express";
-import { createRequire } from "node:module";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { startSseKeepalive } from "./http-util.js";
@@ -21,7 +20,7 @@ import { audit } from "./audit.js";
 import { requireScope, type Principal } from "./auth.js";
 import { CREATE_BROWSER_TOOL_DESCRIPTION } from "./metadata.js";
 import { BrowserManager, logToolActivity, type BrowserRow } from "./browsers.js";
-import { sanitizedChromeEnv } from "./chrome.js";
+import { bridgeSpawn } from "./mcp-bridge.js";
 import { startCapture, stopCapture, abandonCapture, type CaptureOptions } from "./screencast.js";
 import { assertMaySeeTunnels, createTunnel, listTunnels, revokeTunnel, tunnelIsConnected, tunnelRow } from "./tunnels.js";
 import {
@@ -39,7 +38,8 @@ import {
 } from "./lending.js";
 import { reportSiteAccess } from "./site-access.js";
 import { agentDesktop } from "./agent-desktop.js";
-const require = createRequire(import.meta.url);
+import { readPidLimit } from "./host-limits.js";
+import { LINKED_BRIDGE_THREADS } from "./linked-bridge.js";
 
 /**
  * Exported so the read-level test can iterate the real set rather than a copy of it. A copy
@@ -494,39 +494,6 @@ export const LIFECYCLE_TOOLS: Tool[] = [
   },
 ];
 
-function chromeDevtoolsBin(): string {
-  const pkg = require.resolve("chrome-devtools-mcp/package.json");
-  const dir = path.dirname(pkg);
-  return path.join(dir, "build", "src", "bin", "chrome-devtools-mcp.js");
-}
-
-/**
- * Spawn options for a chrome-devtools-mcp bridge child. bind() and the manifest harvest both
- * go through this so the tool list an unbound session advertises cannot drift from the tools
- * a bound session actually gets: same binary, same flags, so the same registrations.
- */
-function bridgeSpawn(browserUrl: string, stderr: "pipe" | "ignore") {
-  return {
-    command: process.execPath,
-    args: [
-      chromeDevtoolsBin(),
-      `--browser-url=${browserUrl}`,
-      "--no-usage-statistics",
-      "--experimental-structured-content",
-    ],
-    env: {
-      ...sanitizedChromeEnv(),
-      CI: "1",
-      CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS: "1",
-      CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS: "1",
-      // The bridge is a full Node process carrying puppeteer-core: ~153-186 MB left to
-      // its own devices. It needs nowhere near that.
-      NODE_OPTIONS: config.mcpBridgeNodeOptions,
-    },
-    stderr,
-  };
-}
-
 /**
  * The forwarded chrome-devtools tool list, harvested once per process.
  *
@@ -608,7 +575,7 @@ async function harvestManifest(): Promise<Tool[]> {
 type BrowserBinding = {
   browserId: string;
   access: GrantAccess;
-  child?: { client: Client; transport: StdioClientTransport };
+  child?: { client: Client; transport: Transport; workerId?: string; bridgeId?: string };
   ready?: Promise<void>;
   attached: boolean;
   closed: boolean;
@@ -908,7 +875,14 @@ export class McpGateway {
       const bound = context.browserId;
       const { browserId: _routingId, ...forwardedArgs } = args;
       const child = context.child;
-      const result = await child.client.callTool({ name, arguments: forwardedArgs });
+      const result = child.workerId && child.bridgeId
+        ? await this.browsers.workers.callLinkedTool({ client: child.client, workerId: child.workerId, bridgeId: child.bridgeId }, name, forwardedArgs, () => {
+            this.bindLevel(context.principal, this.browsers.row(bound));
+            if (MUTATING_TOOLS.has(name) && this.browsers.isHumanControlled(bound)) throw Err.humanControlling();
+            if (this.guardGrant(context, name)) throw Err.unauthorized("Browser access changed while preparing this tool call.");
+            if (session.closed || binding?.closed) throw Err.browserUnavailable("The browser connection closed; retry with the same browserId.");
+          })
+        : await child.client.callTool({ name, arguments: forwardedArgs });
       if (staged.length && Array.isArray(result.content)) {
         for (const c of result.content as Array<{ type: string; text?: string }>) {
           if (c.type === "text" && typeof c.text === "string") {
@@ -1611,21 +1585,37 @@ export class McpGateway {
       log.info("mcp bound fake browser (no chrome-devtools-mcp child)", { session: session.id, browser: row.id });
       return;
     }
-    const transport = new StdioClientTransport(bridgeSpawn(rt.cdpUrl, "pipe"));
-    const client = new Client({ name: "tallylamp-bridge", version: config.version });
+    const remote = row.kind === "linked" ? await this.browsers.workers.linkedBridge(rt.cdpPort) : null;
+    let candidate: NonNullable<BrowserBinding["child"]>;
+    if (remote) {
+      candidate = remote;
+    } else {
+      this.assertBindingOpen(session, binding);
+      if (row.kind === "linked") {
+        const pids = readPidLimit();
+        if (pids && pids.max - pids.current - config.processHeadroom < LINKED_BRIDGE_THREADS) {
+          throw Err.fleetFull("No host has room for this linked browser's control bridge. Free capacity on the main instance or add an available worker.");
+        }
+      }
+      const transport = new StdioClientTransport(bridgeSpawn(rt.cdpUrl, "pipe"));
+      const client = new Client({ name: "tallylamp-bridge", version: config.version });
+      try { await client.connect(transport); }
+      catch (e) { await client.close().catch(() => undefined); throw e; }
+      candidate = { client, transport };
+    }
     try {
-      await client.connect(transport);
       this.assertBindingOpen(session, binding);
       if (rt.chrome.exitCode !== null) throw Err.browserUnavailable("Browser binding was cancelled; try again.");
-      if (this.bindLevel(session.principal, this.browsers.row(row.id)) !== access) {
-        throw Err.unauthorized("Browser access changed while connecting; bind again.");
-      }
+      if (this.bindLevel(session.principal, this.browsers.row(row.id)) !== access) throw Err.unauthorized("Browser access changed while connecting; bind again.");
+      if (remote?.transport.closed) throw Err.browserUnavailable("Worker disconnected while the control bridge was starting.");
     } catch (error) {
-      await client.close().catch(() => undefined);
+      await candidate.client.close().catch(() => undefined);
+      remote?.release();
       throw error;
     }
-    const child = binding.child = { client, transport };
+    const child = binding.child = candidate;
     child.client.onclose = () => {
+      remote?.release();
       if (binding.child !== child) return;
       binding.child = undefined;
       void this.disposeBinding(session, binding);
@@ -1633,7 +1623,7 @@ export class McpGateway {
     };
     await this.selectWorkingPage(binding, row.id, access);
     this.assertBindingOpen(session, binding);
-    log.info("mcp bound browser", { session: session.id, browser: row.id });
+    log.info("mcp bound browser", { session: session.id, browser: row.id, bridgeWorker: binding.child?.workerId ?? null });
   }
 
   /**
