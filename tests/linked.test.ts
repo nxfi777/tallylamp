@@ -514,7 +514,8 @@ describe("linked browsers", () => {
     assert.equal(cut.status, 200);
     const after = await call("list_pages");
     assert.equal(after.isError, true, after.text);
-    assert.match(after.text, /No browser is bound/);
+    assert.match(after.text, /unauthorized.*not been shared/);
+    assert.equal(ctx.browsers.publicView(ctx.browsers.row(browserId)).mcpAttached, 0);
     ext.close();
     await ext.closed;
   });

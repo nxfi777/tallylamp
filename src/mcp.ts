@@ -23,7 +23,7 @@ import { CREATE_BROWSER_TOOL_DESCRIPTION } from "./metadata.js";
 import { BrowserManager, logToolActivity, type BrowserRow } from "./browsers.js";
 import { sanitizedChromeEnv } from "./chrome.js";
 import { startCapture, stopCapture, abandonCapture, type CaptureOptions } from "./screencast.js";
-import { assertMaySeeTunnels, createTunnel, listTunnels, revokeTunnel, tunnelIsConnected } from "./tunnels.js";
+import { assertMaySeeTunnels, createTunnel, listTunnels, revokeTunnel, tunnelIsConnected, tunnelRow } from "./tunnels.js";
 import {
   requestBrowser,
   answerRequest,
@@ -39,7 +39,6 @@ import {
 } from "./lending.js";
 import { reportSiteAccess } from "./site-access.js";
 import { agentDesktop } from "./agent-desktop.js";
-
 const require = createRequire(import.meta.url);
 
 /**
@@ -106,6 +105,8 @@ const GRANT_NEVER = new Set([
 ]);
 
 const MCP_INSTRUCTIONS = `Tallylamp runs persistent headed Chrome with Chrome DevTools MCP tools, a live viewer, and human takeover. It does not simulate human mouse paths or guarantee that websites will accept automation.
+
+When agents share this connection, pass your browserId on EVERY browser tool call, including page selection, snapshots, actions, and recording start/stop. Explicit browserId calls run independently and do not change the session default. tallylamp_create_browser and tallylamp_use_browser still change that shared default for older clients. Keep the ID returned for your browser; never rely on another agent leaving the default unchanged. After reconnecting, pass browserId again. Browser IDs select a target, not an identity or permission. Agents sharing one browser also share that browser's page-selection state within this connection.
 
 A failed HTTP fetch is not proof that a website is inaccessible. If a fetch returns 401/403, a login page, or a browser challenge, try browser access before reporting a blocker. When saved authentication or human assistance may be needed, call tallylamp_list_browsers and reuse a suitable accessible profile with tallylamp_use_browser, or call tallylamp_create_browser if none fits. Match the project, purpose, and intended account. Open and inspect the page first; sign-in may not be needed. If sign-in, 2FA, or a CAPTCHA requires the user, request human takeover of the named browser and stop automated input until they return control. Then inspect the page before continuing. Do not promise that sign-in will resolve every block, attempt to bypass a challenge, or circumvent access restrictions.
 
@@ -544,6 +545,22 @@ const MANIFEST_TIMEOUT_MS = 15_000;
 let forwardedManifest: Tool[] = [];
 let harvesting: Promise<Tool[]> | null = null;
 
+const BROWSER_ID = {
+  type: "string",
+  minLength: 1,
+  description: "Target browser. Pass this on every call when sharing a connection. Omit to use the session's shared default; an explicit ID does not change it.",
+};
+
+function withBrowserRouting(tool: Tool): Tool {
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: { ...tool.inputSchema.properties, browserId: BROWSER_ID },
+    },
+  };
+}
+
 async function forwardedTools(): Promise<Tool[]> {
   if (forwardedManifest.length) return forwardedManifest;
   if (!harvesting) {
@@ -588,23 +605,35 @@ async function harvestManifest(): Promise<Tool[]> {
   }
 }
 
+type BrowserBinding = {
+  browserId: string;
+  access: GrantAccess;
+  child?: { client: Client; transport: StdioClientTransport };
+  ready?: Promise<void>;
+  attached: boolean;
+  closed: boolean;
+};
+
+type BrowserCall = {
+  principal: Principal;
+  browserId?: string;
+  child?: BrowserBinding["child"];
+  noticesSeen: Map<string, number>;
+};
+
 type Session = {
   id: string;
   principal: Principal;
   lastSeenAt: number;
   transport: StreamableHTTPServerTransport;
   server: Server;
+  /** Legacy default only. Explicit calls never change it. */
   browserId?: string;
-  /**
-   * The level this session bound at. Descriptive only -- every actual refusal is decided
-   * against the grant table on the call itself, because a session that cached its own
-   * permission would outlive a revocation. This is here so the session can say what it is.
-   */
-  access?: GrantAccess;
-  child?: { client: Client; transport: StdioClientTransport };
+  bindings: Map<string, BrowserBinding>;
+  closed: boolean;
   clientInfo?: { name?: string; version?: string };
   /** The last browser notice this session was shown, per browser (BrowserManager.notice). */
-  noticesSeen?: Map<string, number>;
+  noticesSeen: Map<string, number>;
   /**
    * Why the last automatic re-bind failed, so "no browser is bound" can say. Retryable when
    * the browser was only busy (being moved, say): the next call then tries the re-bind again.
@@ -690,28 +719,21 @@ export class McpGateway {
       { name: "tallylamp", version: config.version },
       { capabilities: { tools: { listChanged: true } }, instructions: MCP_INSTRUCTIONS },
     );
-    const session: Session = { id, principal, transport, server, lastSeenAt: Date.now() };
+    const session: Session = {
+      id, principal, transport, server, lastSeenAt: Date.now(),
+      bindings: new Map(), noticesSeen: new Map(), closed: false,
+    };
     this.sessions.set(id, session);
 
     const init = req.body as { params?: { clientInfo?: { name?: string; version?: string } } };
     session.clientInfo = init.params?.clientInfo;
 
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-      const tools = [...LIFECYCLE_TOOLS];
-      // A bound session lists its own bridge, which is authoritative for that browser.
-      // An unbound one still advertises the manifest so the driving tools are discoverable
-      // before binding; calling one unbound returns the "no browser is bound" tool error.
-      if (session.child) {
-        const listed = await session.child.client.listTools();
-        tools.push(...listed.tools);
-      } else {
-        tools.push(...(await forwardedTools()));
-      }
-      // A read session is shown what it can actually call. Advertising navigate_page to an
-      // agent that will be refused it invites a round of calls that all fail; the level is
-      // re-read here rather than taken from the session, for the same reason every other
-      // check re-reads it -- a grant downgraded or revoked mid-session has to show.
-      return { tools: this.readableOnly(session, tools) };
+      // One stable manifest for the connection: a read-only default must not hide tools
+      // another agent can use on its explicitly named, owned browser. Authorize each call.
+      const tools = LIFECYCLE_TOOLS.map((tool) => McpGateway.BOUND_TOOLS.has(tool.name) ? withBrowserRouting(tool) : tool);
+      tools.push(...(await forwardedTools()).map(withBrowserRouting));
+      return { tools };
     });
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -726,21 +748,18 @@ export class McpGateway {
     startSseKeepalive(res);
   }
 
-  /**
-   * Narrow an advertised tool list to what a read grant permits. A no-op for everybody else,
-   * including an owner and the administrator, so the manifest is unchanged for every session
-   * that is not holding a read grant on the browser it is bound to.
-   */
-  private readableOnly(session: Session, tools: Tool[]): Tool[] {
-    const p = session.principal;
-    if (p.type === "admin" || !session.browserId) return tools;
-    const grant = activeGrant(session.browserId, p.id);
-    if (!grant || grantAccess(grant) !== "read") return tools;
-    return tools.filter((t) => !MUTATING_TOOLS.has(t.name) && !GRANT_NEVER.has(t.name));
+  /** null means this identity has used multiple browsers: a new session must choose. */
+  private lastBound = new Map<string, string | null>();
+
+  private rememberBrowser(principal: Principal, browserId: string): void {
+    const key = `${principal.type}:${principal.id}`;
+    const prior = this.lastBound.get(key);
+    this.lastBound.set(key, prior === undefined || prior === browserId ? browserId : null);
   }
 
-  /** The last browser each principal bound, so a dropped session can pick up where it left off. */
-  private lastBound = new Map<string, string>();
+  private static readonly BOUND_TOOLS = new Set([
+    "tallylamp_screencast_start", "tallylamp_screencast_stop", "tallylamp_select_page",
+  ]);
 
   /** Tools that establish or replace a binding, so restoring one first would be wasted work. */
   private static readonly BINDS_ITSELF = new Set([
@@ -769,106 +788,143 @@ export class McpGateway {
   ]);
 
   private async callTool(session: Session, name: string, args: Record<string, unknown>) {
-    // Restore before the guard, not after. A transient failure — a 502 from a proxy, a dropped
-    // stream — costs the client its MCP session, and every call after it used to come back "No
-    // browser is bound" until the agent noticed and re-bound by hand. The binding is
-    // server-side state keyed by the principal, so the server already knows which browser this
-    // was. Ownership is re-checked, so this can only restore a browser the caller could have
-    // bound itself. Doing it here rather than lower down matters: the human-lease guard reads
-    // session.browserId, so a restore that happened after it would let the first call through
-    // a lease it should have been refused by.
-    // UNBOUND_OK as well as BINDS_ITSELF: the lending tools name their target in the arguments,
-    // and restoreBinding() goes through bind() -> ensureRunning(), so without this, asking what
-    // requests are waiting would launch a Chrome to answer it.
-    if (!session.browserId && !McpGateway.BINDS_ITSELF.has(name) && !McpGateway.UNBOUND_OK.has(name)) {
-      await this.restoreBinding(session);
-    }
-    // Then the lease guard, before the namespace routing. Recording is a mutating tool that
-    // happens to be ours, and routing on the prefix first would have let it straight past the
-    // check every other mutating tool has to pass.
-    if (session.browserId && MUTATING_TOOLS.has(name) && this.browsers.isHumanControlled(session.browserId)) {
-      // errorBody, not a bare sentence. AGENTS.md asks for a *retryable* tool error while the
-      // lease is live, and the only way a caller can read that is off the structured shape the
-      // lifecycle tools already return. Err.humanControlling carried the flag from the start
-      // and was never thrown; the message text is unchanged, so string matchers still hold.
-      return { isError: true, content: [{ type: "text", text: JSON.stringify(errorBody(Err.humanControlling())) }] };
-    }
-    // Then the grant, re-read from the table on every single call. Nothing about a borrower's
-    // standing is cached on the session, which is the whole reason a revocation lands on the
-    // next call of a session that is already open and already bound, and the reason a grant
-    // outlives the session it was first used from.
-    const refused = this.guardGrant(session, name, args);
-    if (refused) return refused;
-    if (name.startsWith("tallylamp_")) {
-      const lifecycle = await this.callLifecycle(session, name, args);
-      // The lending tools report on the queue themselves; everything else gets the note, so an
-      // owner sees a request whichever tool it happened to reach for.
-      return McpGateway.UNBOUND_OK.has(name) ? lifecycle : this.withPendingRequests(session, lifecycle);
-    }
-    if (!session.browserId || !session.child) {
-      // A browser that was stopped to make room, or broke and could not be restarted, used to
-      // surface here as a bare "nothing is bound". Say what happened to it instead.
-      const lost = session.lostBinding;
-      session.lostBinding = undefined;
-      // The browser is still this session's, only busy for a moment. Saying "call use_browser"
-      // here sent an agent that called during a move off to re-bind by hand; the next call
-      // does that by itself.
-      if (lost?.retryable) {
-        return this.toolError(
-          Err.browserUnavailable(`Your browser (${lost.browserId}) is not available for a moment: ${lost.error.replace(/\.?$/, ".")} Retry this call; it reconnects to the same browser.`),
-        );
+    try {
+      if (session.closed) throw Err.browserUnavailable("This MCP session has closed; reconnect and pass browserId.");
+      if ("browserId" in args && (typeof args.browserId !== "string" || !args.browserId.trim())) {
+        throw Err.invalid("browserId must be a non-empty string");
       }
-      const why = lost
-        ? [`Your last browser (${lost.browserId}) could not be started again: ${lost.error}`,
-          ...this.browsers.noticesSince(lost.browserId, session.noticesSeen?.get(lost.browserId) ?? 0).map((n) => n.text)]
-        : [];
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: [...why, "No browser is bound to this session. Call tallylamp_create_browser or tallylamp_use_browser first."].join("\n"),
-          },
-        ],
-      };
-    }
-    // The bridge hands Chrome a path on this host. Chrome on a worker reads its own disk, so
-    // the files go there first, to a path that is the same on both (workers.ts, stageUploads).
-    // The bridge's answer names the path it was given, so each copy's path is put back to the
-    // one the agent asked for: that is the file it knows about.
-    let staged: Array<[copy: string, asked: string]> = [];
-    if (name === "upload_file") {
-      const row = this.browsers.row(session.browserId);
-      if (row.worker_id) {
-        try {
-          const asked = args.filePaths;
-          const copies = await this.browsers.workers.stageUploads(row, asked);
-          if (Array.isArray(asked) && Array.isArray(copies)) {
-            staged = copies.map((c, i): [string, string] => [String(c), String(asked[i])]).filter(([c, a]) => c !== a);
+      const forwarded = !name.startsWith("tallylamp_");
+      const scoped = forwarded || McpGateway.BOUND_TOOLS.has(name) || (
+        name !== "tallylamp_request_browser" &&
+        LIFECYCLE_TOOLS.some((tool) => tool.name === name && tool.inputSchema.properties?.browserId)
+      );
+      // Resolve once, before any await. A concurrent use_browser cannot redirect this call.
+      const defaultBrowser = session.browserId;
+      let target = scoped ? (args.browserId as string | undefined) ?? defaultBrowser : undefined;
+      if (name === "tallylamp_close_tunnel") target = tunnelRow(String(args.tunnelId ?? "")).browser_id;
+      if (scoped && !target && !McpGateway.BINDS_ITSELF.has(name) && !McpGateway.UNBOUND_OK.has(name)) {
+        await this.restoreBinding(session);
+        target = session.browserId;
+      }
+      const context: BrowserCall = { principal: session.principal, browserId: target, noticesSeen: session.noticesSeen };
+      if (target && MUTATING_TOOLS.has(name) && this.browsers.isHumanControlled(target)) {
+        return this.toolError(Err.humanControlling());
+      }
+      const initiallyRefused = this.guardGrant(context, name, !forwarded);
+      if (initiallyRefused) return initiallyRefused;
+      let binding: BrowserBinding | undefined;
+      if (target && (forwarded || McpGateway.BOUND_TOOLS.has(name))) {
+        const row = this.browsers.row(target);
+        const access = this.bindLevel(context.principal, row);
+        if (forwarded || name === "tallylamp_select_page") {
+          try {
+            binding = await this.getBinding(session, row, access);
+          } catch (error) {
+            if (error instanceof AppError && error.retryable && this.browsers.busy(target)) {
+              return this.toolError(Err.browserUnavailable(`Your browser (${target}) is not available for a moment: ${error.message.replace(/\.?$/, ".")} Retry this call; it reconnects to the same browser.`));
+            }
+            throw error;
           }
-          args = { ...args, filePaths: copies };
-        } catch (e) {
-          return this.toolError(e);
+          context.child = binding.child;
+          // Grants may be revoked, and human control may start, while a bridge connects.
+          this.bindLevel(context.principal, this.browsers.row(target));
+          const denied = this.guardGrant(context, name, false);
+          if (denied) return denied;
+          if (MUTATING_TOOLS.has(name) && this.browsers.isHumanControlled(target)) return this.toolError(Err.humanControlling());
         }
       }
-    }
-    this.browsers.touch(session.browserId);
-    logToolActivity(session.browserId, name);
-    const bound = session.browserId;
-    const result = await session.child.client.callTool({ name, arguments: args });
-    if (staged.length && Array.isArray(result.content)) {
-      for (const c of result.content as Array<{ type: string; text?: string }>) {
-        if (c.type === "text" && typeof c.text === "string") {
-          c.text = staged.reduce((t, [copy, asked]) => t.split(copy).join(asked), c.text);
+      if (!forwarded) {
+        const lifecycle = await this.callLifecycle(session, name, args, context);
+        // A fleet listing need not start a bridge to deliver notices for this session's
+        // default browser. Preserve the next-call notification behavior without routing
+        // this unscoped tool through that browser or leaking notes after access revocation.
+        if (name === "tallylamp_list_browsers" && defaultBrowser) {
+          try {
+            this.bindLevel(context.principal, this.browsers.row(defaultBrowser));
+            return this.withPendingRequests({ ...context, browserId: defaultBrowser }, lifecycle);
+          } catch { /* the former default is no longer accessible */ }
+        }
+        return McpGateway.UNBOUND_OK.has(name) ? lifecycle : this.withPendingRequests(context, lifecycle);
+      }
+      if (!context.browserId || !context.child) {
+        // A browser that was stopped to make room, or broke and could not be restarted, used to
+        // surface here as a bare "nothing is bound". Say what happened to it instead.
+        const lost = session.lostBinding;
+        session.lostBinding = undefined;
+        // The browser is still this session's, only busy for a moment. Saying "call use_browser"
+        // here sent an agent that called during a move off to re-bind by hand; the next call
+        // does that by itself.
+        if (lost?.retryable) {
+          return this.toolError(
+            Err.browserUnavailable(`Your browser (${lost.browserId}) is not available for a moment: ${lost.error.replace(/\.?$/, ".")} Retry this call; it reconnects to the same browser.`),
+          );
+        }
+        const why = lost
+          ? [`Your last browser (${lost.browserId}) could not be started again: ${lost.error}`,
+            ...this.browsers.noticesSince(lost.browserId, session.noticesSeen?.get(lost.browserId) ?? 0).map((n) => n.text)]
+          : [];
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: [...why, this.lastBound.get(`${session.principal.type}:${session.principal.id}`) === null
+                ? "No browser is bound to this session. Multiple browsers have been used with these credentials; pass browserId explicitly or call tallylamp_use_browser."
+                : "No browser is bound to this session. Pass browserId, or call tallylamp_create_browser or tallylamp_use_browser first."].join("\n"),
+            },
+          ],
+        };
+      }
+      // The bridge hands Chrome a path on this host. Chrome on a worker reads its own disk, so
+      // the files go there first, to a path that is the same on both (workers.ts, stageUploads).
+      // The bridge's answer names the path it was given, so each copy's path is put back to the
+      // one the agent asked for: that is the file it knows about.
+      let staged: Array<[copy: string, asked: string]> = [];
+      if (name === "upload_file") {
+        const row = this.browsers.row(context.browserId);
+        if (row.worker_id) {
+          try {
+            const asked = args.filePaths;
+            const copies = await this.browsers.workers.stageUploads(row, asked);
+            if (Array.isArray(asked) && Array.isArray(copies)) {
+              staged = copies.map((c, i): [string, string] => [String(c), String(asked[i])]).filter(([c, a]) => c !== a);
+            }
+            args = { ...args, filePaths: copies };
+          } catch (e) {
+            return this.toolError(e);
+          }
         }
       }
+      // Upload staging and bridge startup can yield. Re-check the same target before dispatch.
+      this.bindLevel(context.principal, this.browsers.row(context.browserId));
+      if (MUTATING_TOOLS.has(name) && this.browsers.isHumanControlled(context.browserId)) {
+        return this.toolError(Err.humanControlling());
+      }
+      const refused = this.guardGrant(context, name);
+      if (refused) return refused;
+      if (session.closed || binding?.closed) throw Err.browserUnavailable("The browser connection closed; retry with the same browserId.");
+      this.browsers.touch(context.browserId);
+      logToolActivity(context.browserId, name);
+      const bound = context.browserId;
+      const { browserId: _routingId, ...forwardedArgs } = args;
+      const child = context.child;
+      const result = await child.client.callTool({ name, arguments: forwardedArgs });
+      if (staged.length && Array.isArray(result.content)) {
+        for (const c of result.content as Array<{ type: string; text?: string }>) {
+          if (c.type === "text" && typeof c.text === "string") {
+            c.text = staged.reduce((t, [copy, asked]) => t.split(copy).join(asked), c.text);
+          }
+        }
+      }
+      void this.browsers.refreshPageInfo(bound);
+      if (name === "navigate_page" || name === "new_page") {
+        const { outcome, url } = navigationOutcome(result);
+        this.browsers.noteNavigation(bound, outcome, url ?? (typeof args.url === "string" ? args.url : undefined));
+      }
+      return this.withPendingRequests(context, result);
+    } catch (error) {
+      return this.toolError(error);
     }
-    void this.browsers.refreshPageInfo(bound);
-    if (name === "navigate_page" || name === "new_page") {
-      const { outcome, url } = navigationOutcome(result);
-      this.browsers.noteNavigation(bound, outcome, url ?? (typeof args.url === "string" ? args.url : undefined));
-    }
-    return this.withPendingRequests(session, result);
   }
 
   /**
@@ -883,10 +939,10 @@ export class McpGateway {
    * bound browser. Without that, an agent holding a read grant on A and owning B would be
    * refused an ordinary call on its own B for as long as A stayed bound.
    */
-  private guardGrant(session: Session, name: string, args: Record<string, unknown>) {
+  private guardGrant(session: BrowserCall, name: string, record = true) {
     const p = session.principal;
     if (p.type === "admin") return null;
-    const target = typeof args.browserId === "string" && args.browserId ? args.browserId : session.browserId;
+    const target = session.browserId;
     if (!target) return null;
 
     let row: BrowserRow;
@@ -934,7 +990,7 @@ export class McpGateway {
     }
     // H: every call made under a grant is recorded against the real agent, never the owner
     // whose browser it is, and against the grant that permitted it.
-    audit({
+    if (record) audit({
       actorType: "agent",
       actorId: p.id,
       action: "browser.grant.tool",
@@ -959,7 +1015,7 @@ export class McpGateway {
    * lookup per call is what turns "answered within a tool call" into the normal case and leaves
    * the idle auto-grant as the backstop rather than the mechanism.
    */
-  private withPendingRequests<T>(session: Session, result: T): T {
+  private withPendingRequests<T>(session: BrowserCall, result: T): T {
     return this.withNotices(session, this.withLendingInbox(session, result));
   }
 
@@ -969,7 +1025,7 @@ export class McpGateway {
    * session. It rides on the result for the same reason the lending inbox does: a tool call is
    * the only moment an agent is listening.
    */
-  private withNotices<T>(session: Session, result: T): T {
+  private withNotices<T>(session: BrowserCall, result: T): T {
     const id = session.browserId;
     if (!id) return result;
     const seen = (session.noticesSeen ??= new Map());
@@ -984,7 +1040,7 @@ export class McpGateway {
     } as T;
   }
 
-  private withLendingInbox<T>(session: Session, result: T): T {
+  private withLendingInbox<T>(session: BrowserCall, result: T): T {
     const id = session.browserId;
     if (!id) return result;
     let waiting: RequestRow[];
@@ -1023,7 +1079,7 @@ export class McpGateway {
    * target independently at its own resolution, so this cannot disturb a human watching the
    * same browser.
    */
-  private async callScreencast(session: Session, name: string, args: Record<string, unknown>) {
+  private async callScreencast(session: BrowserCall, name: string, args: Record<string, unknown>) {
     if (!session.browserId) {
       return {
         isError: true,
@@ -1034,6 +1090,10 @@ export class McpGateway {
     try {
       if (name === "tallylamp_screencast_start") {
         const rt = await this.browsers.ensureRunning(id);
+        this.bindLevel(session.principal, this.browsers.row(id));
+        const refused = this.guardGrant(session, name, false);
+        if (refused) return refused;
+        if (this.browsers.isHumanControlled(id)) throw Err.humanControlling();
         const started = await startCapture(id, rt.cdpUrl, args as CaptureOptions);
         logToolActivity(id, "screencast_start");
         this.browsers.touch(id);
@@ -1100,11 +1160,11 @@ export class McpGateway {
     }
   }
 
-  private async callLifecycle(session: Session, name: string, args: Record<string, unknown>) {
+  private async callLifecycle(session: Session, name: string, args: Record<string, unknown>, context: BrowserCall) {
     const p = session.principal;
     try {
       if (name === "tallylamp_desktop_screenshot" || name === "tallylamp_desktop_action") {
-        const id = String(args.browserId ?? session.browserId ?? "");
+        const id = String(args.browserId ?? context.browserId ?? "");
         if (!id) throw Err.invalid("pass browserId or bind a browser first");
         // The target can differ from the binding: authorization and the human guard live
         // inside agentDesktop and are checked again throughout the native operation.
@@ -1128,6 +1188,7 @@ export class McpGateway {
           clientVersion: session.clientInfo?.version,
         });
         await this.bind(session, row);
+        context.browserId = row.id;
         return {
           content: [
             {
@@ -1169,7 +1230,7 @@ export class McpGateway {
         return { content: [{ type: "text", text: JSON.stringify(this.browsers.publicView(row)) }] };
       }
       if (name === "tallylamp_report_site_access") {
-        const browserId = String(args.browserId ?? session.browserId ?? "");
+        const browserId = String(args.browserId ?? context.browserId ?? "");
         if (!browserId) throw Err.invalid("pass browserId, or bind a browser first with tallylamp_use_browser");
         const row = this.browsers.row(browserId);
         this.browsers.assertAccess(p, row, "control");
@@ -1205,12 +1266,12 @@ export class McpGateway {
         return { content: [{ type: "text", text: JSON.stringify(templates) }] };
       }
       if (name === "tallylamp_save_profile" || name === "tallylamp_update_profile") {
-        const browserId = String(args.browserId ?? session.browserId ?? "");
+        const browserId = String(args.browserId ?? context.browserId ?? "");
         if (!browserId) throw Err.invalid("pass browserId, or bind a browser first with tallylamp_use_browser");
         if (args.asNew !== undefined && typeof args.asNew !== "boolean") throw Err.invalid("asNew must be a boolean");
         if (args.name !== undefined && typeof args.name !== "string") throw Err.invalid("name must be a string");
         if (args.profileId !== undefined && typeof args.profileId !== "string") throw Err.invalid("profileId must be a string");
-        const wasBound = session.browserId === browserId;
+        const wasBound = session.bindings.has(browserId);
         const saved = await this.browsers.saveProfile(browserId, p, {
           name: args.name as string | undefined, metadata: args.metadata,
           asNew: name === "tallylamp_save_profile" && args.asNew === true,
@@ -1219,13 +1280,13 @@ export class McpGateway {
         });
         let bindingError: string | undefined;
         if (wasBound && saved.resumed) {
-          try { await this.bind(session, this.browsers.row(browserId)); }
+          try { await this.getBinding(session, this.browsers.row(browserId), "control"); }
           catch (e) { bindingError = (e as Error).message; }
         }
         return { content: [{ type: "text", text: JSON.stringify({ ...saved, ...(bindingError ? { bindingError, note: "Profile saved. Reconnect with tallylamp_use_browser before continuing." } : {}) }) }] };
       }
       if (name === "tallylamp_screencast_start" || name === "tallylamp_screencast_stop") {
-        return await this.callScreencast(session, name, args);
+        return await this.callScreencast(context, name, args);
       }
       if (name === "tallylamp_request_browser") {
         const out = requestBrowser(this.browsers, p, {
@@ -1297,7 +1358,7 @@ export class McpGateway {
         return { content: [{ type: "text", text: JSON.stringify({ browserId: row.id, lendable: row.lendable === 1 }) }] };
       }
       if (name === "tallylamp_open_tunnel") {
-        const browserId = String(args.browserId ?? session.browserId ?? "");
+        const browserId = String(args.browserId ?? context.browserId ?? "");
         if (!browserId) throw Err.invalid("pass browserId, or bind a browser first with tallylamp_use_browser");
         const { row, token } = createTunnel(this.browsers, p, {
           browserId,
@@ -1335,7 +1396,7 @@ export class McpGateway {
         };
       }
       if (name === "tallylamp_list_tunnels") {
-        const target = String(args.browserId ?? session.browserId ?? "");
+        const target = String(args.browserId ?? context.browserId ?? "");
         if (!target) throw Err.invalid("pass browserId, or bind a browser first with tallylamp_use_browser");
         // Owner-or-admin, not assertAccess("read"): a grantee passes that, and the authorities
         // an operator has open are not something a borrower should be able to enumerate.
@@ -1366,7 +1427,7 @@ export class McpGateway {
         return { content: [{ type: "text", text: JSON.stringify({ revoked: true }) }] };
       }
       if (name === "tallylamp_select_page") {
-        if (!session.browserId || !session.child) {
+        if (!context.browserId || !context.child) {
           throw Err.invalid("bind a browser first with tallylamp_use_browser");
         }
         const pageId = Number(args.pageId);
@@ -1374,18 +1435,19 @@ export class McpGateway {
         // bringToFront is hard-coded, never taken from the caller. The entire reason this tool
         // exists alongside select_page is that it cannot foreground a tab; letting an argument
         // decide would make it select_page with extra steps.
-        const out = await session.child.client.callTool({
+        const out = await context.child.client.callTool({
           name: "select_page",
           arguments: { pageId, bringToFront: false },
         });
-        logToolActivity(session.browserId, "select_page");
+        logToolActivity(context.browserId, "select_page");
         return out;
       }
       if (name === "tallylamp_use_browser") {
         const id = String(args.browserId ?? "");
         const row = this.browsers.row(id);
-        const level = this.bindLevel(p, row);
+        let level = this.bindLevel(p, row);
         await this.bind(session, row, level);
+        level = this.bindLevel(p, this.browsers.row(id));
         const grant = level === "read" ? activeGrant(row.id, p.id) : null;
         return {
           content: [
@@ -1413,7 +1475,7 @@ export class McpGateway {
         };
       }
       if (name === "tallylamp_stop_browser") {
-        const id = String(args.browserId ?? session.browserId ?? "");
+        const id = String(args.browserId ?? context.browserId ?? "");
         const row = this.browsers.row(id);
         this.browsers.assertAccess(p, row, "control");
         // Also caught by GRANT_NEVER at the door. Repeated here because this is the path a
@@ -1426,7 +1488,7 @@ export class McpGateway {
         return { content: [{ type: "text", text: JSON.stringify({ browserId: id, status: "stopped" }) }] };
       }
       if (name === "tallylamp_delete_browser") {
-        const id = String(args.browserId ?? session.browserId ?? "");
+        const id = String(args.browserId ?? context.browserId ?? "");
         await this.browsers.destroy(id, p);
         await this.releaseBrowser(id);
         return { content: [{ type: "text", text: JSON.stringify({ deleted: id }) }] };
@@ -1444,7 +1506,8 @@ export class McpGateway {
    * ownership check the explicit tool does is repeated here.
    */
   private async restoreBinding(session: Session): Promise<void> {
-    const id = this.lastBound.get(session.principal.id);
+    const key = `${session.principal.type}:${session.principal.id}`;
+    const id = this.lastBound.get(key);
     if (!id) return;
     try {
       const row = this.browsers.row(id);
@@ -1464,7 +1527,7 @@ export class McpGateway {
       // would take the room straight back.
       const retryable = e instanceof AppError && e.retryable && this.browsers.busy(id);
       session.lostBinding = { browserId: id, error: (e as Error).message, retryable };
-      if (!retryable) this.lastBound.delete(session.principal.id);
+      if (!retryable && this.lastBound.get(key) === id) this.lastBound.delete(key);
       log.debug("mcp could not restore binding", { browser: id, error: (e as Error).message });
     }
   }
@@ -1500,39 +1563,76 @@ export class McpGateway {
    * does not move.
    */
   private async bind(session: Session, row: BrowserRow, access: GrantAccess = "control"): Promise<void> {
-    const rt = await this.browsers.ensureRunning(row.id);
-    if (session.browserId && session.browserId !== row.id) {
-      this.browsers.detachMcp(session.browserId);
-    }
-    await this.unbindChild(session);
+    await this.getBinding(session, row, access);
     session.browserId = row.id;
-    this.lastBound.set(session.principal.id, row.id);
+    session.lostBinding = undefined;
+  }
+
+  /** A connection owns one bridge per browser. Cold calls to the same ID share startup. */
+  private async getBinding(session: Session, row: BrowserRow, access: GrantAccess): Promise<BrowserBinding> {
+    if (session.closed) throw Err.browserUnavailable("This MCP session has closed; reconnect and pass browserId.");
+    let binding = session.bindings.get(row.id);
+    if (!binding) {
+      binding = { browserId: row.id, access, attached: false, closed: false };
+      session.bindings.set(row.id, binding);
+      const created = binding;
+      created.ready = this.startBinding(session, created, row).catch(async (error) => {
+        await this.disposeBinding(session, created);
+        throw error;
+      });
+    }
+    await binding.ready;
+    this.assertBindingOpen(session, binding);
+    access = this.bindLevel(session.principal, this.browsers.row(row.id));
+    if (access === "control" && binding.access !== "control" && !this.browsers.isHumanControlled(row.id)) {
+      this.browsers.acquireControl(row.id, "agent", session.principal.id);
+    }
+    binding.access = access;
+    this.rememberBrowser(session.principal, row.id);
+    return binding;
+  }
+
+  private assertBindingOpen(session: Session, binding: BrowserBinding): void {
+    if (session.closed || binding.closed) throw Err.browserUnavailable("The browser connection closed; retry with the same browserId.");
+  }
+
+  private async startBinding(session: Session, binding: BrowserBinding, row: BrowserRow): Promise<void> {
+    const rt = await this.browsers.ensureRunning(row.id);
+    this.assertBindingOpen(session, binding);
+    const access = this.bindLevel(session.principal, this.browsers.row(row.id));
+    binding.access = access;
     this.browsers.attachMcp(row.id);
+    binding.attached = true;
     this.browsers.recordClient(row.id, session.clientInfo?.name, session.clientInfo?.version);
-    session.access = access;
-    // A reader must never appear as the controller. Taking the lease here would show a person
-    // that an agent has their browser, and hand them a Take control back button for a session
-    // that cannot type -- which is worse than useless, it is a false alarm.
     if (access === "control" && !this.browsers.isHumanControlled(row.id)) {
       this.browsers.acquireControl(row.id, "agent", session.principal.id);
     }
-    // The fake stands in for a Chrome we would have launched. A linked browser's endpoint is
-    // the real shim whatever this flag says, so it gets the real bridge -- which is also what
-    // lets the suite prove Puppeteer can actually connect through it.
     if (config.fakeChrome && row.kind !== "linked") {
       log.info("mcp bound fake browser (no chrome-devtools-mcp child)", { session: session.id, browser: row.id });
       return;
     }
     const transport = new StdioClientTransport(bridgeSpawn(rt.cdpUrl, "pipe"));
     const client = new Client({ name: "tallylamp-bridge", version: config.version });
-    await client.connect(transport);
-    session.child = { client, transport };
-    await this.selectWorkingPage(session, row.id, access);
     try {
-      await session.server.notification({ method: "notifications/tools/list_changed" });
-    } catch {
-      /* client may not support it */
+      await client.connect(transport);
+      this.assertBindingOpen(session, binding);
+      if (rt.chrome.exitCode !== null) throw Err.browserUnavailable("Browser binding was cancelled; try again.");
+      if (this.bindLevel(session.principal, this.browsers.row(row.id)) !== access) {
+        throw Err.unauthorized("Browser access changed while connecting; bind again.");
+      }
+    } catch (error) {
+      await client.close().catch(() => undefined);
+      throw error;
     }
+    const child = binding.child = { client, transport };
+    child.client.onclose = () => {
+      if (binding.child !== child) return;
+      binding.child = undefined;
+      void this.disposeBinding(session, binding);
+      // Never replay an in-flight call. The next call reconnects to this same browser ID.
+    };
+    await this.selectWorkingPage(binding, row.id, access);
+    this.assertBindingOpen(session, binding);
     log.info("mcp bound browser", { session: session.id, browser: row.id });
   }
 
@@ -1561,7 +1661,7 @@ export class McpGateway {
    * with, and take_snapshot returns an empty document -- the whole feature, reading one page,
    * would not work.
    */
-  private async selectWorkingPage(session: Session, browserId: string, access: GrantAccess = "control"): Promise<void> {
+  private async selectWorkingPage(session: BrowserBinding, browserId: string, access: GrantAccess = "control"): Promise<void> {
     if (!session.child) return;
     if (access === "control" && this.browsers.isHumanControlled(browserId)) return;
     try {
@@ -1596,24 +1696,28 @@ export class McpGateway {
    * the REST API releases the bridge too.
    */
   async releaseBrowser(browserId: string): Promise<void> {
-    // A recording holds its own CDP connection to a browser that is going away.
-    await abandonCapture(browserId);
+    const closing: Promise<void>[] = [];
     for (const session of this.sessions.values()) {
-      if (session.browserId !== browserId) continue;
-      this.browsers.detachMcp(browserId);
-      session.browserId = undefined;
-      await this.unbindChild(session);
+      const binding = session.bindings.get(browserId);
+      if (binding) closing.push(this.disposeBinding(session, binding));
+      // Preserve this session's default ID for recovery after a stop or move.
     }
+    // Invalidate all bindings before yielding, including any still starting up.
+    await Promise.all([abandonCapture(browserId), ...closing]);
   }
 
-  private async unbindChild(session: Session): Promise<void> {
-    if (!session.child) return;
-    try {
-      await session.child.client.close();
-    } catch {
-      /* ignore */
+  private async disposeBinding(session: Session, binding: BrowserBinding): Promise<void> {
+    binding.closed = true;
+    if (session.bindings.get(binding.browserId) === binding) session.bindings.delete(binding.browserId);
+    if (binding.attached) {
+      binding.attached = false;
+      this.browsers.detachMcp(binding.browserId);
     }
-    session.child = undefined;
+    const child = binding.child;
+    binding.child = undefined;
+    try { await child?.client.close(); } catch { /* already disconnected */ }
+    // Do not wait for startup: ensureRunning itself can trigger onBrowserGone.
+    // Startup checks closed after each await and disposes any late-arriving child.
   }
 
   /**
@@ -1638,8 +1742,8 @@ export class McpGateway {
     const s = this.sessions.get(id);
     if (!s) return;
     this.sessions.delete(id);
-    if (s.browserId) this.browsers.detachMcp(s.browserId);
-    await this.unbindChild(s);
+    s.closed = true;
+    for (const binding of [...s.bindings.values()]) await this.disposeBinding(s, binding);
     try {
       await s.transport.close();
     } catch {

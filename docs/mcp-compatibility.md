@@ -36,6 +36,41 @@ Authorization: Bearer YOUR_AGENT_TOKEN
 The token has no expiry. It belongs to an agent with its own permissions and
 browser cap, and the dashboard can revoke it. Keep it out of URLs.
 
+## Multiple agents and browsers
+
+Multiple agents can operate different browsers through one MCP session. Browser
+tools accept a `browserId`; it is optional for driving tools such as
+`navigate_page` and `take_snapshot`. An explicit ID routes that call to the named
+browser without changing the session's default browser. Calls for different
+browsers can run concurrently. Agents using the same browser in one session
+share its selected tab; a browser ID selects a target and does not grant access.
+The client must also dispatch requests concurrently; a client that queues all
+tool calls still executes them in sequence.
+
+For example, two agents sharing a session can call:
+
+```json
+{"name":"navigate_page","arguments":{"browserId":"BROWSER_A","pageId":1,"url":"https://example.com"}}
+{"name":"take_snapshot","arguments":{"browserId":"BROWSER_B","pageId":1}}
+```
+
+Use each browser's page ID from `list_pages`; the example assumes both have
+page `1`.
+
+`tallylamp_create_browser` and `tallylamp_use_browser` still set the session's
+default browser. Calls that omit `browserId` use that shared default. Each agent
+sharing a session must keep its own browser ID and pass it on every subsequent
+browser operation, including screenshots, recordings, and cleanup. Switching
+the default before each call is insufficient: another agent can switch it again
+between those calls.
+
+Separate MCP sessions can use the same bearer token and maintain independent
+defaults. They still share the token's permissions and browser cap. A new session
+after a reconnect cannot identify the originating agent from shared credentials;
+when automatic restoration is ambiguous, pass `browserId` explicitly or call
+`tallylamp_use_browser` to select the intended default. Shared-session agents
+should continue passing explicit IDs after reconnecting.
+
 ## Claude Code
 
 Replace the URL and token in this command:
