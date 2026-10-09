@@ -4,6 +4,7 @@ const app = document.getElementById("app");
 // every re-render can tear it down: without this, keys pressed anywhere in the dashboard kept
 // being injected into the last browser you controlled — including into the login field.
 let viewer = null;
+let detailMetadataRefresh = null;
 
 function teardownViewer() {
   if (!viewer) return;
@@ -18,6 +19,7 @@ window.addEventListener("beforeunload", teardownViewer);
 // this code takes care to compose were unreachable exactly when they mattered.
 function flash(message, success = false) {
   state.flash = message || "";
+  state.flashSuccess = success;
   const el = document.querySelector(".flash");
   if (el) {
     el.textContent = state.flash;
@@ -33,14 +35,25 @@ function flash(message, success = false) {
  * behind. `aria-modal` on its own was a promise the dashboard did not keep — every nav link
  * behind the dialog stayed in the tab order.
  *
- * `build` receives a `close(result)` it can call; `onClose` gets that result, or undefined.
+ * `build` receives `close(result)` and `setPending(value)`. Pending writes cannot be dismissed;
+ * `onClose` gets the result, or undefined. One-time credentials require explicit acknowledgement.
  */
-function openModal(title, build, onClose) {
+function openModal(title, build, onClose, { dismissible = true } = {}) {
   const restoreFocus = document.activeElement;
-  const box = h("div", { class: "modal-box", role: "dialog", "aria-modal": "true", "aria-label": title });
-  const dialog = h("div", { class: "modal", onMousedown: (e) => { if (e.target === dialog) close(); } }, box);
+  const box = h("div", { class: "modal-box", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: "-1" });
+  const dialog = h("div", { class: "modal", onMousedown: (e) => { if (dismissible && e.target === dialog) close(); } }, box);
+  let pending = false;
+  let closed = false;
+
+  function setPending(value) {
+    pending = value;
+    if (pending) box.setAttribute("aria-busy", "true");
+    else box.removeAttribute("aria-busy");
+  }
 
   function close(result) {
+    if (pending || closed) return;
+    closed = true;
     document.removeEventListener("keydown", onKey, true);
     dialog.remove();
     const app = document.getElementById("app");
@@ -49,32 +62,35 @@ function openModal(title, build, onClose) {
     if (onClose) onClose(result);
   }
   function onKey(e) {
-    if (e.key === "Escape") { e.preventDefault(); close(); return; }
+    if (e.key === "Escape") { e.preventDefault(); if (dismissible) close(); return; }
     if (e.key !== "Tab") return;
-    const stops = [...box.querySelectorAll("input, textarea, select, button")].filter((el) => !el.disabled);
-    if (!stops.length) return;
+    const stops = [...box.querySelectorAll("input, textarea, select, button, summary")].filter((el) => {
+      const details = el.closest("details");
+      return !el.disabled && (!details || details.open || el.tagName === "SUMMARY");
+    });
+    if (!stops.length) { e.preventDefault(); box.focus(); return; }
     const first = stops[0];
     const last = stops[stops.length - 1];
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
 
-  box.replaceChildren(...[].concat(build(close)).filter(Boolean));
+  box.replaceChildren(...[].concat(build(close, setPending)).filter(Boolean));
   document.body.append(dialog);
   const app = document.getElementById("app");
   if (app) app.setAttribute("inert", "");
   document.addEventListener("keydown", onKey, true);
-  return { close, box };
+  return { close, box, setPending };
 }
 
 /**
  * Ask for a few values at once. This replaces a run of prompt() dialogs, which arrive one at a
  * time with no labels, no hint of how many are coming, and no way back to the previous answer.
  */
-function askFor(title, fields, submitLabel, submit) {
+function askFor(title, fields, submitLabel, submit, { description } = {}) {
   return new Promise((resolve) => {
     const inputs = new Map();
-    const { box } = openModal(title, (close) => {
+    const { box } = openModal(title, (close, setPending) => {
       let submitting = false;
       const error = h("div", { class: "err", role: "alert" });
       const form = h("form", {
@@ -87,28 +103,47 @@ function askFor(title, fields, submitLabel, submit) {
             out[name] = typeof value !== "string" || el.dataset.preserveWhitespace ? value : value.trim();
           }
           submitting = true;
+          setPending(true);
+          const controls = [...form.querySelectorAll("input, textarea, select, button")];
+          const wasDisabled = controls.map((el) => el.disabled);
+          controls.forEach((el) => { el.disabled = true; });
           const button = form.querySelector('button[type="submit"]');
-          button.disabled = true;
-          button.textContent = submit ? (submitLabel.startsWith("Create") ? "Creating…" : "Saving…") : submitLabel;
+          button.textContent = submit ? (submitLabel.startsWith("Create") ? "Creating…"
+            : submitLabel.startsWith("Replace") ? "Replacing…"
+            : submitLabel.includes("sign-out") ? "Signing out…" : "Saving…") : submitLabel;
           error.textContent = "";
-          try { if (submit) await submit(out); close(out); }
+          try { if (submit) await submit(out); setPending(false); close(out); }
           catch (e) { error.textContent = e.message; }
-          finally { submitting = false; button.disabled = false; button.textContent = submitLabel; }
+          finally {
+            submitting = false;
+            setPending(false);
+            controls.forEach((el, i) => { el.disabled = wasDisabled[i]; });
+            button.textContent = submitLabel;
+          }
         },
       });
+      const advancedFields = h("div", { class: "advanced-fields" });
+      const advanced = h("details", { class: "advanced-settings" }, h("summary", {}, "Advanced settings"), advancedFields);
+      let advancedAdded = false;
+      // Native validation must reveal a collapsed field before the browser tries to focus it.
+      form.addEventListener("invalid", (e) => {
+        if (advanced.contains(e.target)) advanced.open = true;
+      }, true);
       for (const f of fields) {
+        if (f.advanced && !advancedAdded) { form.append(advanced); advancedAdded = true; }
+        const section = f.advanced ? advancedFields : form;
         const id = `field-${f.name}`;
         if (f.kind === "project" && knownProjects(f.value).length) {
           const picker = projectPicker(f, id);
           inputs.set(f.name, picker.field);
-          form.append(h("label", { for: id }, f.label), picker.select, picker.text);
-          if (f.hint) form.append(h("div", { class: "sub field-hint" }, f.hint));
+          section.append(h("label", { for: id }, f.label), picker.select, picker.text);
+          if (f.hint) section.append(h("div", { class: "sub field-hint" }, f.hint));
           continue;
         }
         if (f.kind === "scopes") {
           const picker = scopePicker(f, id);
           inputs.set(f.name, picker.field);
-          form.append(picker.el);
+          section.append(picker.el);
           continue;
         }
         const input = f.options ? h("select", { id, name: f.name, required: !!f.required },
@@ -119,17 +154,20 @@ function askFor(title, fields, submitLabel, submit) {
           placeholder: f.placeholder || "", maxlength: String(f.maxLength || 120), autocomplete: "off",
         });
         inputs.set(f.name, input);
-        form.append(h("label", { for: id }, f.label), input);
+        section.append(h("label", { for: id }, f.label), input);
         // Several hints are several separate points, each its own line, not one paragraph.
-        for (const hint of [f.hint].flat().filter(Boolean)) form.append(h("div", { class: "sub field-hint" }, hint));
+        for (const hint of [f.hint].flat().filter(Boolean)) section.append(h("div", { class: "sub field-hint" }, hint));
       }
       form.append(error, h("div", { class: "row modal-foot" },
         h("button", { class: "btn primary", type: "submit" }, submitLabel),
         h("button", { class: "btn", type: "button", onClick: () => close() }, "Cancel"),
       ));
-      return [h("h2", {}, title), form];
+      return [h("h2", {}, title), description ? h("p", { class: "sub" }, description) : null, form];
     }, (result) => resolve(result || null));
-    const first = box.querySelector("input, select");
+    const first = [...box.querySelectorAll("input, select, button, summary")].find((el) => {
+      const details = el.closest("details");
+      return !el.disabled && (!details || details.open || el.tagName === "SUMMARY");
+    });
     if (first) first.focus();
   });
 }
@@ -246,7 +284,7 @@ function revealToken(title, token, { note, command } = {}) {
     command ? h("div", { class: "row" }, copyButton("Command", () => command, false)) : null,
     note ? h("p", { class: "sub" }, note) : null,
     h("div", { class: "row modal-foot" }, h("button", { class: "btn", onClick: () => close() }, "Done"), status),
-  ]);
+  ], undefined, { dismissible: false });
 
   tokenField.focus();
   tokenField.select();
@@ -528,18 +566,26 @@ const state = {
   status: null,
   filter: "",
   flash: "",
+  flashSuccess: false,
   events: [],
   requests: [],
   workers: [],
+  data: Object.fromEntries(["status", "browsers", "agents", "seeds", "requests", "workers"].map(name =>
+    [name, { loading: false, error: "", loadedAt: null }])),
 };
 
 async function api(path, opts = {}) {
+  const read = !opts.method || opts.method === "GET";
+  const controller = read ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), 10_000) : null;
+  try {
   const res = await fetch(path, {
     credentials: "same-origin",
     // Only declare a JSON body when there is one. Announcing it on GETs and on bodyless POSTs
     // is a lie some proxies and CSRF filters take seriously.
     headers: { ...(opts.body ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) },
     ...opts,
+    ...(controller ? { signal: controller.signal } : {}),
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   if (res.status === 204) return null;
@@ -551,6 +597,12 @@ async function api(path, opts = {}) {
     throw err;
   }
   return data;
+  } catch (e) {
+    if (controller?.signal.aborted) throw new Error("The server took too long to respond. Try again.");
+    throw e;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function h(tag, attrs = {}, ...kids) {
@@ -630,7 +682,8 @@ function route() {
   return { name: "home" };
 }
 
-function go(path) {
+function go(path, { preserveFlash = false } = {}) {
+  if (!preserveFlash) flash("");
   history.pushState({}, "", path);
   void render();
 }
@@ -683,6 +736,39 @@ function linkedCaption(b) {
 /** A guest link's lease: a person, but never this operator, so never "You have control". */
 const guestHolds = (b) => String(b.control?.controllerId || "").startsWith("guest:");
 
+function controllerName(b) {
+  const c = b.control;
+  if (!c?.controllerType || c.controllerType === "none") return "No controller";
+  if (guestHolds(b)) return "Guest";
+  if (c.controllerType === "human") return "Administrator";
+  const agent = state.agents.find(a => a.id === c.controllerId);
+  return agent ? agent.name.replace(/\s*\(connector\)$/, "") : (c.controllerId || "Agent");
+}
+
+function requestBadge() {
+  const count = state.requests.length;
+  const failed = state.data.requests.error;
+  return h("span", { class: "nav-badge", "data-request-badge": "", hidden: !count && !failed,
+    "aria-label": failed ? "Access requests could not be refreshed" : `${count} agents are waiting for access`,
+    title: failed || false }, failed ? "!" : String(count));
+}
+
+function syncRequestBadges() {
+  for (const el of document.querySelectorAll("[data-request-badge]")) {
+    const count = state.requests.length;
+    const failed = state.data.requests.error;
+    el.hidden = !count && !failed;
+    el.textContent = failed ? "!" : String(count);
+    el.setAttribute("aria-label", failed ? "Access requests could not be refreshed" : `${count} agents are waiting for access`);
+    el.title = failed || "";
+  }
+}
+
+const wideNav = window.matchMedia("(min-width: 901px)");
+wideNav.addEventListener("change", e => {
+  for (const el of document.querySelectorAll(".nav-pages, .nav-options")) el.open = e.matches;
+});
+
 function badge(b) {
   if (b.control?.controllerType === "human") return h("span", { class: "badge human" }, guestHolds(b) ? "Guest" : "Human");
   if (b.kind === "linked" && b.status !== "running") return h("span", { class: "badge idle" }, linkStatus(b));
@@ -698,6 +784,9 @@ function layout(main) {
       h("a", { href: "#main", class: "skip", onClick: (e) => { e.preventDefault(); const m = document.getElementById("main"); if (m) m.focus(); } }, "Skip to content"),
       h("nav", { class: "nav" },
         h("div", { class: "brand" }, lamp(), "Tallylamp"),
+        h("details", { class: "nav-pages", open: wideNav.matches },
+        h("summary", {}, TITLES[route().name] || "Browsers", route().name === "home" ? requestBadge() : null),
+        h("div", { class: "nav-links" },
         ...[
           ["/", "home", "Browsers"],
           ["/agents", "agents", "Agents"],
@@ -716,20 +805,21 @@ function layout(main) {
             // Without this the active page is signalled by background colour alone.
             "aria-current": active ? "page" : false,
             onClick: (e) => { e.preventDefault(); go(href); },
-          }, label, waiting ? h("span", {
-            class: "nav-badge",
-            // The number alone reads as "4" to a screen reader, which is not a fact.
-            "aria-label": waiting === 1 ? "1 agent is waiting for access" : `${waiting} agents are waiting for access`,
-          }, String(waiting)) : null);
-        }),
+          }, label, name === "home" ? requestBadge() : null);
+        }))),
         h("div", { class: "spacer" }),
+        h("details", { class: "nav-options", open: wideNav.matches },
+        h("summary", {}, "Options"),
+        h("div", { class: "nav-preferences" },
         searchButton(),
         themeButton(),
         h("button", { class: "link logout", onClick: logout }, "Log out"),
+        )),
       ),
       // Errors were being written into a plain div, so a screen reader never heard one.
       h("main", { class: "main", id: "main", tabindex: "-1" },
-        h("div", { class: "err flash", role: "alert", "aria-live": "assertive", "aria-atomic": "true" }, state.flash || ""),
+        h("div", { class: `flash ${state.flashSuccess ? "ok" : "err"}`, role: state.flashSuccess ? "status" : "alert",
+          "aria-live": state.flashSuccess ? "polite" : "assertive", "aria-atomic": "true" }, state.flash || ""),
         main),
     ),
   );
@@ -863,6 +953,8 @@ function card(b) {
         b.worker ? h("span", { class: "kind-tag" + (b.worker.online ? "" : " warn"), title: b.worker.online ? `Its Chrome runs on the worker ${b.worker.name}` : `Its worker, ${b.worker.name}, is not answering` }, b.worker.name) : null),
       // Six identical grey lines was most of what made this card hard to scan. Owner and
       // reported source moved to the detail page; what stays is what tells you whether to click.
+      h("div", { class: "who" }, b.control?.controllerType && b.control.controllerType !== "none" ? `${controllerName(b)} has control` : "No controller"),
+      md.task ? h("div", { class: "card-task" }, h("span", { class: "sub" }, "Reported task: "), md.task) : null,
       h("div", { class: "meta" },
         md.purpose ? h("div", { class: "purpose" }, md.purpose) : null,
         // A stopped browser has no page, and a lone dash in its place read as data.
@@ -872,11 +964,6 @@ function card(b) {
         b.threads != null && state.status?.host?.pids ? h("div", { class: "mono" }, `${b.threads} processes and threads`) : null,
       ),
       sitePills(b),
-      h("div", { class: "who" },
-        b.control?.controllerType === "human" ? (guestHolds(b) ? "Guest has control" : "Human has control")
-          : b.control?.controllerType === "agent" ? "Agent has control"
-          : "No controller",
-      ),
       h("div", { class: "actions" },
         // A stopped browser has nothing to watch or take, so its card offers Start instead. A
         // linked browser's status says nothing about its shared tabs, so it keeps Watch.
@@ -934,27 +1021,33 @@ let browsersHost = null;
 let requestsHost = null;
 let fleetCountEl = null;
 
-/**
- * The fleet limit caps *running* browsers — browsers.ts refuses ensureRunning once
- * runtimes.size hits it — so that is what the meter measures. Stopped browsers hold no slot.
- */
+const LOCAL_SLOT_STATES = new Set(["running", "unhealthy", "starting", "queued", "stopping"]);
+function localSlotsUsed() {
+  if (Number.isFinite(state.status?.occupiedSlots)) return state.status.occupiedSlots;
+  return state.browsers.filter(b => b.kind !== "linked" && !b.worker &&
+    (b.cdpBound || b.savingProfile || LOCAL_SLOT_STATES.has(b.status) || b.moving?.phase === "starting")).length;
+}
+
 function fleetMeter() {
-  const running = state.browsers.filter((b) => ["running", "unhealthy"].includes(b.status)).length;
+  const running = localSlotsUsed();
   const limit = state.status?.maxBrowsers;
-  const stopped = state.browsers.length - running;
-  const label = limit
-    ? `${running} of ${limit} slots in use${stopped ? ` · ${stopped} stopped` : ""}`
-    : `${running} running`;
+  const stopped = state.browsers.filter(b => b.kind !== "linked" && b.status === "stopped").length;
+  const linked = state.browsers.filter(b => b.kind === "linked").length;
+  const workers = state.browsers.filter(b => b.worker && b.kind !== "linked").length;
+  const extras = [stopped ? `${stopped} stopped` : "", linked ? `${linked} linked` : "", workers ? `${workers} on workers` : ""].filter(Boolean);
+  const unknown = state.data.status.error || state.data.browsers.error;
+  const label = (unknown ? "Local capacity unavailable" : !state.data.status.loadedAt || !state.data.browsers.loadedAt ? "Loading local capacity…" :
+    limit ? `${running} of ${limit} local slots in use or reserved` : `${running} local slots in use or reserved`) + (extras.length ? ` · ${extras.join(" · ")}` : "");
 
   const wrap = h("div", { class: "meter-wrap" });
-  if (limit) {
+  if (limit && !unknown && state.data.status.loadedAt && state.data.browsers.loadedAt) {
     // A count is a number you have to reason about; a row of slots is a shape you can read at
     // a glance, and it makes headroom visible without arithmetic.
     const slots = h("div", {
       class: "meter",
       role: "img",
       "aria-label": `${running} of ${limit} browser slots in use`,
-    }, ...Array.from({ length: limit }, (_, i) =>
+    }, ...Array.from({ length: Math.min(limit, 40) }, (_, i) =>
       h("span", { class: "slot" + (i < running ? " on" : "") })));
     wrap.append(slots);
   }
@@ -985,10 +1078,9 @@ function hostRefusalBanner() {
 }
 
 function freeSlots() {
+  if (!state.data.status.loadedAt || state.data.status.error || !state.data.browsers.loadedAt || state.data.browsers.error) return 0;
   const limit = state.status?.maxBrowsers;
-  if (!limit) return 0;
-  const running = state.browsers.filter((b) => ["running", "unhealthy"].includes(b.status)).length;
-  return Math.max(0, limit - running);
+  return limit ? Math.max(0, limit - localSlotsUsed()) : 0;
 }
 
 /** Repaint only the results, so the filter input keeps focus and no refetch happens. */
@@ -1004,19 +1096,22 @@ function freeSlots() {
  */
 function requestsPanel() {
   const list = state.requests || [];
-  if (!list.length) return null;
+  const notice = dataNotice("requests", "access requests", () => loadDataset("requests").then(paintBrowsers));
+  if (!list.length) return notice;
   const anyControl = list.some((r) => (r.access || "control") === "control");
   return h("section", { class: "banner asks", "aria-label": "Access requests" },
     h("h2", { class: "asks-h" },
       list.length === 1 ? "1 agent is waiting on a browser" : `${list.length} agents are waiting on a browser`),
+    notice,
     // Said once for the panel, not repeated per row: three copies of the same warning is the
     // noise that stops any of them being read. Worded by the strongest level being asked for,
     // because the read-only case genuinely is a smaller thing and saying otherwise trains the
     // operator to skip the sentence on the day it matters.
+    h("details", { class: "request-help" }, h("summary", {}, "What these permissions allow"),
     h("p", { class: "sub" }, anyControl
       ? "Control lets an agent navigate, click, type and run scripts in that browser, signed in as you. Read lets it see pages and nothing else. You can approve a control request as read instead, and revoke either at any time."
       : "Read access lets an agent see the pages in that browser, including anything you are signed in to. It cannot click, type, navigate or run scripts. You can revoke it at any time."),
-    h("p", { class: "sub" }, "Ignoring a request is safe: it expires by itself and nothing is blocked meanwhile."),
+    h("p", { class: "sub" }, "Ignoring a request is safe: it expires by itself and nothing is blocked meanwhile.")),
     ...list.map(askRow),
   );
 }
@@ -1117,9 +1212,10 @@ function askRow(r) {
 }
 
 function paintBrowsers() {
+  syncRequestBadges();
   // Repainted on the same tick as the fleet, so an SSE event lands a new request in front of
   // the operator within a second or two rather than on the next full navigation.
-  if (requestsHost) requestsHost.replaceChildren(...[hostRefusalBanner(), requestsPanel()].filter(Boolean));
+  if (requestsHost) requestsHost.replaceChildren(...[dataNotice("status", "local capacity", () => retryDataset("status")), hostRefusalBanner(), requestsPanel()].filter(Boolean));
   if (!browsersHost) return;
   // These cards are about to be replaced; a menu anchored to one of them would outlive it.
   closeMenu();
@@ -1128,6 +1224,8 @@ function paintBrowsers() {
   // .filter() already returns a copy, so this orders the render list and not state.browsers.
   const list = state.browsers.filter((b) => matches(b, q)).sort(byLiveFirst);
   const nodes = [];
+  const notice = dataNotice("browsers", "browsers", () => loadDataset("browsers").then(paintBrowsers));
+  if (notice) nodes.push(notice);
   if (list.length > 0) {
     // One grid for the fleet, not one per project. A grid per project is a separate formatting
     // context each, so three browsers in three projects rendered as three rows of one card with
@@ -1140,7 +1238,7 @@ function paintBrowsers() {
         ...list.map(card)),
     );
   }
-  if (list.length === 0) {
+  if (list.length === 0 && state.data.browsers.loadedAt) {
     // Branch on the fleet, not the filtered list: "No browsers yet" while eight are running
     // is the worst possible thing for the one screen whose job is fleet state.
     nodes.push(
@@ -1157,7 +1255,7 @@ function paintBrowsers() {
   // are inert and fade, so the row reads as "and this much room left" instead of as more cards.
   // Not while filtering (the row would describe capacity the filter is hiding), and not on an
   // empty fleet, where the empty state already says the same thing.
-  const free = state.filter || state.browsers.length === 0 ? 0 : freeSlots();
+  const free = state.filter || state.browsers.length === 0 || state.data.status.error ? 0 : freeSlots();
   if (free > 0) {
     const ghosts = [
       h("button", {
@@ -1396,7 +1494,7 @@ function settingsSection(b) {
             el.setAttribute("aria-checked", String(on)); // answer the click now; the server follows
             try {
               await api(`/api/v1/browsers/${id}/lendable`, { method: "POST", body: { lendable: on } });
-              flash(on ? `${b.name} can now be lent out when idle.` : `${b.name} will only be lent if you say so.`);
+              flash(on ? `${b.name} can now be lent out when idle.` : `${b.name} will only be lent if you say so.`, true);
               await refresh(); void render();
             } catch (err) {
               el.setAttribute("aria-checked", String(!on)); // put the switch back; the server did not move
@@ -1569,7 +1667,7 @@ function tunnelSection(tunnels) {
             class: "btn tiny danger",
             onClick: () => act(async () => {
               await api(`/api/v1/tunnels/${t.id}`, { method: "DELETE" });
-              flash(`Closed the tunnel to ${t.authority}.`);
+              flash(`Closed the tunnel to ${t.authority}.`, true);
               await refresh();
               void render();
             }),
@@ -1589,7 +1687,8 @@ async function browserView(id, seq) {
     data = await api(`/api/v1/browsers/${id}`);
   } catch (e) {
     if (seq !== undefined && seq !== renderSeq) return;
-    layout(h("div", { class: "err" }, e.message));
+    layout([h("h1", {}, "Browser unavailable"), h("div", { class: "err", role: "alert" }, e.message),
+      h("button", { class: "btn", onClick: () => void render() }, "Retry browser")]);
     return;
   }
   // Second gate: this fetch is the slow one, and painting after it would both replace a newer
@@ -1601,9 +1700,24 @@ async function browserView(id, seq) {
   const linked = b.kind === "linked";
   // The operator's own lease. A guest's is a person too, but driving with it would be refused.
   const human = b.control?.controllerType === "human" && !guestHolds(b);
-  const guests = linked ? [] : (await api(`/api/v1/browsers/${id}/guests`).catch(() => ({ guests: [] }))).guests || [];
-  if (seq !== undefined && seq !== renderSeq) return;
-  const guestInControl = guestHolds(b) ? guests.find((g) => g.controlling) : null;
+  let guests = [];
+  const guestHost = h("div", {});
+  const guestControllerLabel = h("span", {}, "A guest");
+  const loadGuests = async () => {
+    const retry = h("button", { class: "btn", onClick: () => void loadGuests() }, "Retry guest links");
+    guestHost.replaceChildren(h("div", { role: "status", class: "data-notice" }, "Loading guest links…"));
+    try {
+      const result = await api(`/api/v1/browsers/${id}/guests`);
+      if (!guestHost.isConnected) return;
+      guests = result.guests || [];
+      guestHost.replaceChildren(guestSection(b, guests));
+      guestControllerLabel.textContent = guests.find(g => g.controlling)?.label || "A guest";
+    } catch (e) {
+      if (!guestHost.isConnected) return;
+      guestHost.replaceChildren(h("div", { role: "alert", class: "data-notice" },
+        h("p", {}, `Guest links unavailable: ${e.message}. Their access has not changed.`), retry));
+    }
+  };
   // Full browser shows the display of whichever host runs its Chrome: this instance, or its worker.
   const fullHere = Boolean(b.worker ? b.worker.fullBrowser : state.status?.fullBrowser);
   const surface = fullHere && viewerSurfaces.get(id) === "desktop" ? "desktop" : "tab";
@@ -1680,6 +1794,10 @@ async function browserView(id, seq) {
   // content — so the tabs were not hidden by a layout bug, they were never in the stream at
   // all. The strip below is the dashboard's own, driven by the target list.
   const tabstrip = h("div", { class: "tabstrip", role: "tablist", "aria-label": "Tabs in this browser" });
+  const panelId = `browser-panel-${id}`;
+  stage.id = panelId;
+  stage.setAttribute("role", "tabpanel");
+  stage.setAttribute("aria-label", "Active browser tab");
   // An address bar, not a label. Chrome's own is browser UI and can never be in the stream, so
   // without this there is no way for the operator to go anywhere they were not already taken.
   const urlInput = h("input", {
@@ -1713,7 +1831,7 @@ async function browserView(id, seq) {
   const stagewrap = h("div", { class: "stagewrap" },
     h("div", { class: "row viewer-surfaces", role: "group", "aria-label": "Browser view" },
       h("button", { class: "btn tiny", "aria-pressed": String(surface === "tab"), onClick: () => switchSurface("tab") }, "Tab"),
-      h("button", { class: "btn tiny", "aria-pressed": String(surface === "desktop"), disabled: !fullHere,
+      h("button", { class: "btn tiny", "data-full-browser": "", "aria-pressed": String(surface === "desktop"), disabled: !fullHere,
         title: fullHere ? "Show Chrome’s toolbar, popups and dialogs" : "Full browser needs a dedicated Xvfb display on the host",
         onClick: () => switchSurface("desktop") }, "Full browser"),
       surface === "desktop" && human ? h("button", { class: "btn tiny", onClick: () => viewer?.openExtensions() }, "Manage extensions") : null,
@@ -1721,7 +1839,7 @@ async function browserView(id, seq) {
         title: "Chrome is fitted to the display when this view opens. Use this if a dialog or an extension has moved it since.",
         onClick: () => viewer?.fitBrowser() }, "Refit Chrome window") : null,
     ),
-    tabstrip,
+    h("div", { class: "tabrow" }, tabstrip, newTabBtn),
     h("div", { class: "urlrow" }, backBtn, fwdBtn, reloadBtn, urlInput, fsBtn),
     // This view hides the dashboard's own address bar and tab strip because Chrome's are in
     // the picture. Without a line saying so, an operator looks for a field to type in, finds
@@ -1734,83 +1852,24 @@ async function browserView(id, seq) {
     stage,
   );
   if (surface === "desktop") {
-    tabstrip.hidden = true;
+    tabstrip.parentElement.hidden = true;
     for (const el of [backBtn, fwdBtn, reloadBtn, urlInput]) el.hidden = true;
   }
   fsBtn.onclick = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else stagewrap.requestFullscreen().catch(() => {});
   };
-  layout([
-    h("div", { class: "top" },
-      h("div", {},
-        h("h1", {}, b.name),
-        // The "not self-reported" caveat was an abstract trust claim stranded in the header. It
-        // belongs next to the rows it is actually about, which is where it now sits.
-        h("div", { class: "sub" }, `created by ${principal(b.provenance.createdByType, b.owner.id)} via ${b.provenance.createdVia}`),
-      ),
-      h("div", { class: "row" },
-        // Stopped, Start is the one thing to do and takes the filled style; Take control has
-        // nothing to take. A lease can outlive a stop, so Return to agent stays when it applies.
-        human
-          ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
-          : ["stopped", "crashed", "queued", "moving"].includes(b.status)
-            ? null
-            : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
-        // One of Start and Stop, never both with one greyed out, and only one button filled:
-        // Save profile used to be filled white beside the takeover button and the two fought
-        // for the eye.
-        b.status === "moving"
-          ? h("button", { class: "btn", disabled: true }, "Moving…")
-          : ["stopped", "crashed"].includes(b.status)
-          ? h("button", { class: human ? "btn" : "btn human", onClick: (e) => call(`/api/v1/browsers/${id}/start`, e.currentTarget) }, "Start")
-          : h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/stop`, e.currentTarget) }, "Stop browser"),
-        canMove(b) ? h("button", { class: "btn", disabled: b.status === "moving" || b.savingProfile, onClick: () => moveBrowser(b) }, "Move to…") : null,
-        b.worker ? null : h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
-        !b.worker && b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
-        // Restarting a stopped browser is starting it, and Start is already here.
-        ["running", "unhealthy"].includes(b.status) ? h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/restart`, e.currentTarget) }, "Restart") : null,
-        h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name, b.kind === "linked") }, "Delete"),
-      ),
-    ),
-    // Three short lines, not one dense block. The old banner was a 74-word paragraph that said
-    // everything at once and so got read as nothing: what you can do, what the agent can do,
-    // what happens to your logins, and how long you have, with no gap between them.
-    b.status === "running" ? h("div", { class: human ? "banner control" : "banner watch" },
-      ...(human
-        ? [
-            "You have control. The agent can still read this page, but every change it tries will fail until you press Return to agent.",
-            "This is the agent's own browser, with its logins live. Nothing you do here signs it out.",
-            // The lease was the fact nobody had: it is 90 seconds by default and this tab is
-            // what renews it, so closing the tab hands the keyboard back on a timer the
-            // operator had no way to know about.
-            `Your turn lasts ${leaseSeconds} seconds, and this tab keeps renewing it. Close the tab and the agent has the keyboard back.`,
-          ]
-        : [
-            "Watching only. Nothing you click or type reaches this browser.",
-            // `human` was the only thing computed, so a browser with no controller at all fell
-            // into this branch and was told an agent had it.
-            guestHolds(b)
-              ? `${guestInControl ? guestInControl.label : "A guest"} has control through a guest link. Take control to cut them off, or revoke the link under Guest links.`
-              : agentHolds
-              ? "The agent has control. Press Take control when you need the keyboard."
-              : "Nothing has control right now. Press Take control when you need the keyboard.",
-          ]
-      ).map((line) => h("p", {}, line)),
-    ) : null,
-    // Full browser streams a whole 2560-wide desktop into this box and letterboxes it to fit,
-    // so Chrome's own toolbar and tab strip are drawn at whatever fraction of their real size
-    // the stage leaves them. Give that view the sidebar's 320px and let the facts sit below it.
-    h("div", { class: surface === "desktop" ? "detail desktop" : "detail" },
-      stagewrap,
-      h("aside", { class: "side" },
+  const sideHost = h("aside", { class: "side" });
+  const renderSide = () => sideHost.replaceChildren(...[
+    ...["status", "agents", "seeds", "workers"].map(name => dataNotice(name, name === "status" ? "server settings" : name)).filter(Boolean),
+
         h("div", { class: "sub" }, "Tallylamp records who created this browser. The rows marked “Reported” come from the client and are not verified."),
         h("dl", { class: "kv" },
           h("dt", {}, "Browser ID"), h("dd", { class: "browser-id" },
             h("span", { class: "mono" }, b.id),
             h("button", { class: "btn tiny", onClick: () => copyBrowserId(b) }, "Copy browser ID")),
           h("dt", {}, "Status"), h("dd", {}, b.status),
-          h("dt", {}, "Controller"), h("dd", {}, b.control?.controllerType || "none"),
+          h("dt", {}, "Controller"), h("dd", {}, controllerName(b)),
           h("dt", {}, "Browser data"), h("dd", {}, linked ? "on its owner's computer" : b.persistent ? "kept when stopped" : "temporary · may be deleted when idle"),
           linked ? null : [h("dt", {}, "Save target"), h("dd", {}, b.savedProfileId ? (state.seeds.find(s => s.id === b.savedProfileId)?.name || b.savedProfileId) : "New saved profile")],
           h("dt", {}, "Project"), h("dd", {}, md.project || "—"),
@@ -1837,7 +1896,7 @@ async function browserView(id, seq) {
         // meaningful next to the thing they hand over.
         linked ? null : [
           h("h2", {}, "Guest links"),
-          guestSection(b, guests),
+          guestHost,
           h("h2", {}, "Loopback tunnels"),
           tunnelSection(data.tunnels),
         ],
@@ -1849,9 +1908,87 @@ async function browserView(id, seq) {
               ...data.activity.map((a) => h("li", {}, `${a.at.slice(11, 19)}  ${a.kind}`)),
             )
           : h("div", { class: "sub" }, "No tool calls recorded for this browser yet."),
+  ].flat().filter(node => node != null && node !== false));
+  renderSide();
+  detailMetadataRefresh = () => {
+    if (!sideHost.isConnected) return;
+    renderSide();
+    for (const el of document.querySelectorAll("[data-controller-label]")) el.textContent = controllerName(b);
+    const move = document.querySelector("[data-move-action]");
+    if (move) move.hidden = !canMove(b);
+    const fullButton = document.querySelector("[data-full-browser]");
+    if (fullButton) {
+      fullButton.disabled = !Boolean(b.worker ? b.worker.fullBrowser : state.status?.fullBrowser);
+      fullButton.title = fullButton.disabled ? "Full browser needs a dedicated Xvfb display on the host" : "Show Chrome’s toolbar, popups and dialogs";
+    }
+  };
+  layout([
+    h("div", { class: "top" },
+      h("div", {},
+        h("h1", {}, b.name),
+        // The "not self-reported" caveat was an abstract trust claim stranded in the header. It
+        // belongs next to the rows it is actually about, which is where it now sits.
+        h("div", { class: "sub" }, `created by ${principal(b.provenance.createdByType, b.owner.id)} via ${b.provenance.createdVia}`),
+      ),
+      h("div", { class: "row" },
+        // Stopped, Start is the one thing to do and takes the filled style; Take control has
+        // nothing to take. A lease can outlive a stop, so Return to agent stays when it applies.
+        human
+          ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
+          : ["stopped", "crashed", "queued", "moving"].includes(b.status)
+            ? null
+            : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
+        // One of Start and Stop, never both with one greyed out, and only one button filled:
+        // Save profile used to be filled white beside the takeover button and the two fought
+        // for the eye.
+        b.status === "moving"
+          ? h("button", { class: "btn", disabled: true }, "Moving…")
+          : ["stopped", "crashed"].includes(b.status)
+          ? h("button", { class: human ? "btn" : "btn human", onClick: (e) => call(`/api/v1/browsers/${id}/start`, e.currentTarget) }, "Start")
+          : h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/stop`, e.currentTarget) }, "Stop browser"),
+        h("button", { class: "btn", "data-move-action": "", hidden: !canMove(b), disabled: b.status === "moving" || b.savingProfile, onClick: () => moveBrowser(b) }, "Move to…"),
+        b.worker ? null : h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
+        !b.worker && b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
+        // Restarting a stopped browser is starting it, and Start is already here.
+        ["running", "unhealthy"].includes(b.status) ? h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/restart`, e.currentTarget) }, "Restart") : null,
+        h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name, b.kind === "linked") }, "Delete"),
       ),
     ),
+    // Three short lines, not one dense block. The old banner was a 74-word paragraph that said
+    // everything at once and so got read as nothing: what you can do, what the agent can do,
+    // what happens to your logins, and how long you have, with no gap between them.
+    b.status === "running" ? h("div", { class: human ? "banner control" : "banner watch" },
+      ...(human
+        ? [
+            "You have control. Agents with read access can still see this page, but their changes are blocked until you return control.",
+            `This browser belongs to ${principal(b.provenance.createdByType, b.owner.id)}. Taking control preserves its current sign-ins; actions on websites can change them.`,
+            // The lease was the fact nobody had: it is 90 seconds by default and this tab is
+            // what renews it, so closing the tab hands the keyboard back on a timer the
+            // operator had no way to know about.
+            `Your turn lasts ${leaseSeconds} seconds, and this tab keeps renewing it. Closing the tab lets that control turn expire.`,
+          ]
+        : [
+            "Watching only. Nothing you click or type reaches this browser.",
+            // `human` was the only thing computed, so a browser with no controller at all fell
+            // into this branch and was told an agent had it.
+            guestHolds(b)
+              ? [guestControllerLabel, " has control through a guest link. Take control to cut them off, or revoke the link under Guest links."]
+              : agentHolds
+              ? [h("span", { "data-controller-label": "" }, controllerName(b)), " has control. Press Take control when you need the keyboard."]
+              : "Nothing has control right now. Press Take control when you need the keyboard.",
+          ]
+      ).map((line) => h("p", {}, line)),
+    ) : null,
+    // Full browser streams a whole 2560-wide desktop into this box and letterboxes it to fit,
+    // so Chrome's own toolbar and tab strip are drawn at whatever fraction of their real size
+    // the stage leaves them. Give that view the sidebar's 320px and let the facts sit below it.
+    h("div", { class: surface === "desktop" ? "detail desktop" : "detail" },
+      stagewrap,
+      sideHost,
+    ),
   ]);
+  detailMetadataRefresh();
+  if (!linked) void loadGuests();
   if (b.status !== "running") {
     // It said "stopped" over a browser that was starting. No Start button of its own: the
     // filled one in the header sits directly above this at every width, and a second copy of
@@ -1871,6 +2008,13 @@ async function browserView(id, seq) {
     surface,
     onActiveTab: (tab) => { b.url = tab?.url || ""; b.title = tab?.title || ""; },
     stage,
+    panelId,
+    onControlLost: () => {
+      if (!stage.isConnected || (seq !== undefined && seq !== renderSeq)) return;
+      if (viewer) { viewer.cancel(true); viewer = null; }
+      flash("Your control turn ended.", true);
+      void render();
+    },
     tabstrip,
     urlInput,
     newTabBtn,
@@ -2052,43 +2196,55 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     observer.observe(ui.stage);
   }
 
+  let focusedTargetId = null;
   const renderTabs = () => {
-    if (!ui || !ui.tabstrip) return;
-    const kids = tabs.map((t) => {
+    if (!ui?.tabstrip) return;
+    const hadFocus = ui.tabstrip.contains(document.activeElement);
+    const wasClose = hadFocus && document.activeElement.classList.contains("tab-x");
+    if (!tabs.some(t => t.targetId === focusedTargetId)) focusedTargetId = activeTargetId || tabs[0]?.targetId;
+    const kids = tabs.map((t, index) => {
       const on = t.targetId === activeTargetId;
       const label = t.title || t.url || "New tab";
-      // Titles come from remote pages, so they are attacker-controlled: they go in as text
-      // children and never through h()'s `html`.
-      const name = h("span", { class: "tab-name" }, label);
       const wrap = h("div", {
-        // A div, because the close control nests inside it and a button inside a button is
-        // not valid HTML. That costs the keyboard affordances a button gave for free, so they
-        // are put back by hand — and only in control mode, where the tab actually does
-        // something. In watch mode it is a label, and `.tab.live` is what makes it look
-        // otherwise, so watch tabs no longer advertise a click that goes nowhere.
         class: (on ? "tab on" : "tab") + (mode === "control" ? " live" : ""),
-        role: "tab",
-        "aria-selected": on ? "true" : "false",
-        tabindex: mode === "control" ? (on ? "0" : "-1") : false,
+        id: `remote-tab-${id}-${encodeURIComponent(t.targetId)}`,
+        "data-target-id": t.targetId,
+        role: "tab", "aria-selected": String(on),
+        "aria-controls": ui.panelId,
+        "aria-disabled": mode === "control" ? false : "true",
+        tabindex: mode === "control" ? (t.targetId === focusedTargetId ? "0" : "-1") : false,
         title: t.url || label,
-      }, name);
+      }, h("span", { class: "tab-name" }, label));
       if (mode === "control") {
-        wrap.onkeydown = (e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          wrap.click();
+        wrap.onfocus = () => {
+          focusedTargetId = t.targetId;
+          for (const el of ui.tabstrip.children) el.tabIndex = el === wrap ? 0 : -1;
+        };
+        wrap.onkeydown = e => {
+          if (e.target !== wrap) return;
+          const next = e.key === "ArrowRight" ? (index + 1) % tabs.length
+            : e.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length
+            : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : null;
+          if (next !== null) {
+            e.preventDefault();
+            ui.tabstrip.children[next].focus();
+          } else if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            wrap.click();
+          }
         };
         wrap.onclick = () => {
-          if (t.targetId === activeTargetId) return;
+          focusedTargetId = t.targetId;
+          if (t.targetId === activeTargetId) { wrap.focus(); return; }
           wantTargetId = t.targetId;
           activeTargetId = t.targetId;
           renderTabs();
+          [...ui.tabstrip.children].find(el => el.dataset.targetId === t.targetId)?.focus();
           sendJson({ type: "selectTab", targetId: t.targetId });
         };
-        // Closing the last tab would take the window, and Chrome, with it.
         if (tabs.length > 1) {
-          const x = h("button", { class: "tab-x", title: "Close tab", "aria-label": `Close ${label}` }, icon(ICON_CLOSE));
-          x.onclick = (e) => {
+          const x = h("button", { class: "tab-x", onFocus: () => { focusedTargetId = t.targetId; }, title: "Close tab", "aria-label": `Close ${label}` }, icon(ICON_CLOSE));
+          x.onclick = e => {
             e.stopPropagation();
             sendJson({ type: "closeTab", targetId: t.targetId });
           };
@@ -2097,12 +2253,16 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
       }
       return wrap;
     });
-    if (ui.newTabBtn) kids.push(ui.newTabBtn);
     ui.tabstrip.replaceChildren(...kids);
-    const act = tabs.find((t) => t.targetId === activeTargetId);
-    ui.onActiveTab?.(act);
-    // Never overwrite an address the operator is part-way through typing.
-    if (ui.urlInput && document.activeElement !== ui.urlInput) ui.urlInput.value = (act && act.url) || "";
+    if (hadFocus && mode === "control") {
+      const el = kids.find(el => el.dataset.targetId === focusedTargetId);
+      (wasClose ? el?.querySelector(".tab-x") || el : el)?.focus();
+    }
+    const active = tabs.find(t => t.targetId === activeTargetId);
+    const selected = kids.find(el => el.dataset.targetId === activeTargetId);
+    if (selected && ui.stage) ui.stage.setAttribute("aria-labelledby", selected.id);
+    ui.onActiveTab?.(active);
+    if (ui.urlInput && document.activeElement !== ui.urlInput) ui.urlInput.value = active?.url || "";
   };
 
   /**
@@ -2312,6 +2472,11 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
       // The server says "lease expired" here and the old client dropped it on the floor, so
       // the bar kept claiming CONTROLLING while the agent had already resumed.
       if (msg.type === "error") {
+        if (msg.message === "lease expired" && mode === "control" && ui?.onControlLost) {
+          terminal = true;
+          ui.onControlLost();
+          return;
+        }
         fail(msg.message === "lease expired"
           ? "Your turn ran out and the agent has the browser again. Take control to carry on."
           : `The live view reported: ${msg.message}`, false);
@@ -2575,7 +2740,7 @@ async function agentsView() {
     h("td", {},
       h("button", { class: "btn", onClick: () => editPermissions(a) }, "Permissions"), " ",
       // A connector has no dashboard token to rotate; its credentials come from the grant.
-      isConnector(a) ? null : h("button", { class: "btn", onClick: () => rotate(a.id) }, "Rotate"),
+      isConnector(a) ? null : h("button", { class: "btn", onClick: () => rotate(a.id) }, "Replace token…"),
       " ",
       // Revoke cuts a live agent off. It sat next to Rotate in the same grey, and the two
       // words even start alike.
@@ -2595,7 +2760,7 @@ async function agentsView() {
         h("h1", {}, "Agents"),
         h("div", { class: "sub" }, "Agents and OAuth connectors that can drive browsers here."),
       ),
-      h("button", { class: "btn primary", onClick: createAgent }, "New agent"),
+      h("button", { class: "btn primary", disabled: !state.data.agents.loadedAt, onClick: createAgent }, "New agent"),
     ),
     // Five lines of token policy sat above the table and answered nothing anyone arrives with.
     // It is still one click away, which is where a rule you read once belongs.
@@ -2603,9 +2768,10 @@ async function agentsView() {
       h("summary", {}, "How agent tokens work"),
       h("p", {}, "You see a token once, when you create or rotate it, because the server keeps only its SHA-256 hash. Revoking stops the agent at its next request and kills its token for good."),
     ),
+    dataNotice("agents", "agents"),
     active.length
       ? table(active, "Active agents")
-      : h("p", { class: "sub" },
+      : !state.data.agents.loadedAt ? null : h("p", { class: "sub" },
           state.agents.length === 0
             ? "No agents yet. Create one to give an MCP client a token."
             : "Nothing can reach your browsers. Every agent here has been revoked."),
@@ -2626,10 +2792,13 @@ async function seedsView() {
       h("div", {}, h("h1", {}, "Saved profiles"), h("div", { class: "sub" }, "Start independent browsers with saved logins and metadata. Changes in one browser do not affect another. Update a saved profile explicitly to change future copies.")),
     ),
     h("p", { class: "sub" }, "Badges show detected or reported sign-ins, not every saved login. A missing badge does not mean a login was lost."),
-    h("table", { class: "table" },
+    dataNotice("seeds", "saved profiles"),
+    dataNotice("browsers", "profile sources"),
+    !eligibleProfileBrowsers().length && state.data.browsers.loadedAt ? h("p", { class: "sub" }, "Updating a saved profile needs a browser on this instance. Linked browsers and worker browsers cannot be profile sources.") : null,
+    h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": "Saved profiles" }, h("table", { class: "table" },
       h("thead", {}, h("tr", {}, h("th", {}, "Profile"), h("th", {}, "Recorded sites"), h("th", {}, "Saved"), h("th", {}, "Actions"))),
       h("tbody", {},
-        state.seeds.length === 0
+        state.seeds.length === 0 && state.data.seeds.loadedAt
           ? h("tr", {}, h("td", { colspan: "4", class: "sub" }, "No saved profiles yet. Open a browser, sign in to the sites you need, then choose Save profile. You do not need to stop it first."))
           : null,
         ...state.seeds.map((s) => h("tr", {},
@@ -2642,11 +2811,11 @@ async function seedsView() {
             class: "btn",
             "aria-label": `Create browser from ${s.name}`,
             onClick: () => createFromTemplate(s),
-          }, "Create browser"), " ", h("button", { class: "btn", disabled: !state.browsers.length, onClick: () => saveProfileTemplate(null, s) }, "Update saved profile"), " ",
+          }, "Create browser"), " ", h("button", { class: "btn", disabled: !eligibleProfileBrowsers().length || Boolean(state.data.browsers.error), title: "Copy logins from a browser on this instance", onClick: () => saveProfileTemplate(null, s) }, "Update saved profile"), " ",
             h("button", { class: "btn danger", "aria-label": `Delete saved profile ${s.name}`, onClick: () => deleteSavedProfile(s) }, "Delete"))),
         )),
       ),
-    ),
+    )),
   ]);
 }
 
@@ -2781,7 +2950,7 @@ async function securityView() {
   if (!state.status) {
     layout([
       h("h1", {}, "Security state"),
-      h("div", { class: "err" }, "The server did not return its security state, so none of these settings can be shown. Reload, or check the server logs."),
+      dataNotice("status", "security state"),
     ]);
     return;
   }
@@ -2792,6 +2961,7 @@ async function securityView() {
     : h("dd", { class: v ? "warn" : "" }, v ? on : off));
   layout([
     h("h1", {}, "Security state"),
+    dataNotice("status", "security state"),
     h("dl", { class: "kv" },
       h("dt", {}, "Sandbox policy"), h("dd", {}, s.sandbox ?? "unknown"),
       h("dt", {}, "GPU"), h("dd", {}, s.gpu ?? "unknown"),
@@ -2844,6 +3014,7 @@ async function workersView() {
       ),
       h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => act(addWorker) }, "Add worker")),
     ),
+    dataNotice("workers", "workers"),
     workers.length
       ? h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": "Workers" },
           h("table", { class: "table" },
@@ -2855,7 +3026,7 @@ async function workersView() {
               h("th", { scope: "col" }, "Actions"),
             )),
             h("tbody", {}, ...workers.map(row))))
-      : h("p", {}, "No workers yet. This instance runs every browser itself, within its host’s process limit. Add a worker when that limit is what stops another browser from starting."),
+      : !state.data.workers.loadedAt ? null : h("p", {}, "No workers yet. This instance runs every browser itself, within its host’s process limit. Add a worker when that limit is what stops another browser from starting."),
     h("h2", {}, "How a worker fits in"),
     h("p", {}, "A worker runs this same image with one setting, TALLYLAMP_JOIN. It has no dashboard and no agents of its own. This instance starts, drives and stops its browsers over your project’s private network, so both must be in the same Railway project and on the same release."),
     h("p", {}, "A new browser stays on this instance while it has room, and goes to a worker when it has not. To move one, choose Move to… from its ⋯ menu. A running browser stops for the copy and starts again on the new host. Everything works there as it does here, apart from saving a browser as a saved profile."),
@@ -2956,19 +3127,20 @@ async function moveBrowser(b) {
 async function createBrowser(seedId = "") {
   if (typeof seedId !== "string") seedId = "";
   let created;
-  const answers = await askFor("New browser", [
+  const pendingAnswers = askFor("New browser", [
     { name: "name", label: "Name", placeholder: "Leave blank and one will be generated", hint: "How it appears in the fleet." },
     { name: "seedId", label: "Use saved profile", value: seedId, options: [{ value: "", label: "Start fresh" }, ...state.seeds.map(s => ({ value: s.id, label: s.name }))],
       hint: "Copies every saved login and its metadata into an independent browser. Sites may ask you to sign in again." },
     { name: "project", label: "Project", kind: "project", emptyLabel: "Same as the saved profile, if any", placeholder: "Use saved profile's project, if any", hint: "Leave it and the saved profile's project is kept." },
     { name: "purpose", label: "What is it for?", placeholder: "Use saved profile's purpose, if any", maxLength: 200 },
-    ...(state.workers.length ? [{ name: "host", label: "Runs on", value: "",
+    ...(state.workers.length ? [{ name: "host", label: "Runs on", advanced: true, value: seedId ? "local" : "",
       options: [{ value: "", label: "Automatic: here while there is room" }, { value: "local", label: "This instance" },
         ...state.workers.map((w) => ({ value: w.id, label: w.online ? w.name : `${w.name} (not answering)` }))],
       hint: "A browser made from a saved profile starts on this instance, and only a browser here can be saved as a saved profile." }] : []),
-    ...proxyFields(),
+    ...proxyFields().map(f => ({ ...f, advanced: true })),
   ], "Create browser", async (values) => {
     const { name, project, purpose } = values;
+    if (values.seedId && values.host && values.host !== "local") throw new Error("Saved profiles can only start on this instance. Change Runs on to This instance.");
     created = await api("/api/v1/browsers", {
       method: "POST",
       body: {
@@ -2977,7 +3149,7 @@ async function createBrowser(seedId = "") {
         seedId: values.seedId || undefined,
         proxy: proxyFromFields(values),
         // Left out, the server decides: here while there is room, a worker when there is not.
-        ...(values.host ? { workerId: values.host === "local" ? null : values.host } : {}),
+        ...(values.seedId ? { workerId: null } : values.host ? { workerId: values.host === "local" ? null : values.host } : {}),
         metadata: {
           source: "dashboard",
           ...(project ? { project } : {}),
@@ -2986,6 +3158,37 @@ async function createBrowser(seedId = "") {
       },
     });
   });
+  const profileInput = document.querySelector('.modal [name="seedId"]');
+  const hostInput = document.querySelector('.modal [name="host"]');
+  const syncHost = () => {
+    if (!hostInput) return;
+    if (profileInput.value) hostInput.value = "local";
+    hostInput.disabled = Boolean(profileInput.value);
+  };
+  profileInput?.addEventListener("change", syncHost);
+  syncHost();
+  if (profileInput && (!state.data.seeds.loadedAt || state.data.seeds.error)) {
+    const notice = h("div", { class: "sub", role: "status" });
+    profileInput.after(notice);
+    const updateProfiles = async () => {
+      notice.textContent = "Loading saved profiles… You can still start fresh.";
+      await loadDataset("seeds");
+      if (!profileInput.isConnected) return;
+      if (state.data.seeds.error) {
+        notice.replaceChildren("Saved profiles could not be loaded. ", h("button", {
+          type: "button", class: "btn tiny", onClick: () => void updateProfiles(),
+        }, "Retry profiles"));
+      } else {
+        const selected = profileInput.value;
+        profileInput.replaceChildren(h("option", { value: "" }, "Start fresh"),
+          ...state.seeds.map(s => h("option", { value: s.id }, s.name)));
+        profileInput.value = selected;
+        notice.remove();
+      }
+    };
+    void updateProfiles();
+  }
+  const answers = await pendingAnswers;
   if (answers) go(`/browsers/${created.browser.id}`);
 }
 
@@ -3027,19 +3230,20 @@ async function editBrowser(b) {
     { name: "name", label: "Browser name", value: b.name, hint: "Changes this browser’s name and metadata, not a saved profile. The browser ID stays the same." },
     { name: "project", label: "Project", kind: "project", value: md.project || "", placeholder: "Optional" },
     { name: "purpose", label: "What is it for?", value: md.purpose || "", placeholder: "Optional", maxLength: 200 },
-  ], "Save changes");
-  if (!answers) return;
-  await act(async () => {
+  ], "Save changes", async (values) => {
     const metadata = { ...md };
-    if (answers.project) metadata.project = answers.project;
+    if (values.project) metadata.project = values.project;
     else delete metadata.project;
-    if (answers.purpose) metadata.purpose = answers.purpose;
+    if (values.purpose) metadata.purpose = values.purpose;
     else delete metadata.purpose;
     await api(`/api/v1/browsers/${b.id}`, {
       method: "PATCH",
-      body: { name: answers.name, metadata },
+      body: { name: values.name, metadata },
     });
-    flash(`Saved ${answers.name}.`);
+  });
+  if (!answers) return;
+  await act(async () => {
+    flash(`Saved ${answers.name}.`, true);
     await refresh();
     void render();
   });
@@ -3056,6 +3260,7 @@ function currentOrigin(b) {
 
 async function addSite(b) {
   const origin = currentOrigin(b);
+  let result;
   const answers = await askFor("Record signed-in site", [
     {
       name: "origin",
@@ -3065,14 +3270,15 @@ async function addSite(b) {
       hint: "Only record a site after you can see that this browser is signed in. This adds an inventory note, not a copy of its cookies or logins.",
     },
     { name: "name", label: "Service name", value: origin ? new URL(origin).hostname.replace(/^www\./, "") : "", placeholder: "Optional — defaults to the hostname" },
-  ], "Record site");
+  ], "Record site", async (values) => {
+    result = await api(`/api/v1/browsers/${b.id}/sites`, {
+      method: "POST",
+      body: { origin: values.origin, name: values.name || undefined, state: "confirmed" },
+    });
+  });
   if (!answers) return;
   await act(async () => {
-    const result = await api(`/api/v1/browsers/${b.id}/sites`, {
-      method: "POST",
-      body: { origin: answers.origin, name: answers.name || undefined, state: "confirmed" },
-    });
-    flash(`${result.site.name} recorded. Agents can now find this browser by ${new URL(result.site.origin).hostname}.`);
+    flash(`${result.site.name} recorded. Agents can now find this browser by ${new URL(result.site.origin).hostname}.`, true);
     await refresh();
     void render();
   });
@@ -3084,7 +3290,7 @@ async function setSiteState(b, site, stateName) {
       method: "POST",
       body: { origin: site.origin, name: site.name, state: stateName },
     });
-    flash(stateName === "confirmed" ? `${site.name} confirmed.` : `${site.name} marked as needing sign-in.`);
+    flash(stateName === "confirmed" ? `${site.name} confirmed.` : `${site.name} marked as needing sign-in.`, true);
     await refresh();
     void render();
   });
@@ -3093,13 +3299,26 @@ async function setSiteState(b, site, stateName) {
 async function removeSite(b, site) {
   await act(async () => {
     await api(`/api/v1/browsers/${b.id}/sites/${site.id}`, { method: "DELETE" });
-    flash(`${site.name} removed from the profile inventory. Its website session was not changed.`);
+    flash(`${site.name} removed from the profile inventory. Its website session was not changed.`, true);
     await refresh();
     void render();
   });
 }
 
+function eligibleProfileBrowsers() {
+  return state.browsers.filter((b) => b.kind !== "linked" && !b.worker);
+}
+
 async function saveProfileTemplate(b, saved = null, asNew = false) {
+  const eligible = eligibleProfileBrowsers();
+  if (b && (b.kind === "linked" || b.worker)) {
+    flash("Save a profile from a hosted browser on this instance. Linked browsers and browsers on workers cannot supply a saved profile.");
+    return;
+  }
+  if (!b && !eligible.length) {
+    flash("Create a hosted browser on this instance, or move one here from a worker, before updating a saved profile.");
+    return;
+  }
   if (b?.savedProfileId && !saved && !asNew) {
     saved = state.seeds.find(s => s.id === b.savedProfileId);
     if (!saved) { flash("The linked saved profile is unavailable. Reload to retry, or choose Save as new profile."); return; }
@@ -3107,14 +3326,18 @@ async function saveProfileTemplate(b, saved = null, asNew = false) {
   const md = saved?.metadata || b?.metadata || {};
   let result;
   const answers = await askFor(saved ? "Update saved profile" : asNew ? "Save as new profile" : "Save profile", [
-    ...(!b ? [{ name: "browserId", label: "Copy from browser", value: saved?.created_from_browser_id || "", required: true,
-      options: [{ value: "", label: "Choose a browser" }, ...state.browsers.map(browser => ({ value: browser.id, label: browser.name }))] }] : []),
+    ...(!b ? [{ name: "browserId", label: "Copy from browser", value: eligible.some(browser => browser.id === saved?.created_from_browser_id) ? saved.created_from_browser_id : "", required: true,
+      options: [{ value: "", label: "Choose a browser" }, ...eligible.map(browser => ({ value: browser.id, label: browser.name }))],
+      hint: "Only hosted browsers on this instance can provide a saved profile." }] : []),
     { name: "name", label: "Saved profile name", value: saved?.name || (asNew ? `${b?.name || "Profile"} copy`.slice(0, 80) : b?.name) || "", required: true, maxLength: 80,
       hint: saved ? "Updates the linked saved profile. Existing browsers stay unchanged. Every login in this browser is copied." : asNew ? "Creates a separate saved profile and makes it this browser's save target. The original stays unchanged." : "Copies every login into a reusable profile. Other browsers can use it immediately." },
     { name: "project", label: "Project", kind: "project", value: md.project || "" },
     { name: "purpose", label: "What is it for?", value: md.purpose || "", maxLength: 200,
       hint: "If the source is running, saving briefly pauses Chrome, then resumes it. Unsaved page edits may be lost." },
   ], saved ? "Update saved profile" : asNew ? "Save as new profile" : "Save profile", async (values) => {
+    if (!b && !eligibleProfileBrowsers().some(browser => browser.id === values.browserId)) {
+      throw new Error("Choose a hosted browser on this instance. The selected source is no longer available for saving.");
+    }
     const metadata = { ...md };
     for (const key of ["project", "purpose"]) {
       if (values[key]) metadata[key] = values[key]; else delete metadata[key];
@@ -3166,10 +3389,15 @@ async function createAgent() {
 }
 
 async function rotate(id) {
-  await act(async () => {
-    const r = await api(`/api/v1/agents/${id}/rotate`, { method: "POST" });
-    revealToken("New token", r.token, { note: "The previous token stopped working the moment this one was issued. Anything still using it is disconnected until you paste this one in." });
+  const agent = state.agents.find(a => a.id === id);
+  let result;
+  const answers = await askFor(`Replace token${agent ? ` for ${agent.name}` : ""}`, [], "Replace token", async () => {
+    result = await api(`/api/v1/agents/${id}/rotate`, { method: "POST" });
+  }, {
+    description: `The current token will stop working immediately. Any client using ${agent ? `${agent.name}’s` : "this agent’s"} token will lose access until you update it with the replacement. The new token is shown once, so copy it before closing.`,
   });
+  if (!answers || !result) return;
+  revealToken(`New token${agent ? ` for ${agent.name}` : ""}`, result.token, { note: "Update every client using the previous token. It no longer works." });
 }
 
 async function toggleAgent(a) {
@@ -3260,18 +3488,85 @@ async function destroyBrowser(id, name, linked = false) {
 }
 
 async function logout() {
-  // A failing logout used to throw into nothing and leave the operator on a page that still
-  // looked signed in. Clear locally either way — the cookie is the server's to invalidate.
+  if (state.signingOut) return;
+  state.signingOut = true;
+  const button = document.querySelector(".logout");
+  const label = button?.textContent;
+  if (button) { button.disabled = true; button.textContent = "Signing out…"; }
   try {
-    await api("/api/v1/logout", { method: "POST" });
-  } catch (e) {
-    flash(`Could not reach the server to sign out: ${e.message}`);
+    try {
+      await api("/api/v1/logout", { method: "POST" });
+    } catch (e) {
+      flash(`Sign-out failed: ${e.message}. The server has not confirmed that your session ended.`);
+      const retry = await askFor("Sign-out failed", [], "Retry sign-out", async () => {
+        await api("/api/v1/logout", { method: "POST" });
+      }, { description: "The server has not confirmed sign-out. Your session may still be active. Retry to end it; closing this dialog keeps the current page." });
+      if (!retry) return;
+    }
+    state.me = null;
+    go("/login");
+  } finally {
+    state.signingOut = false;
+    if (button) { button.disabled = false; button.textContent = label; }
   }
-  state.me = null;
-  go("/login");
 }
 
-async function refresh() {
+const DATA_PATHS = Object.fromEntries(["status", "browsers", "agents", "seeds", "requests", "workers"].map(name => [name, `/api/v1/${name}`]));
+const dataLoads = new Map();
+
+async function retryDataset(name) {
+  await loadDataset(name);
+  syncRequestBadges();
+  const current = route().name;
+  if (current === "home") paintBrowsers();
+  else if (current === "agents") void agentsView();
+  else if (current === "seeds") void seedsView();
+  else if (current === "workers") void workersView();
+  else if (current === "security") void securityView();
+  else if (current === "browser") detailMetadataRefresh?.();
+}
+
+function dataNotice(name, label, retry = () => retryDataset(name)) {
+  const data = state.data[name];
+  if (data.loading && !data.loadedAt) return h("div", { class: "data-notice sub", role: "status" }, `Loading ${label}…`);
+  if (!data.error) return null;
+  return h("div", { class: "data-notice err", role: "alert" },
+    h("div", {}, `Could not refresh ${label}. ${data.error}`),
+    data.loadedAt ? h("div", { class: "sub" }, `Showing the last successful update from ${new Date(data.loadedAt).toLocaleTimeString()}.`) : null,
+    h("button", { class: "btn", disabled: data.loading, onClick: (e) => {
+      const button = e.currentTarget;
+      button.disabled = true;
+      button.textContent = "Retrying…";
+      void act(async () => {
+        try { await retry(); }
+        finally {
+          if (button.isConnected) { button.disabled = false; button.textContent = "Retry"; }
+        }
+      });
+    } }, data.loading ? "Retrying…" : "Retry"));
+}
+
+function loadDataset(name) {
+  if (dataLoads.has(name)) return dataLoads.get(name);
+  const data = state.data[name];
+  data.loading = true;
+  const adminOnly = ["agents", "seeds", "workers"].includes(name);
+  const pending = (adminOnly && state.me?.type !== "admin" ? Promise.resolve({ [name]: [] }) : api(DATA_PATHS[name]))
+    .then(value => {
+      state[name] = name === "status" ? value : value[name];
+      if (name === "agents") {
+        state.permissions = value.permissions || [];
+        state.defaultScopes = value.defaultScopes || [];
+      }
+      data.loadedAt = new Date().toISOString();
+      data.error = "";
+    }).catch(error => { data.error = error.message; })
+    .finally(() => { data.loading = false; dataLoads.delete(name); });
+  dataLoads.set(name, pending);
+  return pending;
+}
+
+async function refresh({ onAuthenticated, onData } = {}) {
   try {
     state.me = (await api("/api/v1/me")).principal;
   } catch (e) {
@@ -3282,32 +3577,11 @@ async function refresh() {
       return false;
     }
     flash(`Cannot reach Tallylamp: ${e.message}`);
-    return true;
+    return null;
   }
-  // These are independent: one failing view must not blank the others or force a logout.
-  const [status, browsers, agents, seeds, requests, workers] = await Promise.allSettled([
-    api("/api/v1/status"),
-    api("/api/v1/browsers"),
-    state.me?.type === "admin" ? api("/api/v1/agents") : Promise.resolve({ agents: [] }),
-    state.me?.type === "admin" ? api("/api/v1/seeds") : Promise.resolve({ seeds: [] }),
-    api("/api/v1/requests"),
-    state.me?.type === "admin" ? api("/api/v1/workers") : Promise.resolve({ workers: [] }),
-  ]);
-  // Not in the failure list below: a missing worker list leaves every other page whole.
-  if (workers.status === "fulfilled") state.workers = workers.value.workers;
-  if (status.status === "fulfilled") state.status = status.value;
-  if (browsers.status === "fulfilled") state.browsers = browsers.value.browsers;
-  if (agents.status === "fulfilled") {
-    state.agents = agents.value.agents;
-    state.permissions = agents.value.permissions || [];
-    state.defaultScopes = agents.value.defaultScopes || [];
-  }
-  if (seeds.status === "fulfilled") state.seeds = seeds.value.seeds;
-  if (requests.status === "fulfilled") state.requests = requests.value.requests;
-  const failed = [
-    ["status", status], ["browsers", browsers], ["agents", agents], ["seeds", seeds],
-  ].filter(([, r]) => r.status === "rejected");
-  if (failed.length) flash(`Could not load ${failed.map(([n]) => n).join(", ")}: ${failed[0][1].reason.message}`);
+  const tasks = Object.keys(DATA_PATHS).map(name => loadDataset(name).then(() => onData?.(name)));
+  onAuthenticated?.();
+  await Promise.all(tasks);
   return true;
 }
 
@@ -3385,13 +3659,23 @@ async function pairView(code) {
   const enabled = state.agents.filter((a) => a.enabled);
   const picker = agentPicker(enabled.length === 1 ? [enabled[0].id] : [], false);
   const err = h("div", { class: "err", role: "alert" });
+  let pending = false;
+  function setPending(value, decision) {
+    pending = value;
+    form.approve.disabled = value;
+    form.deny.disabled = value;
+    form.approve.textContent = value && decision === "approve" ? "Linking…" : "Approve and link";
+    form.deny.textContent = value && decision === "deny" ? "Denying…" : "Deny";
+    if (value) form.setAttribute("aria-busy", "true");
+    else form.removeAttribute("aria-busy");
+  }
   const form = h("form", {
     class: "pair-form",
     onSubmit: async (e) => {
       e.preventDefault();
+      if (pending) return;
       err.textContent = "";
-      form.approve.disabled = true;
-      form.approve.textContent = "Linking…";
+      setPending(true, "approve");
       try {
         const chosen = picker.value();
         const out = await api(`/api/v1/links/pair/${encodeURIComponent(pairing.userCode)}/approve`, {
@@ -3404,10 +3688,8 @@ async function pairView(code) {
             nobody ? "Tick agents on its page when you want one to drive it." : "No agent can do anything there until a tab is shared."),
           h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => go("/") }, "Back to browsers")));
       } catch (ex) {
-        err.textContent = ex.message;
-        form.approve.disabled = false;
-        form.approve.textContent = "Approve and link";
-      }
+        err.textContent = `Could not link this browser: ${ex.message}. Try again.`;
+      } finally { setPending(false); }
     },
   },
     h("label", { for: "pair-name" }, "Name it"),
@@ -3418,11 +3700,18 @@ async function pairView(code) {
     h("div", { class: "row pair-actions" },
       h("button", { class: "btn primary", name: "approve", type: "submit" }, "Approve and link"),
       h("button", {
-        class: "btn secondary", type: "button",
+        class: "btn secondary", name: "deny", type: "button",
         onClick: async () => {
-          await api(`/api/v1/links/pair/${encodeURIComponent(pairing.userCode)}/deny`, { method: "POST" }).catch(() => {});
-          say(h("h1", {}, "Request denied"), h("p", { class: "sub" }, "Nothing was linked, and the extension has been told."),
-            h("div", { class: "row" }, h("button", { class: "btn secondary", onClick: () => go("/") }, "Back to browsers")));
+          if (pending) return;
+          err.textContent = "";
+          setPending(true, "deny");
+          try {
+            await api(`/api/v1/links/pair/${encodeURIComponent(pairing.userCode)}/deny`, { method: "POST" });
+            say(h("h1", {}, "Request denied"), h("p", { class: "sub" }, "Nothing was linked, and the extension has been told."),
+              h("div", { class: "row" }, h("button", { class: "btn secondary", onClick: () => go("/") }, "Back to browsers")));
+          } catch (ex) {
+            err.textContent = `Could not confirm denial: ${ex.message}. Check the code and press Deny to retry.`;
+          } finally { setPending(false); }
         },
       }, "Deny"),
     ),
@@ -3455,30 +3744,46 @@ async function render() {
   // navigated to — and then open a viewer socket for a browser they had already left.
   const seq = ++renderSeq;
   teardownViewer();
+  detailMetadataRefresh = null;
   closeMenu();
-  state.flash = "";
   const r = route();
   // Every route used to read "Tallylamp", so a row of pinned tabs was indistinguishable and
   // browser history was useless.
   document.title = r.name === "browser" ? "Browser · Tallylamp" : `${TITLES[r.name] || "Tallylamp"} · Tallylamp`;
   if (r.name === "login") return loginView();
+  layout([h("h1", {}, TITLES[r.name] || "Browser"),
+    h("div", { class: "data-notice sub", role: "status" }, "Loading your dashboard…")]);
   busy(true);
   let ok;
+  let detailStarted = false;
+  const showRoute = (name) => {
+    if (seq !== renderSeq) return;
+    syncRequestBadges();
+    if (r.name === "home") {
+      if (!name) homeView();
+      else paintBrowsers();
+    } else if (r.name === "browser") {
+      if (!detailStarted) {
+        detailStarted = true;
+        void browserView(r.id, seq);
+      } else detailMetadataRefresh?.();
+    } else if (r.name === "pair") {
+      if (!detailStarted && !state.data.agents.loading) { detailStarted = true; void pairView(r.code); }
+    } else if (r.name === "agents" && (!name || name === "agents")) void agentsView();
+    else if (r.name === "seeds" && (!name || ["seeds", "browsers"].includes(name))) void seedsView();
+    else if (r.name === "workers" && (!name || name === "workers")) void workersView();
+    else if (r.name === "security" && (!name || name === "status")) void securityView();
+  };
   try {
-    ok = await refresh();
+    ok = await refresh({ onAuthenticated: () => { startEvents(); showRoute(); }, onData: showRoute });
   } finally {
     busy(false);
   }
   if (seq !== renderSeq) return; // the operator navigated while refresh() was in flight
-  if (!ok) return loginView();
-  startEvents(); // we are authenticated by here, which is what /api/v1/events requires
-  if (r.name === "browser") return browserView(r.id, seq);
-  if (r.name === "pair") return pairView(r.code);
-  if (r.name === "agents") return agentsView();
-  if (r.name === "seeds") return seedsView();
-  if (r.name === "workers") return workersView();
-  if (r.name === "security") return securityView();
-  return homeView();
+  if (ok === false) return loginView();
+  if (ok === null) layout([h("h1", {}, "Dashboard unavailable"),
+    h("p", {}, "Your session has not been signed out. Retry when the server is available."),
+    h("button", { class: "btn primary", onClick: () => void render() }, "Retry")]);
 }
 
 window.addEventListener("popstate", () => void render());
@@ -3495,9 +3800,9 @@ function startEvents() {
   // refresh also re-requests every running browser's thumbnail.
   setInterval(async () => {
     if (route().name !== "home" || document.hidden) return;
-    try { state.status = await api("/api/v1/status"); } catch { return; }
+    await loadDataset("status");
     if (fleetCountEl) fleetCountEl.replaceChildren(fleetMeter());
-    if (requestsHost) requestsHost.replaceChildren(...[hostRefusalBanner(), requestsPanel()].filter(Boolean));
+    if (requestsHost) requestsHost.replaceChildren(...[dataNotice("status", "local capacity", () => retryDataset("status")), hostRefusalBanner(), requestsPanel()].filter(Boolean));
   }, 15_000);
   let timer = 0;
   let backoff = 1000;

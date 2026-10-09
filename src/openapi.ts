@@ -28,6 +28,16 @@ export const openApiSpec = {
   },
   paths: {
     "/status": { get: { summary: "Authenticated deployment status", responses: { "200": { description: "ok" } } } },
+    "/export": { post: {
+      summary: "Export portable instance data (admin only)",
+      description: "Stops selected managed browsers and leaves them stopped. Includes all saved profiles, agents, metadata and downloads, including workers. Source data is retained. Import offline into a new data directory with the CLI.",
+      requestBody: { content: { "application/json": { schema: { type: "object", properties: {
+        browsers: { type: "array", items: { type: "string" }, description: "Browser IDs or slugs; omitted means all." },
+        exclude: { type: "array", items: { type: "string" }, description: "Browser IDs or slugs to leave out." },
+      } } } } },
+      responses: { "200": { description: "Portable gzip tar archive", content: { "application/gzip": { schema: { type: "string", format: "binary" } } } },
+        "403": { description: "admin only" }, "409": { description: "browser operation or another export is in progress" } },
+    } },
     "/browsers": {
       get: { summary: "List browsers", responses: { "200": { description: "ok" } } },
       post: { summary: "Create a browser", requestBody: { content: { "application/json": { schema: { ...browserInput, properties: { ...browserInput.properties,

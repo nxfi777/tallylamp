@@ -1,10 +1,13 @@
 import http from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { copyFileSync, createReadStream, existsSync, linkSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, createReadStream, createWriteStream, existsSync, linkSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { lstat, mkdir, mkdtemp, rename, rm, statfs } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { unpackArchive } from "./archive.js";
 import { WebSocket } from "ws";
 import { config, downloadDir, profileDir } from "./config.js";
 import { getDb, nowIso } from "./db.js";
@@ -666,11 +669,72 @@ export class Workers {
     }
   }
 
-  /**
-   * Move a stopped browser's profile to another host: copy it, point the browser at the new
-   * host, then delete the copy left behind. In that order, so a failure part-way leaves the
-   * browser where it was, with its profile intact.
-   */
+  /** Confirm the worker stopped Chrome, including when this instance has lost its relay. */
+  async stopBrowser(id: string, workerId: string): Promise<void> {
+    await this.call(this.row(workerId), "POST", `/worker/v1/browsers/${id}/stop?export=1`, undefined, config.shutdownTimeoutMs + 10_000);
+  }
+
+  /** Copy a worker's profile AND downloads without changing placement or deleting its source. */
+  async copyForExport(row: BrowserRow, stagingDataDir: string, externalSignal?: AbortSignal): Promise<void> {
+    if (!row.worker_id) throw Err.invalid("browser is not on a worker");
+    const w = this.row(row.worker_id);
+    const problem = this.unusable(w);
+    if (problem) throw Err.browserUnavailable(problem);
+    const temp = await mkdtemp(path.join(stagingDataDir, ".worker-export-"));
+    const archive = path.join(temp, "bundle.tar.gz");
+    const unpacked = path.join(temp, "unpacked");
+    const signal = AbortSignal.any([AbortSignal.timeout(TRANSFER_TIMEOUT_MS), ...(externalSignal ? [externalSignal] : [])]);
+    try {
+      const disk = await statfs(temp);
+      const available = Math.max(0, disk.bavail * disk.bsize - 256 * 1024 ** 2);
+      const limit = Math.min(64 * 1024 ** 3, Math.floor(available / 2));
+      if (!limit) throw new Error("not enough disk space to copy the worker browser");
+      let res: Response;
+      try {
+        res = await fetch(`${w.url}/worker/v1/browsers/${row.id}/export`, {
+          headers: { authorization: `Bearer ${w.secret}` }, signal,
+        });
+      } catch (error) { throw this.unreachable(w, error); }
+      if (!res.ok || !res.body) throw this.refused(w, res.status,
+        await res.json().catch(() => ({})) as { error?: { message?: string } });
+      const present = {
+        profiles: res.headers.get("x-tallylamp-profile-present"),
+        downloads: res.headers.get("x-tallylamp-downloads-present"),
+      };
+      if (Object.values(present).some(value => value !== "true" && value !== "false")) {
+        await res.body.cancel();
+        throw new Error("worker did not report whether its profile and downloads were included; update the worker before exporting");
+      }
+      if ((row.chrome_version || row.last_activity_at) && Object.values(present).some(value => value !== "true")) {
+        await res.body.cancel();
+        throw new Error(`worker browser ${row.name} is missing its profile or downloads directory; export was aborted`);
+      }
+      let received = 0;
+      async function* bounded(body: ReadableStream<Uint8Array>) {
+        for await (const chunk of Readable.fromWeb(body as import("node:stream/web").ReadableStream)) {
+          received += chunk.length;
+          if (received > limit) throw new Error("worker export exceeds available disk space");
+          yield chunk;
+        }
+      }
+      await pipeline(Readable.from(bounded(res.body)), createWriteStream(archive, { mode: 0o600 }), { signal });
+      await mkdir(unpacked);
+      await unpackArchive({ file: archive, cwd: unpacked, roots: [`profiles/${row.id}`, `downloads/${row.id}`], maxBytes: limit }, signal);
+      for (const root of ["profiles", "downloads"] as const) {
+        const source = path.join(unpacked, root, row.id);
+        if (present[root] === "true") {
+          if (!(await lstat(source)).isDirectory()) throw new Error(`worker archive is missing its ${root} directory`);
+        } else {
+          if (existsSync(source)) throw new Error(`worker archive disagrees with its ${root} inventory`);
+          await mkdir(source, { recursive: true });
+        }
+        await mkdir(path.join(stagingDataDir, root), { recursive: true });
+        await rename(source, path.join(stagingDataDir, root, row.id));
+      }
+    } finally { await rm(temp, { recursive: true, force: true }); }
+  }
+
+  /** Copy a stopped browser to its new host before deleting the old profile. */
   async move(row: BrowserRow, to: string | null, principal: Principal, onBytes: (copied: number) => void = () => undefined): Promise<void> {
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can move a browser");
     const from = row.worker_id;

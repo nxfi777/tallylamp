@@ -58,7 +58,7 @@ describe("profile site inventory", () => {
 
   it("prefills the manual form from the viewer's active tab, not the cached URL", async () => {
     const source = readFileSync(new URL("../dashboard/app.js", import.meta.url), "utf8");
-    const functions = ["browserView", "siteAccessSection", "currentOrigin", "addSite"].map(name => {
+    const functions = ["browserView", "siteAccessSection", "controllerName", "currentOrigin", "addSite"].map(name => {
       const match = source.match(new RegExp(`^(?:async )?function ${name}\\([\\s\\S]*?^}`, "m"));
       assert.ok(match, `missing dashboard function ${name}`);
       return match[0];
@@ -66,14 +66,30 @@ describe("profile site inventory", () => {
     const browser = { id: "test", name: "Research", status: "running", url: "https://stale.example", persistent: true, metadata: {}, provenance: {}, owner: {} };
     let active: { onActiveTab: (tab: { url: string; title: string }) => void } | undefined;
     let fields: Array<{ name: string; value?: string }> = [];
+    let submitForm = true;
+    const recorded: Array<{ origin: string; name: string }> = [];
     const sandbox = {
       browser, URL, document: {}, state: { status: {} },
-      api: async () => ({ browser }),
-      h: (_tag: string, attrs: object, ...children: unknown[]) => ({ attrs, children, append() {}, replaceChildren() {}, classList: { add() {} } }),
+      api: async (url: string, options?: { body: { origin: string; name: string } }) => {
+        if (url.endsWith("/sites") && options) {
+          recorded.push(options.body);
+          return { site: options.body };
+        }
+        return { browser };
+      },
+      h: (_tag: string, attrs: object, ...children: unknown[]) => ({ attrs, children, append() {}, replaceChildren() {}, setAttribute() {}, classList: { add() {} } }),
       principal: () => "Test", layout() {}, icon() {}, settingsSection: () => [], tunnelSection() {}, guestSection() {}, guestHolds: () => false, canMove: () => false,
+      dataNotice: () => null,
       ICON_BACK: [], ICON_FORWARD: [], ICON_RELOAD: [], ICON_FULLSCREEN: [], ICON_PLUS: [],
       connectViewer: (...args: unknown[]) => { active = args[5] as typeof active; },
-      askFor: async (_title: string, values: typeof fields) => { fields = values; return null; },
+      askFor: async (_title: string, shown: typeof fields, _label: string, submit: (values: unknown) => Promise<void>) => {
+        fields = shown;
+        if (!submitForm) return null;
+        const values = Object.fromEntries(fields.map(field => [field.name, field.value || ""]));
+        await submit(values);
+        return values;
+      },
+      act: (fn: () => Promise<void>) => fn(), flash() {}, refresh: async () => {}, render() {},
     };
     await runInNewContext(`${functions}\n(async () => { await browserView('test'); })()`, sandbox);
     assert.ok(active);
@@ -81,21 +97,26 @@ describe("profile site inventory", () => {
     await runInNewContext(`${functions}\naddSite(browser)`, sandbox);
     assert.equal(fields.find(field => field.name === "origin")?.value, "https://mobbin.com");
     assert.equal(fields.find(field => field.name === "name")?.value, "mobbin.com");
+    assert.equal(recorded[0].origin, "https://mobbin.com", "the inline save submits the viewer's current origin");
+    assert.equal(recorded[0].name, "mobbin.com");
+    submitForm = false;
     active.onActiveTab({ url: "about:blank", title: "" });
     await runInNewContext(`${functions}\naddSite(browser)`, sandbox);
     assert.equal(fields.find(field => field.name === "origin")?.value, "");
+    assert.equal(recorded.length, 1, "cancelling the blank form sends no request");
   });
 
   it("dashboard Save updates the linked ID; Save as new explicitly posts a separate profile", async () => {
     const source = readFileSync(new URL("../dashboard/app.js", import.meta.url), "utf8");
-    const code = source.match(/^async function saveProfileTemplate\([\s\S]*?^}/m)![0];
+    const code = ["eligibleProfileBrowsers", "saveProfileTemplate"].map(name =>
+      source.match(new RegExp(`^(?:async )?function ${name}\\([\\s\\S]*?^}`, "m"))![0]).join("\n");
     const calls: Array<{ url: string; method: string; body: { name: string; metadata: unknown } }> = [];
     let message = "";
     let cancelledWith: unknown = "not cancelled";
-    const browser = { id: "browser", name: "Renamed browser", savedProfileId: "linked-id", metadata: { project: "Browser metadata" } };
+    const browser = { id: "browser", name: "Renamed browser", kind: "managed", worker: null, savedProfileId: "linked-id", metadata: { project: "Browser metadata" } };
     const sandbox = { browser,
       viewer: { cancel: (keepControl: unknown) => { cancelledWith = keepControl; } } as { cancel: (keepControl: unknown) => void } | null,
-      state: { seeds: [{ id: "linked-id", name: "Original saved name", metadata: { project: "Saved metadata" } }] },
+      state: { browsers: [browser], seeds: [{ id: "linked-id", name: "Original saved name", metadata: { project: "Saved metadata" } }] },
       askFor: async (_title: string, fields: Array<{ name: string; value?: string }>, _label: string, submit: (values: unknown) => Promise<void>) => {
         const values = Object.fromEntries(fields.map(field => [field.name, field.value || ""]));
         await submit(values); return values;

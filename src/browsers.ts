@@ -121,12 +121,51 @@ export class BrowserManager {
   private unhealthy = new Map<string, { reason: string; since: string }>();
   /** Browsers whose profile is being copied to another host (moveTo). */
   private moving = new Set<string>();
+  private exporting = new Set<string>();
+  private exportActive = false;
+  private stopping = new Map<string, Promise<void>>();
+  private deleting = new Set<string>();
+  private reaping = false;
   /** Where each of those is going and how far along it is, for the dashboard. */
   private movingNow = new Map<string, { to: string; phase: string; copied: number }>();
   private abortedNavs = new Map<string, { count: number; hosts: Set<string> }>();
   private notices = new Map<string, Notice[]>();
   private noticeSeq = 0;
   shuttingDown = false;
+  get transferInProgress(): boolean { return this.exportActive; }
+
+  private assertNoExport(): void {
+    if (this.exportActive) throw Err.browserUnavailable("an instance export is in progress; retry when it finishes");
+  }
+
+  /** Freeze profile writers before copying. Export deliberately leaves selected browsers stopped. */
+  async withExport<T>(ids: string[], callback: () => Promise<T>): Promise<T> {
+    this.assertNoExport();
+    if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
+    if (this.starting.size || this.profileSaves.size || this.savingSeeds.size || this.moving.size ||
+        this.stopping.size || this.deleting.size || this.unhealthy.size || this.snapshotCleanup.size || this.reaping) {
+      throw Err.browserUnavailable("browsers or saved profiles are busy; retry export when their current operations finish");
+    }
+    const selected = [...new Set(ids)].map(id => this.row(id)).filter(row => row.kind === "managed");
+    this.exportActive = true;
+    for (const row of selected) this.exporting.add(row.id);
+    try {
+      for (const row of selected) {
+        const runtime = this.runtimes.get(row.id);
+        await this.stopInternal(row.id);
+        // A lost relay is not evidence that Chrome on the worker has exited.
+        if (row.worker_id) await this.workers.stopBrowser(row.id, row.worker_id);
+        if (runtime && !row.worker_id && !config.fakeChrome &&
+            (runtime.chrome.signalCode !== null || runtime.chrome.exitCode !== 0)) {
+          throw Err.browserUnavailable(`Chrome for ${row.name} did not close cleanly; no export was created`);
+        }
+      }
+      return await callback();
+    } finally {
+      this.exporting.clear();
+      this.exportActive = false;
+    }
+  }
   readonly capacity: Capacity;
   readonly workers: Workers;
 
@@ -247,6 +286,7 @@ export class BrowserManager {
    * a live login.
    */
   setLendable(id: string, lendable: boolean, principal: Principal): BrowserRow {
+    this.assertNoExport();
     const row = this.row(id);
     // Auto-lending hands a profile over because its owner went quiet. That is a judgement an
     // operator can make about a Chrome in a container, never about somebody's own browser.
@@ -268,6 +308,17 @@ export class BrowserManager {
 
   runningCount(): number {
     return this.runtimes.size;
+  }
+
+  /** The same local slots the fleet cap counts, including starts and profile-save resumes. */
+  private occupiedSlotIds(): Set<string> {
+    const occupied = new Set([...this.runtimes.keys(), ...this.starting.keys(), ...this.resumeReservations]);
+    for (const id of occupied) if (this.offHost(id)) occupied.delete(id);
+    return occupied;
+  }
+
+  occupiedSlotCount(): number {
+    return this.occupiedSlotIds().size;
   }
 
   runtime(id: string): ChromeRuntime | undefined {
@@ -292,7 +343,7 @@ export class BrowserManager {
 
   /** Mid-start, mid-save or mid-restart: not something to stop underneath. */
   busy(id: string): boolean {
-    return this.starting.has(id) || this.profileSaves.has(id) || this.unhealthy.has(id) || this.moving.has(id);
+    return this.starting.has(id) || this.profileSaves.has(id) || this.unhealthy.has(id) || this.moving.has(id) || this.exporting.has(id);
   }
 
   /**
@@ -322,6 +373,7 @@ export class BrowserManager {
    * stop somebody else's, so an agent must not be able to pin its own.
    */
   setPinned(id: string, pinned: boolean, principal: Principal): BrowserRow {
+    this.assertNoExport();
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can pin a browser");
     if (pinned) this.assertManaged(id, "pinning");
     getDb().prepare(`UPDATE browsers SET pinned = ? WHERE id = ?`).run(pinned ? 1 : 0, id);
@@ -340,6 +392,7 @@ export class BrowserManager {
    * browser's start was counting on.
    */
   resetThreads(id: string, principal: Principal): BrowserRow {
+    this.assertNoExport();
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can reset a browser's thread counts");
     this.assertManaged(id, "resetting thread counts");
     const row = this.row(id);
@@ -377,6 +430,7 @@ export class BrowserManager {
    * tabs back on the next start, which is why this stops rather than closing tabs.
    */
   async shedStop(id: string, threads: number, idle: boolean, why: string): Promise<void> {
+    if (this.exporting.has(id)) return;
     const row = this.row(id);
     const clock = new Date().toISOString().slice(11, 19);
     const what = idle ? `after ${Math.round(this.idleFor(id) / 60_000)} idle minutes` : "while it was in use";
@@ -618,6 +672,7 @@ export class BrowserManager {
     /** Where it runs: a worker's id, null for this instance, undefined to let placement decide. */
     workerId?: string | null;
   }): BrowserRow {
+    this.assertNoExport();
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     const proxy = parseBrowserProxy(input.proxy);
     let workerId: string | null;
@@ -727,6 +782,7 @@ export class BrowserManager {
    * string there is one refactor away from an rm -rf on the wrong path.
    */
   createLinked(input: { approvedBy: Principal; name: string }): BrowserRow {
+    this.assertNoExport();
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     const id = randomBytes(8).toString("hex");
     const name = input.name.trim().slice(0, 80) || `linked-${id.slice(0, 6)}`;
@@ -799,6 +855,7 @@ export class BrowserManager {
    * Only the administrator: it decides which container a signed-in profile sits in.
    */
   async moveTo(id: string, workerId: string | null, principal: Principal): Promise<BrowserRow & { restarted: boolean }> {
+    this.assertNoExport();
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can move a browser");
     const row = this.row(id);
     this.assertManaged(id, "moving");
@@ -889,6 +946,7 @@ export class BrowserManager {
   }
 
   private async ensureRunningInternal(id: string): Promise<ChromeRuntime> {
+    if (this.exporting.has(id)) throw Err.browserUnavailable("this browser is being exported; retry when export finishes");
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     if (this.moving.has(id)) throw Err.browserUnavailable("this browser is being moved to another host; retry when that finishes");
     const existing = this.runtimes.get(id);
@@ -899,14 +957,12 @@ export class BrowserManager {
     // launchChrome has resolved (startupTimeoutMs is 45s), and the check above runs
     // synchronously, so N concurrent calls for N distinct ids all read a size below the cap
     // and all launched. Counting the in-flight starts is what makes the number mean anything.
-    // Between runtimes.set() and the finally below an id sits in both maps, so the cap is
-    // briefly one stricter than asked -- the safe direction to be wrong in.
-    const occupied = new Set([...this.runtimes.keys(), ...this.starting.keys(), ...this.resumeReservations]);
+    // A browser can briefly sit in both maps; the union counts its slot only once.
+    const occupied = this.occupiedSlotIds();
     // The cap is a memory budget for Chromes on this host. A linked browser runs on somebody
     // else's machine, and a worker's on the worker: each costs a listener here, so it neither
     // counts nor is refused.
     const linked = this.offHost(id);
-    for (const other of occupied) if (other !== id && this.offHost(other)) occupied.delete(other);
     const cap = config.maxBrowsers;
     if (cap !== null && !linked && occupied.size >= cap && !occupied.has(id)) {
       throw Err.fleetFull(`fleet is full (max ${cap})`);
@@ -1042,11 +1098,21 @@ export class BrowserManager {
   }
 
   async stop(id: string): Promise<void> {
+    if (this.exporting.has(id)) throw Err.browserUnavailable("this browser is being exported; retry when export finishes");
     if (this.profileSaves.has(id)) throw Err.browserUnavailable("profile is being saved; retry when saving finishes");
     return this.stopInternal(id);
   }
 
   private async stopInternal(id: string): Promise<void> {
+    const pending = this.stopping.get(id);
+    if (pending) return pending;
+    const work = this.performStop(id);
+    this.stopping.set(id, work);
+    try { await work; }
+    finally { this.stopping.delete(id); }
+  }
+
+  private async performStop(id: string): Promise<void> {
     const rt = this.runtimes.get(id);
     this.setStatus(id, "stopping");
     if (rt) {
@@ -1080,6 +1146,13 @@ export class BrowserManager {
   }
 
   async destroy(id: string, principal: Principal): Promise<void> {
+    this.assertNoExport();
+    this.deleting.add(id);
+    try { await this.performDestroy(id, principal); }
+    finally { this.deleting.delete(id); }
+  }
+
+  private async performDestroy(id: string, principal: Principal): Promise<void> {
     const row = this.row(id);
     this.assertAccess(principal, row, "delete");
     await this.stop(id);
@@ -1134,6 +1207,7 @@ export class BrowserManager {
   }
 
   updateProxy(id: string, input: unknown, principal: Principal): BrowserRow {
+    this.assertNoExport();
     const row = this.row(id);
     this.assertManaged(id, "a proxy");
     this.assertAccess(principal, row, "control");
@@ -1162,6 +1236,7 @@ export class BrowserManager {
   }
 
   updateExtensions(id: string, enabled: boolean, principal: Principal): BrowserRow {
+    this.assertNoExport();
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can enable extensions");
     const row = this.row(id);
     if (enabled) this.assertManaged(id, "installing extensions");
@@ -1181,6 +1256,7 @@ export class BrowserManager {
   }
 
   updateAgentDesktop(id: string, enabled: boolean, principal: Principal): BrowserRow {
+    this.assertNoExport();
     if (principal.type !== "admin") throw Err.unauthorized("only the administrator can grant native browser access");
     const row = this.row(id);
     if (enabled) this.assertManaged(id, "native desktop access");
@@ -1193,6 +1269,7 @@ export class BrowserManager {
   }
 
   updateMetadata(id: string, metadata: unknown, principal: Principal): BrowserRow {
+    this.assertNoExport();
     const row = this.row(id);
     if (principal.type !== "admin") {
       this.assertAccess(principal, row, "control");
@@ -1213,6 +1290,7 @@ export class BrowserManager {
   }
 
   updateName(id: string, input: unknown, principal: Principal): BrowserRow {
+    this.assertNoExport();
     const row = this.row(id);
     if (principal.type !== "admin") {
       // A lending grant permits driving the browser, not rewriting the owner's profile
@@ -1510,6 +1588,13 @@ export class BrowserManager {
   }
 
   async reapIdle(): Promise<void> {
+    if (this.exportActive || this.reaping) return;
+    this.reaping = true;
+    try { await this.performReapIdle(); }
+    finally { this.reaping = false; }
+  }
+
+  private async performReapIdle(): Promise<void> {
     await this.cleanupDeletedProfiles();
     const now = Date.now();
     for (const [id, rt] of this.runtimes) {
@@ -1584,6 +1669,7 @@ export class BrowserManager {
 
   async snapshotSeed(browserId: string, name: string, principal: Principal,
     options: { seedId?: string; metadata?: unknown } = {}): Promise<SavedProfileResult> {
+    this.assertNoExport();
     this.assertManaged(browserId, "saving a profile");
     this.assertLocal(browserId, "Saving a profile");
     // Publishing makes every login reusable. A loan grants driving, never export.
@@ -1692,6 +1778,7 @@ export class BrowserManager {
   }
 
   async deleteSeed(id: string, confirmName: unknown, principal: Principal) {
+    this.assertNoExport();
     if (principal.type !== "admin") throw Err.unauthorized("only an administrator can delete shared saved profiles");
     const seed = getDb().prepare(`SELECT name, path FROM seeds WHERE id = ?`).get(id) as { name: string; path: string } | undefined;
     if (!seed) throw Err.notFound("saved profile not found");
@@ -1732,6 +1819,7 @@ export class BrowserManager {
   }
 
   private assertSeedInventoryEditable(id: string, principal: Principal): void {
+    this.assertNoExport();
     // A shared profile's inventory is how every other agent decides which logins it can reach.
     // seed:write is permission to publish a browser you own, not to relabel someone else's.
     if (principal.type !== "admin") throw Err.unauthorized("only an administrator can edit a shared saved profile's recorded sites");
@@ -1750,6 +1838,7 @@ export class BrowserManager {
   }
 
   async cleanupDeletedProfiles(id?: string): Promise<void> {
+    if (this.exportActive) return;
     const jobs = getDb().prepare(`SELECT id, path FROM deleted_profile_snapshots ${id ? "WHERE id = ?" : ""} LIMIT 5`).all(...(id ? [id] : [])) as Array<{ id: string; path: string }>;
     for (const job of jobs) {
       if (this.snapshotCleanup.has(job.id)) continue;

@@ -1,0 +1,304 @@
+{
+  "verifiedAt": "2026-10-07",
+  "fixture": "Synthetic local API, no production sessions or profiles",
+  "matrix": [
+    {
+      "route": "/",
+      "width": 375,
+      "scroll": 375,
+      "heading": "Browsers",
+      "navHeight": 59,
+      "tables": [],
+      "cardHeight": 349,
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/agents",
+      "width": 375,
+      "scroll": 375,
+      "heading": "Agents",
+      "navHeight": 59,
+      "tables": [
+        {
+          "width": 347,
+          "scrollWidth": 620
+        },
+        {
+          "width": 347,
+          "scrollWidth": 620
+        }
+      ],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/seeds",
+      "width": 375,
+      "scroll": 375,
+      "heading": "Saved profiles",
+      "navHeight": 59,
+      "tables": [
+        {
+          "width": 347,
+          "scrollWidth": 620
+        }
+      ],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/workers",
+      "width": 375,
+      "scroll": 375,
+      "heading": "Workers",
+      "navHeight": 59,
+      "tables": [
+        {
+          "width": 347,
+          "scrollWidth": 620
+        }
+      ],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/security",
+      "width": 375,
+      "scroll": 375,
+      "heading": "Security state",
+      "navHeight": 59,
+      "tables": [],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/browsers/browser-1",
+      "width": 375,
+      "scroll": 375,
+      "heading": "Research · Main",
+      "navHeight": 59,
+      "tables": [],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/",
+      "width": 768,
+      "scroll": 753,
+      "heading": "Browsers",
+      "navHeight": 59,
+      "tables": [],
+      "cardHeight": 475,
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/agents",
+      "width": 768,
+      "scroll": 768,
+      "heading": "Agents",
+      "navHeight": 59,
+      "tables": [
+        {
+          "width": 740,
+          "scrollWidth": 740
+        },
+        {
+          "width": 740,
+          "scrollWidth": 740
+        }
+      ],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/seeds",
+      "width": 768,
+      "scroll": 768,
+      "heading": "Saved profiles",
+      "navHeight": 59,
+      "tables": [
+        {
+          "width": 740,
+          "scrollWidth": 740
+        }
+      ],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/workers",
+      "width": 768,
+      "scroll": 768,
+      "heading": "Workers",
+      "navHeight": 59,
+      "tables": [
+        {
+          "width": 740,
+          "scrollWidth": 740
+        }
+      ],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/security",
+      "width": 768,
+      "scroll": 768,
+      "heading": "Security state",
+      "navHeight": 59,
+      "tables": [],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/browsers/browser-1",
+      "width": 768,
+      "scroll": 753,
+      "heading": "Research · Main",
+      "navHeight": 59,
+      "tables": [],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/",
+      "width": 1440,
+      "scroll": 1440,
+      "heading": "Browsers",
+      "navHeight": 900,
+      "tables": [],
+      "cardHeight": 417,
+      "smallButtons": 26,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/agents",
+      "width": 1440,
+      "scroll": 1440,
+      "heading": "Agents",
+      "navHeight": 900,
+      "tables": [
+        {
+          "width": 1178,
+          "scrollWidth": 1178
+        },
+        {
+          "width": 1178,
+          "scrollWidth": 1178
+        }
+      ],
+      "smallButtons": 9,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/seeds",
+      "width": 1440,
+      "scroll": 1440,
+      "heading": "Saved profiles",
+      "navHeight": 900,
+      "tables": [
+        {
+          "width": 1178,
+          "scrollWidth": 1178
+        }
+      ],
+      "smallButtons": 4,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/workers",
+      "width": 1440,
+      "scroll": 1440,
+      "heading": "Workers",
+      "navHeight": 900,
+      "tables": [
+        {
+          "width": 1178,
+          "scrollWidth": 1178
+        }
+      ],
+      "smallButtons": 3,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/security",
+      "width": 1440,
+      "scroll": 1440,
+      "heading": "Security state",
+      "navHeight": 900,
+      "tables": [],
+      "smallButtons": 0,
+      "errors": [],
+      "straySidebarText": []
+    },
+    {
+      "route": "/browsers/browser-1",
+      "width": 1440,
+      "scroll": 1440,
+      "heading": "Research · Main",
+      "navHeight": 900,
+      "tables": [],
+      "smallButtons": 27,
+      "errors": [],
+      "straySidebarText": []
+    }
+  ],
+  "checks": {
+    "pendingEscape": "Creation stayed open and disabled Cancel until committed; then opened created browser",
+    "token": "Escape retained one-time token dialog; Done required",
+    "failedEdit": "Name remained entered; Save and Cancel available for retry",
+    "failedLogout": "Kept current route, showed sign-out uncertainty and Retry",
+    "failedPairing": "Kept code and retry controls; no false denied success",
+    "leaseExpiry": "Removed Return to agent, restored Take control, showed current controller and watch mode",
+    "guestFailure": "Viewer remained available, local error and Retry guest links, no false empty",
+    "partialData": "Request badge showed ! and access-request/worker error notices",
+    "staleSecurity": "Last-successful timestamp, warning and Retry above retained facts",
+    "keyboardTabs": "ArrowRight focused next tab without selecting; Enter selected it; Enter on close sent only closeTab",
+    "capacity": "occupiedSlots uses exact server local reservation union; tested without double counting or off-host slots",
+    "darkSuccessContrast": 8.041875455895532
+  },
+  "validation": {
+    "build": "npm run build passed",
+    "suite": {
+      "tests": 420,
+      "pass": 420,
+      "fail": 0
+    },
+    "finalFocused": {
+      "tests": 33,
+      "pass": 33,
+      "fail": 0
+    },
+    "lighthouse": {
+      "fleetDesktopAccessibility": 100,
+      "fleetMobileAccessibility": 100,
+      "detailDesktopAccessibility": 100,
+      "detailMobileDarkSuccessAccessibility": 100
+    },
+    "performance": {
+      "cpuSlowdown": 4,
+      "network": "Fast 4G",
+      "lcpMs": 1332,
+      "cls": 0.05,
+      "context": "Synthetic local fixture; not production performance or a controlled statistically significant before/after comparison"
+    }
+  }
+}

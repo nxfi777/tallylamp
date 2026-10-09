@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
+import { packArchive } from "./archive.js";
 import { WebSocketServer } from "ws";
 import { setTimeout as sleep } from "node:timers/promises";
 import { config } from "./config.js";
@@ -141,6 +142,9 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   let identity: Identity | null = null;
   const running = new Map<string, Entry>();
   const starting = new Map<string, { need: number; promise: Promise<Entry> }>();
+  const stopping = new Map<string, Promise<void>>();
+  const uncleanStops = new Set<string>();
+  const exporting = new Set<string>();
   const bridges = new Map<string, ReturnType<typeof acceptLinkedBridge>>();
   let closing = false;
   // Reserve the part of a starting bridge that has not appeared in the cgroup count yet.
@@ -158,7 +162,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   const dialTunnel = async (id: string, host: string, port: number) =>
     hostLooksPrivate(host) ? (await tunnels.get(id)?.open(host, port)) ?? null : null;
 
-  const drop = async (id: string): Promise<void> => {
+  const performDrop = async (id: string): Promise<void> => {
     tunnels.get(id)?.shutdown("browser stopped");
     tunnels.delete(id);
     rmSync(uploadStaging(id), { recursive: true, force: true });
@@ -167,13 +171,28 @@ export async function startWorker(opts: WorkerOptions): Promise<{
     running.delete(id);
     try {
       if (e.closeFake) await e.closeFake();
-      else await stopRuntime(e.rt);
+      else {
+        try { await stopRuntime(e.rt); }
+        catch (error) { uncleanStops.add(id); throw error; }
+        if (e.rt.chrome.signalCode !== null || e.rt.chrome.exitCode !== 0) uncleanStops.add(id);
+      }
     } finally {
       await e.proxy?.close().catch(() => undefined);
     }
   };
 
+  const drop = async (id: string): Promise<void> => {
+    const pending = stopping.get(id);
+    if (pending) return pending;
+    const work = performDrop(id);
+    stopping.set(id, work);
+    try { await work; }
+    finally { stopping.delete(id); }
+  };
+
   const start = async (id: string, body: WorkerStartRequest): Promise<Entry> => {
+    if (exporting.has(id)) throw new Refused(409, "browser_unavailable", "this browser is being exported", true);
+    uncleanStops.delete(id);
     const existing = running.get(id);
     if (existing && existing.rt.chrome.exitCode === null) return existing;
     if (existing) await drop(id);
@@ -303,12 +322,18 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   }));
 
   app.post("/worker/v1/browsers/:id/stop", route(async (req, res) => {
-    await drop(browserId(req));
+    const id = browserId(req);
+    if (exporting.has(id)) throw new Refused(409, "browser_unavailable", "this browser is being exported", true);
+    await drop(id);
+    if (req.query.export === "1" && uncleanStops.has(id)) {
+      throw new Refused(409, "browser_unavailable", "Chrome did not close cleanly; retry export after starting and stopping this browser", true);
+    }
     res.json({ stopped: true });
   }));
 
   app.delete("/worker/v1/browsers/:id", route(async (req, res) => {
     const id = browserId(req);
+    if (exporting.has(id)) throw new Refused(409, "browser_unavailable", "this browser is being exported", true);
     await drop(id);
     rmSync(path.join(profiles, id), { recursive: true, force: true });
     rmSync(path.join(downloads, id), { recursive: true, force: true });
@@ -318,8 +343,28 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   // A profile leaves or arrives as a tar stream, and only while its browser is stopped: Chrome
   // holds the files open and half-written otherwise.
   const assertStopped = (id: string) => {
-    if (running.has(id) || starting.has(id)) throw new Refused(409, "browser_unavailable", "stop the browser before moving its profile", true);
+    if (running.has(id) || starting.has(id) || stopping.has(id) || exporting.has(id)) throw new Refused(409, "browser_unavailable", "stop the browser before moving its profile", true);
   };
+  app.get("/worker/v1/browsers/:id/export", route(async (req, res) => {
+    const id = browserId(req);
+    assertStopped(id);
+    if (uncleanStops.has(id)) throw new Refused(409, "browser_unavailable", "Chrome did not close cleanly; no profile export was created", true);
+    const profilePresent = existsSync(path.join(profiles, id));
+    const downloadsPresent = existsSync(path.join(downloads, id));
+    exporting.add(id);
+    res.setHeader("Content-Type", "application/gzip");
+    res.setHeader("X-Tallylamp-Profile-Present", String(profilePresent));
+    res.setHeader("X-Tallylamp-Downloads-Present", String(downloadsPresent));
+    const entries = [profilePresent ? `profiles/${id}` : null, downloadsPresent ? `downloads/${id}` : null]
+      .filter((entry): entry is string => entry !== null);
+    const abort = new AbortController();
+    const disconnected = () => { if (!res.writableFinished) abort.abort(new Error("worker export disconnected")); };
+    res.once("close", disconnected);
+    try {
+      await packArchive({ root: opts.dataDir, sources: entries.map(source => ({ source, target: source })) }, res,
+        AbortSignal.any([abort.signal, AbortSignal.timeout(30 * 60_000)]));
+    } finally { res.off("close", disconnected); exporting.delete(id); }
+  }));
   app.get("/worker/v1/browsers/:id/profile", route((req, res) => {
     const id = browserId(req);
     assertStopped(id);
@@ -441,6 +486,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   }));
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (res.headersSent || res.destroyed) { res.destroy(err as Error); return; }
     if (err instanceof Refused) {
       res.status(err.status).json({ error: { code: err.code, message: err.message, retryable: err.retryable } });
       return;

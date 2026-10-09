@@ -56,11 +56,12 @@ function escapeHtml(s: string): string {
  * that has already been matched against the client's registration: an unvalidated value
  * here would let a caller name its own origin as a form-action destination.
  */
-function secureHeaders(res: Response, formAction?: string): void {
+function secureHeaders(res: Response, formAction?: string, allowConsentScript = false): void {
   const extra = formAction ? ` ${originOf(formAction)}` : "";
+  const script = allowConsentScript ? ` script-src 'sha256-${CONSENT_SCRIPT_HASH}';` : "";
   res.setHeader(
     "Content-Security-Policy",
-    `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${extra}; base-uri 'none'; frame-ancestors 'none'`,
+    `default-src 'none';${script} style-src 'unsafe-inline'; form-action 'self'${extra}; base-uri 'none'; frame-ancestors 'none'`,
   );
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -433,16 +434,43 @@ function consentTokenValid(expected: string, supplied: string): boolean {
  */
 const BASE_SCOPES = AGENT_SCOPES.filter((s) => !OPT_IN_SCOPES.some((o) => o.scope === s));
 
+// Keep this script static so the consent page can allow only its exact hash in CSP.
+const CONSENT_SCRIPT = `
+(() => {
+  const all = document.getElementById('select-all-scopes');
+  const scopes = document.querySelectorAll('#optional-scopes input[name="grant_scope"]');
+  const sync = () => {
+    const selected = Array.from(scopes).filter((scope) => scope.checked).length;
+    all.checked = selected === scopes.length;
+    all.indeterminate = selected > 0 && selected < scopes.length;
+  };
+  all.addEventListener('change', () => {
+    scopes.forEach((scope) => { scope.checked = all.checked; });
+    sync();
+  });
+  scopes.forEach((scope) => scope.addEventListener('change', sync));
+  all.form.addEventListener('reset', () => queueMicrotask(sync));
+  window.addEventListener('pageshow', sync);
+  sync();
+  all.closest('label').hidden = false;
+})();
+`;
+const CONSENT_SCRIPT_HASH = createHash("sha256").update(CONSENT_SCRIPT).digest("base64");
+
 const PAGE_CSS = `
   body { margin:0; min-height:100vh; display:grid; place-items:center; background:#0c1014; color:#fdffff;
     font-family:"IBM Plex Sans", system-ui, sans-serif; }
-  .box { width:min(480px,92vw); background:#161d24; border:1px solid #2a3540; border-radius:12px; padding:1.6rem; }
+  .box { box-sizing:border-box; width:min(534px,calc(100% - 2rem)); background:#161d24; border:1px solid #2a3540; border-radius:12px; padding:1.6rem; }
   h1 { font-size:1.2rem; margin:0 0 .6rem; }
   p { color:#93a0ab; font-size:.9rem; line-height:1.5; }
   dl { margin:1rem 0; font-size:.9rem; }
   dt { color:#93a0ab; font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; margin-top:.7rem; }
   dd { margin:.15rem 0 0; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; word-break:break-all; }
-  ul.scopes { list-style:none; padding:0; margin:.4rem 0 0; font-size:.86rem; }
+  .scopes-heading { display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-wrap:wrap; }
+  .select-all { min-height:44px; gap:.6rem; color:#fdffff; font-size:.84rem; text-transform:none; letter-spacing:normal; cursor:pointer; }
+  .select-all:not([hidden]) { display:inline-flex; align-items:center; }
+  .select-all input { width:1.05rem; height:1.05rem; margin:0; accent-color:#177abf; }
+  ul.scopes { list-style:none; padding:0; margin:.4rem 0 0; font-size:.86rem; word-break:normal; overflow-wrap:anywhere; }
   ul.scopes li { display:grid; grid-template-columns:auto 1fr; gap:.1rem .6rem; padding:.5rem 0; }
   ul.scopes input[type=checkbox] { width:1.05rem; height:1.05rem; margin:.15rem 0 0; accent-color:#177abf; }
   ul.scopes label { font-weight:500; cursor:pointer; }
@@ -556,8 +584,10 @@ function consentPage(opts: {
     ${hidden}
     <input type="hidden" name="consent" value="${escapeHtml(opts.consent)}">
     <dl>
-      <dt>Also allow it to</dt>
-      <dd><ul class="scopes">
+      <dt class="scopes-heading"><span>Also allow it to</span>
+        <label class="select-all" hidden><input type="checkbox" id="select-all-scopes" aria-controls="optional-scopes">Select all</label>
+      </dt>
+      <dd><ul class="scopes" id="optional-scopes">
       ${sensitive}
       </ul>
       <details class="base">
@@ -579,7 +609,8 @@ function consentPage(opts: {
       <button class="deny" type="submit" name="action" value="deny">Deny</button>
       <button class="approve" type="submit" name="action" value="approve">Approve</button>
     </div>
-  </form>`,
+  </form>
+  <script>${CONSENT_SCRIPT}</script>`,
   );
 }
 
@@ -745,7 +776,7 @@ export function mountOauth(app: Express): void {
 
     // Now that this redirect_uri is known to belong to this client, let the consent form
     // reach it. Every earlier exit from this handler keeps the bare `form-action 'self'`.
-    secureHeaders(res, p.redirect_uri);
+    secureHeaders(res, p.redirect_uri, true);
     res.type("html").send(
       consentPage({
         client: resolved.client,

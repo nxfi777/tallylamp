@@ -31,6 +31,7 @@ import { openApiSpec } from "./openapi.js";
 import { captureScreenshot } from "./cdp.js";
 import { cookieSerialize, readCookie, wwwAuthenticate, startSseKeepalive } from "./http-util.js";
 import { removeSiteAccess, reportSiteAccess } from "./site-access.js";
+import { exportInstance } from "./transfer.js";
 
 declare global {
   namespace Express {
@@ -131,6 +132,24 @@ function asyncRoute(fn: (req: Request, res: Response) => Promise<unknown>) {
 }
 
 export function mountApi(app: Express, browsers: BrowserManager): void {
+  app.use("/api/v1", (req, _res, next) => {
+    if (browsers.transferInProgress && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !["/login", "/logout"].includes(req.path)) {
+      return next(Err.browserUnavailable("an export is in progress; retry when it finishes"));
+    }
+    next();
+  });
+
+  app.post("/api/v1/export", requireAuth, csrf, requireAdmin, asyncRoute(async (req, res) => {
+    try { await exportInstance(browsers, res, req.body ?? {}, () => {
+      res.setHeader("Content-Type", "application/gzip");
+      res.setHeader("Content-Disposition", `attachment; filename="tallylamp-${new Date().toISOString().slice(0, 10)}.tar.gz"`);
+      res.setHeader("Cache-Control", "no-store");
+    }); } catch (e) {
+      if (e instanceof AppError) throw e;
+      throw Err.browserUnavailable(`Export failed: ${(e as Error).message}`);
+    }
+  }));
+
   app.get("/api/v1/openapi.json", (_req, res) => res.json(openApiSpec));
 
   app.post(
@@ -265,6 +284,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
       version: config.version,
       maxBrowsers: config.maxBrowsers,
       running: browsers.runningCount(),
+      occupiedSlots: browsers.occupiedSlotCount(),
       sandbox: config.sandbox,
       gpu: config.gpu,
       allowPrivateNetwork: config.allowPrivateNetwork,
@@ -662,6 +682,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
 }
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
+  if (res.headersSent) { console.error(err); res.destroy(); return; }
   if (statusOf(err) === 401 && !res.getHeader("WWW-Authenticate")) {
     res.setHeader("WWW-Authenticate", wwwAuthenticate("invalid_token"));
   }

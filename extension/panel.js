@@ -6,8 +6,8 @@
 //
 // panel.html?demo=<state> renders a fixture with no extension APIs at all, so every state can
 // be looked at in an ordinary browser tab. States: unpaired, unpaired-error, pairing,
-// connecting, ready, unshareable, dashboard, other-extension, shared-here, shared-elsewhere,
-// offline, notice.
+// connecting, ready, unshareable, dashboard, other-extension, shared-here, shared-connecting,
+// shared-elsewhere, offline, notice.
 
 import { onServer, siteOf } from "./guard.js";
 
@@ -179,7 +179,9 @@ function shareCard() {
   if (here) {
     return h("div", { class: "card" },
       tabLine(tab, scopeLine(here)),
-      justShared
+      state.link !== "online"
+        ? h("div", { class: "banner warn", role: "status" }, h("div", {}, h("b", {}, "Reconnecting. "), "Your agent can use this tab again once the connection returns."))
+        : justShared
         ? h("div", { class: "banner ok", role: "status" }, h("div", {}, h("b", {}, "Shared. "), `Tell your agent to use the browser called “${state.browserName}”.`))
         : h("p", { class: "small muted" }, `Your agent can see and control this tab. It finds it as “${state.browserName}”.`),
       h("button", { class: "stop wide", disabled: busy, onclick: () => { justShared = false; ask("unshareTab", { tabId: tab.id }); } }, "Stop sharing this tab"),
@@ -274,6 +276,7 @@ const DEMOS = {
     extensions: { id: "abcdefghijklmnopabcdefghijklmnop" },
   },
   "shared-here": { ...base, shared: [{ tabId: 1, title: DEMO_TAB.title, url: DEMO_TAB.url, sites: ["mail.example.com"], byAgent: false }] },
+  "shared-connecting": { ...base, link: "connecting", shared: [{ tabId: 1, title: DEMO_TAB.title, url: DEMO_TAB.url, sites: ["mail.example.com"], byAgent: false }] },
   "shared-elsewhere": { ...base, shared: also },
   offline: { ...base, link: "offline", shared: also, releaseAt: Date.now() + 42_000 },
   notice: { ...base, notice: "You pressed Cancel on Chrome's debugging bar, so sharing stopped." },

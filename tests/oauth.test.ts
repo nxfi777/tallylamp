@@ -97,7 +97,7 @@ async function consentBoxes(clientId: string, scope?: string) {
   const ticked = [...html.matchAll(/name="grant_scope" value="([^"]+)"( checked)?>/g)]
     .filter((m) => m[2])
     .map((m) => m[1]!);
-  return { html, ticked };
+  return { page, html, ticked };
 }
 
 async function connectorFor(clientId: string) {
@@ -672,6 +672,21 @@ describe("oauth for MCP hosts that refuse static bearer tokens", () => {
   // something on the second connect.
   describe("profile permissions are decided on the consent screen", () => {
     const HANDS_OVER_LOGINS = ["seed:use", "seed:write", "browser:lend", "browser:borrow", "browser:tunnel"];
+
+    it("select all is authorized without allowing other scripts", async () => {
+      const reg = await register();
+      const clientId = (reg.body as { client_id: string }).client_id;
+      const { page, html } = await consentBoxes(clientId, "mcp:tools");
+      const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
+      assert.equal(scripts.length, 1, "the consent page needs exactly one select-all script");
+      const hash = createHash("sha256").update(scripts[0]![1]!).digest("base64");
+      const csp = page.headers.get("content-security-policy") ?? "";
+      const scriptSrc = /(?:^|;)\s*script-src\s+([^;]+)/.exec(csp)?.[1]?.trim();
+      assert.equal(scriptSrc, `'sha256-${hash}'`, "only the exact consent script may execute");
+      const master = /<input\b[^>]*\bid="select-all-scopes"[^>]*>/.exec(html)?.[0];
+      assert.ok(master, "the consent page exposes a select-all checkbox");
+      assert.doesNotMatch(master, /\bname\s*=\s*["']grant_scope["']/, "the master checkbox is not a submitted permission");
+    });
 
     it("never pre-ticks a scope that hands over logins", async () => {
       const reg = await register();

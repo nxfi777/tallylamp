@@ -15,6 +15,8 @@ import { normalizeServer } from "./address.js";
 
 const PROTOCOL = "1.3";
 const PING_MS = 20_000; // Also what keeps this worker alive: socket traffic resets its idle timer.
+const CONNECT_TIMEOUT_MS = 10_000;
+const PONG_TIMEOUT_MS = 10_000;
 const OFFLINE_GRACE_MS = 60_000;
 const BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 const GROUP_TITLE = "Tallylamp";
@@ -65,7 +67,7 @@ function changed() {
   chrome.action.setTitle({
     title: shared.size ? `Tallylamp Link: sharing ${shared.size} tab${shared.size === 1 ? "" : "s"} with your agent` : "Tallylamp Link",
   });
-  chrome.storage.session.set({ shared: [...shared.values()].map(({ tabId, sites, byAgent }) => ({ tabId, sites, byAgent })) });
+  chrome.storage.session.set({ shared: [...shared.values()].map(({ tabId, sites, byAgent }) => ({ tabId, sites, byAgent })), releaseAt });
   // Nobody listening just means the panel is closed.
   chrome.runtime.sendMessage({ type: "state", state: snapshot() }).catch(() => {});
 }
@@ -193,6 +195,19 @@ function send(msg) {
 
 const wire = (t) => ({ tabId: t.tabId, info: { targetId: t.info.targetId, type: "page", url: t.info.url, title: t.info.title, browserContextId: t.info.browserContextId } });
 
+function offlineGrace() {
+  if (!shared.size) return;
+  releaseAt ??= Date.now() + OFFLINE_GRACE_MS;
+  clearTimeout(graceTimer);
+  const release = () => {
+    if (link === "online") return;
+    notice = "The server was unreachable for a minute, so your tabs were handed back.";
+    return unshareAll("server unreachable");
+  };
+  if (releaseAt <= Date.now()) return release();
+  graceTimer = setTimeout(release, releaseAt - Date.now());
+}
+
 function connect() {
   if (!conn || (ws && ws.readyState <= WebSocket.OPEN)) return;
   clearTimeout(retryTimer);
@@ -201,12 +216,32 @@ function connect() {
   const socket = new WebSocket(`${conn.server.replace(/^http/, "ws")}/api/v1/links/connect`);
   ws = socket;
   let welcomed = false;
+  let pongTimer;
+  // Neither a DNS/TCP connection nor the application's welcome may wait forever. Closing a
+  // half-open socket can itself take time, so retry without waiting for Chrome's close event.
+  const helloTimer = setTimeout(() => disconnected(), CONNECT_TIMEOUT_MS);
+  function disconnected(ev = {}) {
+    clearTimeout(helloTimer);
+    clearTimeout(pongTimer);
+    if (ws !== socket) return;
+    ws = null;
+    clearInterval(pingTimer);
+    socket.close();
+    if (!conn) return;
+    if (!welcomed && /revoked/.test(ev.reason ?? "")) return void unpair("This browser was disconnected from the Tallylamp dashboard.");
+    link = "offline";
+    offlineGrace();
+    retryTimer = setTimeout(connect, BACKOFF_MS[Math.min(attempts++, BACKOFF_MS.length - 1)]);
+    changed();
+  }
   socket.onopen = () => {
+    if (ws !== socket) return;
     const version = navigator.userAgent.match(/Chrom(?:e|ium)\/([\d.]+)/)?.[1] ?? "";
     // The token goes in the first frame, not the URL, so it never lands in an access log.
     socket.send(JSON.stringify({ event: "hello", token: conn.token, product: `Chrome/${version}`, userAgent: navigator.userAgent, tabs: [...shared.values()].map(wire) }));
   };
   socket.onmessage = (ev) => {
+    if (ws !== socket) return;
     let msg;
     try {
       msg = JSON.parse(ev.data);
@@ -214,43 +249,39 @@ function connect() {
       return;
     }
     if (msg.event === "welcome") {
+      if (welcomed) return;
       welcomed = true;
+      clearTimeout(helloTimer);
       attempts = 0;
       link = "online";
       releaseAt = null;
       clearTimeout(graceTimer);
       clearInterval(pingTimer);
-      pingTimer = setInterval(() => send({ event: "ping" }), PING_MS);
+      pingTimer = setInterval(() => {
+        if (ws !== socket) return;
+        // Sending proves only that Chrome accepted bytes. A pong proves the server is there.
+        pongTimer = setTimeout(() => disconnected(), PONG_TIMEOUT_MS);
+        socket.send(JSON.stringify({ event: "ping" }));
+      }, PING_MS);
       return changed();
     }
-    if (typeof msg.id === "number" && typeof msg.method === "string") {
+    if (msg.event === "pong") {
+      clearTimeout(pongTimer);
+      return;
+    }
+    if (welcomed && typeof msg.id === "number" && typeof msg.method === "string") {
+      const reply = (result) => {
+        // A command belongs to the socket that asked. Request IDs start over on reconnect.
+        if (ws === socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(result));
+      };
       handle(msg.method, msg.params ?? {}).then(
-        (result) => send({ id: msg.id, result: result ?? {} }),
-        (e) => send({ id: msg.id, error: String(e?.message ?? e) }),
+        (result) => reply({ id: msg.id, result: result ?? {} }),
+        (e) => reply({ id: msg.id, error: String(e?.message ?? e) }),
       );
     }
   };
-  socket.onclose = (ev) => {
-    if (ws !== socket) return;
-    ws = null;
-    clearInterval(pingTimer);
-    if (!conn) return;
-    // Refused at hello: the link was revoked in the dashboard, or its browser was deleted.
-    // Retrying a revoked token forever would just be noise in somebody's audit log.
-    if (!welcomed && /revoked/.test(ev.reason)) return void unpair("This browser was disconnected from the Tallylamp dashboard.");
-    link = "offline";
-    if (shared.size && !releaseAt) {
-      releaseAt = Date.now() + OFFLINE_GRACE_MS;
-      graceTimer = setTimeout(() => {
-        if (link === "online") return;
-        notice = "The server was unreachable for a minute, so your tabs were handed back.";
-        unshareAll("server unreachable");
-      }, OFFLINE_GRACE_MS);
-    }
-    retryTimer = setTimeout(connect, BACKOFF_MS[Math.min(attempts++, BACKOFF_MS.length - 1)]);
-    changed();
-  };
-  socket.onerror = () => socket.close();
+  socket.onclose = disconnected;
+  socket.onerror = () => disconnected();
 }
 
 // ---------------------------------------------------------------- what the server may ask for
@@ -590,7 +621,8 @@ async function boot() {
   const stored = await chrome.storage.local.get(["conn", "pairing"]);
   conn = stored.conn ?? null;
   pairing = stored.pairing ?? null;
-  const { shared: was = [] } = await chrome.storage.session.get("shared");
+  const { shared: was = [], releaseAt: deadline } = await chrome.storage.session.get(["shared", "releaseAt"]);
+  releaseAt = Number.isFinite(deadline) ? deadline : null;
   for (const entry of was) {
     try {
       const { targetInfo: info } = await chrome.debugger.sendCommand({ tabId: entry.tabId }, "Target.getTargetInfo");
@@ -608,6 +640,8 @@ async function boot() {
     link = "pairing";
     poll();
   } else if (conn) {
+    // Worker restarts during a DNS outage must not renew the minute-long sharing grace.
+    await offlineGrace();
     connect();
   }
   changed();

@@ -69,6 +69,33 @@ describe("host capacity", () => {
   });
   afterEach(stopAll);
 
+  it("counts each occupied local slot once, including queued starts and reserved resumes", () => {
+    const live = browser("slot-live");
+    const queued = browser("slot-queued");
+    const reserved = browser("slot-reserved");
+    const stopped = browser("slot-stopped");
+    const linked = browser("slot-linked");
+    const worker = browser("slot-worker");
+    getDb().prepare(`UPDATE browsers SET kind = 'linked' WHERE id = ?`).run(linked.id);
+    getDb().prepare(`UPDATE browsers SET worker_id = ? WHERE id = ?`).run("test-worker", worker.id);
+
+    // A manager with only the occupancy state: no Chrome process, timers or live runtime to
+    // fake. offHost still consults the real browser rows, and no fake enters ctx's cleanup.
+    const manager = Object.create(Object.getPrototypeOf(ctx.browsers)) as TestCtx["browsers"];
+    const slots = manager as unknown as {
+      runtimes: Map<string, unknown>;
+      starting: Map<string, unknown>;
+      resumeReservations: Set<string>;
+    };
+    slots.runtimes = new Map([live.id, linked.id, worker.id].map(id => [id, {}]));
+    slots.starting = new Map([live.id, queued.id, linked.id, worker.id].map(id => [id, {}]));
+    slots.resumeReservations = new Set([live.id, reserved.id, linked.id, worker.id]);
+    assert.equal(manager.occupiedSlotCount(), 3, "live, queued and reserved; no duplicate or off-host slots");
+    slots.resumeReservations.delete(reserved.id);
+    assert.equal(manager.occupiedSlotCount(), 2, "a stopped browser without a resume reservation holds no slot");
+    assert.equal(ctx.browsers.row(stopped.id).status, "stopped");
+  });
+
   it("admits on a browser's measured launch peak, and refuses one it has no room for", async () => {
     const b = browser("kraken");
     // 1000 - 700 - 50 headroom leaves 250, short of the 300 assumed for a browser never measured.
@@ -102,9 +129,14 @@ describe("host capacity", () => {
       const started = ctx.browsers.ensureRunning(b.id);
       await sleep(300);
       assert.equal(ctx.browsers.row(b.id).status, "queued");
+      assert.equal(ctx.browsers.occupiedSlotCount(), 1, "a queued start reserves a fleet slot before Chrome is live");
+      const status = await json(`${ctx.url}/api/v1/status`, { headers: { Cookie: ctx.cookie } });
+      assert.equal(status.status, 200);
+      assert.equal(status.body.occupiedSlots, 1);
       pids(300); // something else stopped
       await started;
       assert.equal(ctx.browsers.row(b.id).status, "running");
+      assert.equal(ctx.browsers.occupiedSlotCount(), 1, "starting to running does not double-count the slot");
       assert.deepEqual(events.slice(0, 2), ["browser.queued", "browser.starting"]);
     } finally {
       hub.off("event", listen);
