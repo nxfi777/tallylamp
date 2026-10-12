@@ -2,14 +2,16 @@
 
 Give your AI agent a browser you can watch and take over.
 
-[Tallylamp](https://tallylamp.dev) gives your agent full, headed Chrome with a
-display and Chrome's normal user agent. Each browser saves its own profile by
-default, including cookies, logins, and local storage. Your agent can come back
-to that profile for its next task instead of starting with an empty browser.
+[Tallylamp](https://tallylamp.dev) runs full, headed Chrome with a display and
+Chrome's normal user agent. Each browser saves cookies, logins, and local
+storage in its own profile by default, ready for your agent's next task.
 
 Your agent drives the browser through MCP. You can watch the same browser live,
 take control to sign in or finish a verification step, then return it to the agent.
 Websites can still expire logins or ask you to sign in again.
+
+Agents sharing one MCP connection can drive separate browsers by passing
+`browserId` on every call.
 
 Tallylamp is open source under the MIT license. You pay Railway for the
 infrastructure your deployment uses.
@@ -42,9 +44,7 @@ password. You choose when to upgrade the application.
 - Finish an OAuth flow whose redirect URI is `http://localhost:PORT/…`, through
   a short-lived loopback tunnel to one private address on your machine. Agents
   need a scope they do not get by default.
-- Install a Chrome extension from the Web Store in Full browser.
-- Let an agent debug a Chrome extension: its service worker, content-script
-  logs and pages.
+- Install a Chrome extension in Full browser, and let an agent debug it.
 - Share a tab from your own Chrome, logins included, with your agent.
 - Let an agent see one of your browsers, read only, once you approve.
 
@@ -91,11 +91,8 @@ that native UI, including settings and host-file dialogs. New agent-owned
 browsers start with it on. Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=0` if you do not
 trust every new agent-owned browser with that access.
 
-Agents can debug extensions too. With the Extensions switch on, the browser's
-Chrome DevTools tools list extension service workers, run code inside them, and
-open an extension's pages. The owning agent can also install an unpacked folder
-from the server and reload it. Borrowed browsers never allow installing or
-removing one.
+Agents can debug extensions too, and the owning agent can install unpacked ones
+from the server.
 
 ## Use your own browser
 
@@ -151,10 +148,10 @@ accept automation.
 
 ## Updates are your choice
 
-The current release is `ghcr.io/nxfi777/tallylamp:0.11.2`. Pin this digest:
+The current release is `ghcr.io/nxfi777/tallylamp:0.11.5`. Pin this digest:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:4429543652378d650c9018cbb981b1a77fc9595f276e9459f66d13c70250246c
+ghcr.io/nxfi777/tallylamp@sha256:77c612265f08ee24b20471dc0bb63c98069491b393eb04826becce0820029667
 ```
 
 Automatic image updates are disabled. Neither a source push nor a new release
@@ -171,8 +168,7 @@ they do not make an agent behave like a person.
 
 Persistent browsers keep their data across stops and redeploys.
 **Record signed-in site** only adds an inventory note for agents; it does not
-sign you in or copy cookies. **Edit browser details** changes its name and
-metadata.
+sign you in or copy cookies.
 
 **Save profile** creates a reusable snapshot, or updates the browser's linked
 profile. **Save as new profile** creates a separate snapshot. Existing browsers
@@ -209,4 +205,3 @@ Tallylamp does not bypass CAPTCHAs or guarantee that sites will accept automatio
 - [Security model](https://github.com/nxfi777/tallylamp/blob/main/docs/security.md)
 - [MCP compatibility](https://github.com/nxfi777/tallylamp/blob/main/docs/mcp-compatibility.md)
 - [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)
-- [Railway volumes](https://docs.railway.com/volumes)

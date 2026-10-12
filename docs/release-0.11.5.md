@@ -65,3 +65,27 @@ on the persistent volume.
 
 Existing Tallylamp Link installs keep working with this server. Load this
 release's `tallylamp-link.zip` to get the reconnect behaviour.
+
+## Release validation
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/38264021437)
+passed application, headed Chrome, and running-container checks before
+publishing the tested image. Its anonymous registry access, digest, version and
+source-revision labels were verified, along with the extension zip's manifest
+version. Pin this Linux amd64 artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:77c612265f08ee24b20471dc0bb63c98069491b393eb04826becce0820029667
+```
+
+After deploying that artifact, a live test drove the new tools through the
+production instance's own `/mcp`, with a temporary agent and browser on headed
+Chrome under Xvfb. `install_extension` loaded an unpacked test extension,
+`list_pages` listed its service worker, and `evaluate_script` ran code inside
+it. Its content script logged on example.com, its options page opened and took
+a snapshot, `trigger_extension_action` fired its toolbar action, and
+`uninstall_extension` removed it. The temporary browser was deleted and the test
+agent disabled, which revokes its credential.
+
+See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
+backups and deployment settings.
