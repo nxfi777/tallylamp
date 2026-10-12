@@ -5,6 +5,9 @@ import { startTestServer, json, type TestCtx } from "./helpers.js";
 import { emitFakeFrame } from "../src/fake-chrome.js";
 import { createAgent, DEFAULT_AGENT_SCOPES } from "../src/auth.js";
 import { Err } from "../src/errors.js";
+import { getDb } from "../src/db.js";
+import { bridgeReachesExtensions } from "../src/mcp.js";
+import { bridgeSpawn } from "../src/mcp-bridge.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -724,6 +727,83 @@ describe("abandoned mcp sessions", () => {
     } finally {
       delete process.env.TALLYLAMP_MCP_SESSION_IDLE_SEC;
       await ctx.close();
+    }
+  });
+});
+
+describe("extension tools", () => {
+  before(async () => {
+    ctx = await startTestServer();
+  });
+  after(async () => ctx.close());
+
+  it("starts a bridge with extension targets only on a Tallylamp browser that has them on", () => {
+    assert.ok(bridgeSpawn("http://127.0.0.1:9/", "ignore", { extensions: true }).args.includes("--categoryExtensions=true"));
+    assert.ok(!bridgeSpawn("http://127.0.0.1:9/", "ignore").args.some((a) => a.startsWith("--categoryExtensions")));
+    assert.equal(bridgeReachesExtensions({ kind: "managed", extensions_enabled: 1 }), true);
+    assert.equal(bridgeReachesExtensions({ kind: "managed", extensions_enabled: 0 }), false);
+    assert.equal(bridgeReachesExtensions({ kind: "linked", extensions_enabled: 1 }), false, "a linked browser's extensions are the person's");
+  });
+
+  it("advertises them before any browser is bound, as the harvested manifest", async () => {
+    const init = await mcp(
+      "initialize",
+      { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "extensions-list", version: "0" } },
+      ctx.agentToken,
+    );
+    const session = init.headers.get("mcp-session-id")!;
+    const tools = rpcResult((await mcp("tools/list", {}, ctx.agentToken, { "MCP-Session-Id": session })).body)?.tools ?? [];
+    for (const name of ["list_extensions", "install_extension", "uninstall_extension", "reload_extension", "trigger_extension_action"]) {
+      assert.ok(tools.some((t) => t.name === name), `${name} in ${tools.map((t) => t.name).join(",")}`);
+    }
+    const evaluate = tools.find((t) => t.name === "evaluate_script");
+    assert.ok(evaluate?.inputSchema.properties?.serviceWorkerId, "evaluate_script takes serviceWorkerId");
+  });
+
+  it("refuses them where the bridge has none, and says why", async () => {
+    const init = await mcp(
+      "initialize",
+      { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "extensions", version: "0" } },
+      ctx.agentToken,
+    );
+    const session = init.headers.get("mcp-session-id")!;
+    const created = await mcp(
+      "tools/call",
+      { name: "tallylamp_create_browser", arguments: { metadata: { project: "tallylamp", purpose: "extension tools" } } },
+      ctx.agentToken,
+      { "MCP-Session-Id": session },
+    );
+    const raw = typeof created.body === "string" ? created.body : JSON.stringify(created.body);
+    const id = raw.match(/browserId\\":\\"([a-f0-9]+)/)?.[1] || raw.match(/"browserId":"([a-f0-9]+)"/)?.[1] || "";
+    assert.ok(id, `missing browserId in ${raw.slice(0, 400)}`);
+    const call = async (name: string, args: Record<string, unknown> = {}) =>
+      JSON.stringify((await mcp("tools/call", { name, arguments: { browserId: id, ...args } }, ctx.agentToken, { "MCP-Session-Id": session })).body);
+    const set = (sql: string) => getDb().prepare(sql).run(id);
+
+    set(`UPDATE browsers SET extensions_enabled = 0 WHERE id = ?`);
+    assert.match(await call("list_extensions"), /list_extensions needs extensions, and they are turned off/);
+    // Without this the bridge would call serviceWorkerId an unknown argument and say to drop it,
+    // and the retried script would run in the page.
+    assert.match(await call("evaluate_script", { function: "() => 1", serviceWorkerId: "sw-1" }), /evaluate_script in a service worker needs extensions/);
+    assert.doesNotMatch(await call("evaluate_script", { function: "() => 1", pageId: 1 }), /needs extensions/, "a page script is not an extension tool");
+
+    set(`UPDATE browsers SET extensions_enabled = 1 WHERE id = ?`);
+    assert.doesNotMatch(await call("list_extensions"), /needs extensions|linked browser/);
+
+    set(`UPDATE browsers SET worker_id = 'test-worker' WHERE id = ?`);
+    try {
+      assert.match(await call("install_extension", { path: "/tmp/extension" }), /runs on another one/);
+    } finally {
+      set(`UPDATE browsers SET worker_id = NULL WHERE id = ?`);
+    }
+
+    set(`UPDATE browsers SET kind = 'linked' WHERE id = ?`);
+    set(`INSERT INTO linked_access (browser_id, agent_id, created_at) VALUES (?, '*', datetime('now'))`);
+    try {
+      assert.match(await call("list_extensions"), /not available on .* It is a linked browser/);
+    } finally {
+      set(`DELETE FROM linked_access WHERE browser_id = ?`);
+      set(`UPDATE browsers SET kind = 'managed' WHERE id = ?`);
     }
   });
 });

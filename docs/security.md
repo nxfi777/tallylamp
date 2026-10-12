@@ -227,6 +227,17 @@ background after human control ends, and may change proxy settings or otherwise
 bypass egress restrictions. The human lease blocks agent input, not extension work.
 The egress proxy is not a sandbox for a privileged extension.
 
+Turning extensions on also starts the browser's MCP bridge with Chrome DevTools
+MCP's extension tools. The owning agent can install an unpacked extension from a
+folder on the Tallylamp host, reload or uninstall one, and run code in an
+extension's service worker. No grant permits installing, reloading or
+uninstalling, at either level. A `control` grant can trigger an extension's
+action and run code in its service worker, and that code has the extension's
+permissions, so a `control` grant on a browser with a privileged extension
+reaches whatever that extension can. With extensions off, and on every linked
+browser, the bridge starts without these tools and Tallylamp refuses calls to
+them.
+
 ### Agent native UI permission
 
 The administrator can grant **Allow agent control** for an agent-owned browser. It is
@@ -363,13 +374,15 @@ the panel.
 
 Approve at `read` and the agent can see every page in that browser, including
 anything you are signed in to, and can do nothing else: navigating, clicking,
-typing, `evaluate_script`, `select_page`, the desktop tools and the tunnel tools
-are all refused. Approve at `control` and it can act as you on those sites.
+typing, `evaluate_script`, `select_page`, triggering an extension's action, the
+desktop tools and the tunnel tools are all refused. Approve at `control` and it
+can act as you on those sites.
 A request for `control` can be approved at `read` instead. An answer can never
 grant more than was asked for.
 
 Neither level permits deleting the browser, stopping it, saving or cloning its
-profile, or changing its proxy, name, metadata or signed-in-site records. A
+profile, installing, reloading or uninstalling extensions, or changing its proxy,
+name, metadata or signed-in-site records. A
 `read` grant does not take the control lease and does not bring any tab to the
 front, so an agent reading a page cannot be mistaken for one driving it and
 cannot move the tab you are looking at.

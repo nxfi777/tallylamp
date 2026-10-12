@@ -91,6 +91,27 @@ browsers start with it on. Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=0` to start
 them with it off. Existing browsers keep their saved choice. Turning the toggle
 off still wins. This does not enable extensions.
 
+### Debugging an extension
+
+A browser with the **Extensions** switch on also gives its agents the
+extension tools. `list_pages` lists extension service workers,
+`evaluate_script` with `serviceWorkerId` runs code inside one, and
+`list_console_messages` includes messages from content scripts.
+`navigate_page` opens an extension's own pages, such as
+`chrome-extension://<id>/popup.html`, to inspect like any other page.
+`list_extensions` lists unpacked extensions, and `trigger_extension_action`
+presses one's toolbar button on the selected page. `install_extension` loads an
+unpacked folder from the Tallylamp host's disk, `reload_extension` loads it
+again after its files change, and `uninstall_extension` removes it.
+
+Only the browser's owner can install, reload or uninstall. A borrowed browser
+refuses those at either access level, because an installed extension keeps
+running after the loan ends. `install_extension` is also refused for a browser
+on a worker, since the folder would be checked on this host and read from the
+worker's; install it through Full browser there. Code run in a service worker
+has that extension's permissions. With the switch off, and on every linked
+browser, these tools are refused with a message saying why.
+
 The agent uses `tallylamp_desktop_screenshot`, then `tallylamp_desktop_action`.
 Coordinates are screen pixels. Human control stops these tools. If
 `agentDesktopEnabled` is false, the agent is told to ask you to turn the toggle

@@ -55,7 +55,7 @@ The agent can open new tabs once at least one tab is shared. Those tabs are shar
 
 Tallylamp did not launch a linked browser and does not hold its profile, so anything that depends on either is refused with an error that says why:
 
-- saving the profile, proxies, tunnels, installing extensions and native desktop access
+- saving the profile, proxies, tunnels, native desktop access and extensions, both installing them and the agent's extension tools. The extensions in your browser are yours, not part of the tab you shared
 - lending. No agent can lend a linked browser or borrow one, whether by asking or by the idle rule
 - the fleet cap. It runs on your machine, so it does not use a slot
 

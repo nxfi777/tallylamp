@@ -64,6 +64,12 @@ export const MUTATING_TOOLS = new Set([
   "emulate",
   "resize_page",
   "evaluate_script",
+  // The extension tools change what runs in the browser, not just the page. Triggering an action
+  // is a click on the toolbar; installing, removing and reloading are in GRANT_NEVER as well.
+  "trigger_extension_action",
+  "install_extension",
+  "uninstall_extension",
+  "reload_extension",
   // Ours, not the bridge's. They were listed here under the bridge's namespace long before
   // anything provided them, which advertised a capability that did not exist; the prefix keeps
   // them from ever colliding with a tool chrome-devtools-mcp might add later.
@@ -102,7 +108,24 @@ const GRANT_NEVER = new Set([
   "tallylamp_open_tunnel",
   "tallylamp_close_tunnel",
   "tallylamp_list_tunnels",
+  // An installed extension outlives the grant. It loads in every later session, the owner's
+  // included, and can read every signed-in page.
+  "install_extension",
+  "uninstall_extension",
+  "reload_extension",
 ]);
+
+/** chrome-devtools-mcp's extension tools. Only a bridge started with extensions has them. */
+const EXTENSION_TOOLS = new Set(["list_extensions", "install_extension", "uninstall_extension", "reload_extension", "trigger_extension_action"]);
+
+/**
+ * Whether a browser's bridge is started with extension targets (src/mcp-bridge.ts): a Tallylamp
+ * browser the administrator turned extensions on for. Never a linked browser, whose extensions
+ * belong to the person and are not part of the tab they shared.
+ */
+export function bridgeReachesExtensions(row: Pick<BrowserRow, "kind" | "extensions_enabled">): boolean {
+  return row.kind !== "linked" && Boolean(row.extensions_enabled);
+}
 
 const MCP_INSTRUCTIONS = `Tallylamp runs persistent headed Chrome with Chrome DevTools MCP tools, a live viewer, and human takeover. It does not simulate human mouse paths or guarantee that websites will accept automation.
 
@@ -118,9 +141,11 @@ Offer a saved profile (called a profile template by the compatibility tools) whe
 
 For extension toolbar popups, side panels and native dialogs, use tallylamp_desktop_screenshot followed by tallylamp_desktop_action. Check agentDesktopEnabled in the browser record first. If false, ask the user or administrator to open that browser in the dashboard, go to Extensions, and turn on Allow agent control. Explain that this grants full Chrome UI access, including settings and host-file dialogs. Wait for approval; do not repeatedly retry, change host configuration, or try to grant yourself access. An operator may preauthorize newly created agent-owned browsers with TALLYLAMP_AGENT_DESKTOP_DEFAULT=1; the saved agentDesktopEnabled field is authoritative for each browser. This does not enable or install extensions. Borrowing does not grant native access. Use fresh screenshots to locate controls; screenshot metadata gives image and screen dimensions for coordinate scaling. Never use native input while a human holds control. Do not install, remove or change extension permissions without the user's explicit request. The tools grant full native UI access, not an extension-only sandbox.
 
-A browser whose kind is "linked" is a person's own browser, reached through the Tallylamp Link extension. You can only use tabs that person has shared, and link.sharedTabs lists them. If link.online is false, or no tab is shared, you cannot fix that yourself: ask the user to open that browser and press Share this tab in the extension, then continue. A tab may be shared for one site only, and navigating away from it is then refused; ask the user to share it for any site if the task needs that. On a linked browser you cannot upload local files, read the browser-wide cookie jar, resize or close the window, close tabs you did not open, save the profile, use a proxy or tunnel, or lend or borrow it. Only the agents the user ticked for it in the dashboard can use it; if one you need is not in your browser list, ask the user to add you on its page in the dashboard. The person can stop sharing at any moment, so expect a tab to disappear mid-task and say so plainly when it does. tallylamp_stop_browser hands every shared tab back to them.
+To debug a Chrome extension, use a browser whose extensionsEnabled is true. There list_pages also lists extension service workers, evaluate_script with serviceWorkerId runs code inside one with that extension's permissions, and list_console_messages includes content-script messages. navigate_page opens an extension's own pages, such as chrome-extension://<id>/popup.html, to inspect like any page. list_extensions shows unpacked extensions, and trigger_extension_action clicks one's toolbar button on the selected page. install_extension loads an unpacked folder from the Tallylamp host's disk, and reload_extension reloads one after its files change. Only the browser's owner may install, reload or uninstall. These tools are refused on linked browsers and where extensionsEnabled is false; ask the administrator to turn on Extensions for that browser rather than retrying. Do not install, remove or change extension permissions without the user's explicit request.
 
-The host may cap processes and threads for all browsers together. A browser with pinned: true is one the operator keeps room for; do not stop, delete or repurpose it unless asked. If a start fails with fleet_full, the host is out of room: stop a browser you no longer need rather than retrying in a loop. If the error says the administrator can reset the browser's thread counts, tell the user; an agent cannot reset them. A browser whose status is "unhealthy" was found broken and is being restarted; wait a few seconds and call tallylamp_use_browser again. Notes starting with [tallylamp] on a tool result say what happened to your browser; tell the user when one says a browser was stopped or restarted. A browser whose worker field is set runs on another host. Drive it the same way: every tool works there, including upload_file, tunnels and the desktop tools. Only saving it as a saved profile is refused there, with a message saying so; ask the user to move the browser to the main instance if the task needs that.
+A browser whose kind is "linked" is a person's own browser, reached through the Tallylamp Link extension. You can only use tabs that person has shared, and link.sharedTabs lists them. If link.online is false, or no tab is shared, you cannot fix that yourself: ask the user to open that browser and press Share this tab in the extension, then continue. A tab may be shared for one site only, and navigating away from it is then refused; ask the user to share it for any site if the task needs that. On a linked browser you cannot upload local files, read the browser-wide cookie jar, resize or close the window, close tabs you did not open, save the profile, use a proxy or tunnel, reach its extensions, or lend or borrow it. Only the agents the user ticked for it in the dashboard can use it; if one you need is not in your browser list, ask the user to add you on its page in the dashboard. The person can stop sharing at any moment, so expect a tab to disappear mid-task and say so plainly when it does. tallylamp_stop_browser hands every shared tab back to them.
+
+The host may cap processes and threads for all browsers together. A browser with pinned: true is one the operator keeps room for; do not stop, delete or repurpose it unless asked. If a start fails with fleet_full, the host is out of room: stop a browser you no longer need rather than retrying in a loop. If the error says the administrator can reset the browser's thread counts, tell the user; an agent cannot reset them. A browser whose status is "unhealthy" was found broken and is being restarted; wait a few seconds and call tallylamp_use_browser again. Notes starting with [tallylamp] on a tool result say what happened to your browser; tell the user when one says a browser was stopped or restarted. A browser whose worker field is set runs on another host. Drive it the same way: every tool works there, including upload_file, tunnels and the desktop tools. Only saving it as a saved profile and install_extension are refused there, with a message saying so; ask the user to move the browser to the main instance if the task needs that.
 
 For routine cleanup, use tallylamp_stop_browser rather than tallylamp_delete_browser to retain a persistent profile. Delete saved browser state only when the user explicitly asks to remove it. If a site needs human input, ask the user to take control of the named browser and wait for them to return control; never promise a CAPTCHA bypass.`;
 
@@ -550,8 +575,9 @@ async function forwardedTools(): Promise<Tool[]> {
 }
 
 async function harvestManifest(): Promise<Tool[]> {
-  // Port 1 is never listening. The bridge does not dial CDP to answer tools/list.
-  const transport = new StdioClientTransport(bridgeSpawn("http://127.0.0.1:1/", "ignore"));
+  // Port 1 is never listening. The bridge does not dial CDP to answer tools/list. Harvested with
+  // extensions so the list is the full set; a browser without them refuses those by name.
+  const transport = new StdioClientTransport(bridgeSpawn("http://127.0.0.1:1/", "ignore", { extensions: true }));
   const client = new Client({ name: "tallylamp-manifest", version: config.version });
   let timer: NodeJS.Timeout | undefined;
   try {
@@ -783,6 +809,9 @@ export class McpGateway {
       if (target && (forwarded || McpGateway.BOUND_TOOLS.has(name))) {
         const row = this.browsers.row(target);
         const access = this.bindLevel(context.principal, row);
+        // After bindLevel, so the refusal tells nothing about a browser the caller cannot use.
+        const unreachable = forwarded ? this.extensionRefusal(row, name, args) : null;
+        if (unreachable) return this.toolError(unreachable);
         if (forwarded || name === "tallylamp_select_page") {
           try {
             binding = await this.getBinding(session, row, access);
@@ -899,6 +928,29 @@ export class McpGateway {
     } catch (error) {
       return this.toolError(error);
     }
+  }
+
+  /**
+   * Refuse an extension tool the browser's bridge cannot serve, in words that say why. Left to
+   * the bridge, the answer is an unknown tool, or an unknown serviceWorkerId it says to remove,
+   * after which the script would run in the page instead.
+   */
+  private extensionRefusal(row: BrowserRow, name: string, args: Record<string, unknown>): AppError | null {
+    const what = EXTENSION_TOOLS.has(name) ? name
+      : name === "evaluate_script" && args.serviceWorkerId !== undefined ? "evaluate_script in a service worker" : null;
+    if (!what) return null;
+    if (row.kind === "linked") {
+      return Err.invalid(`${what} is not available on ${row.id}. It is a linked browser, a person's own Chrome, and its extensions are not part of the tab they shared.`);
+    }
+    if (!bridgeReachesExtensions(row)) {
+      return Err.invalid(`${what} needs extensions, and they are turned off for ${row.id}. Ask the administrator to stop the browser and turn on Extensions on its page in the dashboard.`);
+    }
+    if (name === "install_extension" && row.worker_id) {
+      // The bridge runs here and checks the folder on this disk, but Chrome loads it from the
+      // worker's, so a path that exists on both would install whatever the worker has there.
+      return Err.invalid(`install_extension reads a folder on this host, and ${row.id} runs on another one. Install it through Full browser there, or ask the administrator to move the browser to the main instance.`);
+    }
+    return null;
   }
 
   /**
@@ -1597,7 +1649,8 @@ export class McpGateway {
           throw Err.fleetFull("No host has room for this linked browser's control bridge. Free capacity on the main instance or add an available worker.");
         }
       }
-      const transport = new StdioClientTransport(bridgeSpawn(rt.cdpUrl, "pipe"));
+      const extensions = bridgeReachesExtensions(this.browsers.row(row.id));
+      const transport = new StdioClientTransport(bridgeSpawn(rt.cdpUrl, "pipe", { extensions }));
       const client = new Client({ name: "tallylamp-bridge", version: config.version });
       try { await client.connect(transport); }
       catch (e) { await client.close().catch(() => undefined); throw e; }

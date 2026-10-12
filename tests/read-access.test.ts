@@ -524,6 +524,30 @@ describe("an agent asking the operator to read one of their browsers", () => {
     // Asking the operator needs no scope; asking a peer for its live logins still does.
     assert.throws(() => requestBrowser(ctx.browsers, asker.agent, { browserId: peer.id }), /browser:borrow/);
   });
+
+  it("10. lets a control grant use the installed extensions, never change which ones there are", async () => {
+    const { reader: agent, browserId: id } = (await fresh("daemon-l"));
+    getDb().prepare(`UPDATE browsers SET extensions_enabled = 1 WHERE id = ?`).run(id);
+    const out = requestBrowser(ctx.browsers, agent.agent, { browserId: id, access: "control", reason: "debug an extension" });
+    answerRequest(ctx.browsers, adminPrincipal(), {
+      requestId: out.state === "pending" ? out.requestId : "",
+      decision: "grant",
+      untilRevoked: true,
+    });
+    assert.equal(grantAccess(activeGrant(id, agent.agent.id)!), "control");
+    const session = await initSession(ctx, agent.token);
+    // An installed extension loads in every later session, the owner's included, so which ones
+    // there are belongs to the owner at any level.
+    for (const tool of ["install_extension", "reload_extension", "uninstall_extension"]) {
+      const res = await mcp(ctx, agent.token, tool, { browserId: id, path: "/tmp/extension", id: "a".repeat(32) }, session);
+      assert.match(res.text, /either access level/, `${tool}: ${res.text.slice(0, 200)}`);
+    }
+    // Using what is installed is driving the browser, which is what control was granted for.
+    for (const tool of ["list_extensions", "trigger_extension_action"]) {
+      const res = await mcp(ctx, agent.token, tool, { browserId: id, id: "a".repeat(32) }, session);
+      assert.doesNotMatch(res.text, /either access level|grant_level_insufficient|needs extensions/, `${tool}: ${res.text.slice(0, 200)}`);
+    }
+  });
 });
 
 describe("a grant outlives the service that issued it", () => {

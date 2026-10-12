@@ -205,7 +205,8 @@ default for agent-to-agent requests, so existing callers are unaffected.
 
 `read` permits binding and the non-mutating tools only: `list_pages`,
 `take_snapshot`, `take_screenshot`, `list_console_messages`,
-`list_network_requests`, their `get_*` companions, and `tallylamp_select_page`.
+`list_network_requests`, `list_extensions`, their `get_*` companions, and
+`tallylamp_select_page`.
 Every tool in `MUTATING_TOOLS` is refused with a non-retryable
 `grant_level_insufficient` error naming the level, and a read session is not
 offered those tools in `tools/list` at all.

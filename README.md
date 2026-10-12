@@ -42,6 +42,9 @@ sites where you need to sign in yourself.
   machine for a short time. Agents need a scope they do not get by default.
 - Install a Chrome extension in **Full browser**. Optionally let the owning
   agent use its popup after you turn on **Allow agent control**.
+- Debug a Chrome extension with an agent. It can read the extension's service
+  worker and content-script logs, open its pages, and press its toolbar button.
+  The owning agent can load an unpacked build and reload it after changes.
 - Let an agent look at one of your browsers without touching it. Approve its
   request at **read**, and it can see pages but not click, type or navigate.
 
@@ -264,6 +267,15 @@ Coordinates are screen pixels, not the downscaled image. Human control stops
 these tools. If `agentDesktopEnabled` is false, the agent is told to ask you to
 turn the toggle on and wait. Limits and the API are in the
 [user guide](docs/usage.md#chrome-extensions-and-full-browser).
+
+Agents can also debug extensions with the Chrome DevTools tools. On a browser
+with the **Extensions** switch on, `list_pages` lists extension service
+workers, `evaluate_script` with `serviceWorkerId` runs code inside one, and
+`navigate_page` opens an extension's own pages. The owning agent can load an
+unpacked folder from the Tallylamp host with `install_extension` and reload it
+after changes. A borrowed browser never allows installing, reloading or
+removing one, and linked browsers get none of these tools. See
+[debugging an extension](docs/usage.md#debugging-an-extension).
 
 ### Loopback tunnels
 

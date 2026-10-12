@@ -230,7 +230,7 @@ export function acceptLinkedBridge(ws: WebSocket, tempDir?: string): {
     if (stopped) return;
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("linked bridge CDP listener did not start");
-    const spawn = bridgeSpawn(`ws://127.0.0.1:${address.port}/devtools/browser/linked`, "ignore", true);
+    const spawn = bridgeSpawn(`ws://127.0.0.1:${address.port}/devtools/browser/linked`, "ignore", { websocket: true });
     child = new StdioClientTransport({
       ...spawn,
       env: { ...spawn.env, ...(tempDir ? { TMPDIR: tempDir, TEMP: tempDir, TMP: tempDir } : {}) },

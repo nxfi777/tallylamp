@@ -15,15 +15,21 @@ function chromeDevtoolsBin(): string {
  * Spawn options for a chrome-devtools-mcp bridge child. bind() and the manifest harvest both
  * go through this so the tool list an unbound session advertises cannot drift from the tools
  * a bound session actually gets: same binary, same flags, so the same registrations.
+ *
+ * `extensions` lets the bridge see extension targets: service workers in list_pages, and
+ * evaluate_script inside one. Without it chrome-devtools-mcp drops every chrome-extension://
+ * target. Only Tallylamp's own browsers get it. A linked browser is a person's own Chrome,
+ * and the extensions in it are theirs, not part of the tab they shared.
  */
-export function bridgeSpawn(browserUrl: string, stderr: "pipe" | "ignore", websocket = false) {
+export function bridgeSpawn(browserUrl: string, stderr: "pipe" | "ignore", opts: { websocket?: boolean; extensions?: boolean } = {}) {
   return {
     command: process.execPath,
     args: [
       chromeDevtoolsBin(),
-      websocket ? `--wsEndpoint=${browserUrl}` : `--browser-url=${browserUrl}`,
+      opts.websocket ? `--wsEndpoint=${browserUrl}` : `--browser-url=${browserUrl}`,
       "--no-usage-statistics",
       "--experimental-structured-content",
+      ...(opts.extensions ? ["--categoryExtensions=true"] : []),
     ],
     env: {
       ...sanitizedChromeEnv(),

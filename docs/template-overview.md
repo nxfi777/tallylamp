@@ -43,6 +43,8 @@ password. You choose when to upgrade the application.
   a short-lived loopback tunnel to one private address on your machine. Agents
   need a scope they do not get by default.
 - Install a Chrome extension from the Web Store in Full browser.
+- Let an agent debug a Chrome extension: its service worker, content-script
+  logs and pages.
 - Share a tab from your own Chrome, logins included, with your agent.
 - Let an agent see one of your browsers, read only, once you approve.
 
@@ -88,6 +90,12 @@ Allow agent control is a separate toggle. It lets the owning agent see and use
 that native UI, including settings and host-file dialogs. New agent-owned
 browsers start with it on. Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=0` if you do not
 trust every new agent-owned browser with that access.
+
+Agents can debug extensions too. With the Extensions switch on, the browser's
+Chrome DevTools tools list extension service workers, run code inside them, and
+open an extension's pages. The owning agent can also install an unpacked folder
+from the server and reload it. Borrowed browsers never allow installing or
+removing one.
 
 ## Use your own browser
 
