@@ -15,6 +15,7 @@ import {
   revokeGrant,
   sha256,
   updateAgent,
+  type CredentialRow,
   type Principal,
 } from "./auth.js";
 import { rateLimit } from "./rate-limit.js";
@@ -983,21 +984,35 @@ type CodeRow = {
   grant_id: string | null;
 };
 
-function issuePair(principalId: string, clientId: string, grantId: string, audience: string, scope: string) {
+/**
+ * Key for deriving refresh-token successors. It hangs off ADMIN_SECRET, so rotating the secret
+ * changes every successor at the same boot that enforceAdminSecretRotation revokes the grants.
+ * With no secret there is no key and rotation stays strict: a key anyone could know would let a
+ * holder of an old token compute the current one offline and walk past reuse detection.
+ */
+function successorKey(): Buffer | null {
+  if (!config.adminSecret) return null;
+  return createHmac("sha256", config.adminSecret).update("tallylamp oauth refresh-token successor v1").digest();
+}
+
+/**
+ * The refresh token that rotating `parent` issues, or null without a key. Deriving it instead of
+ * drawing it at random lets a client that presents `parent` again get the same successor back.
+ */
+export function successorRefreshToken(parent: string): string | null {
+  const key = successorKey();
+  if (!key) return null;
+  return `tl_rt_${createHmac("sha256", key).update(parent).digest().subarray(0, 24).toString("base64url")}`;
+}
+
+/** Mint a fresh access token and wrap it, with `refreshToken`, in a token response. */
+function accessResponse(principalId: string, clientId: string, grantId: string, audience: string, scope: string, refreshToken: string) {
   const accessTtl = config.oauthAccessTtlSec;
   const access = issueCredential("agent", principalId, {
     prefix: "tl_oa",
     expiresAt: new Date(Date.now() + accessTtl * 1000).toISOString(),
     audience,
     kind: "access",
-    clientId,
-    grantId,
-  });
-  const refreshToken = issueCredential("agent", principalId, {
-    prefix: "tl_rt",
-    expiresAt: new Date(Date.now() + config.oauthRefreshTtlSec * 1000).toISOString(),
-    audience,
-    kind: "refresh",
     clientId,
     grantId,
   });
@@ -1008,6 +1023,50 @@ function issuePair(principalId: string, clientId: string, grantId: string, audie
     refresh_token: refreshToken,
     scope,
   };
+}
+
+/** Issue a token pair. `rotatedFrom` is the refresh token being spent, whose successor this is. */
+function issuePair(principalId: string, clientId: string, grantId: string, audience: string, scope: string, rotatedFrom?: string) {
+  const refreshToken = issueCredential("agent", principalId, {
+    prefix: "tl_rt",
+    token: (rotatedFrom && successorRefreshToken(rotatedFrom)) || undefined,
+    expiresAt: new Date(Date.now() + config.oauthRefreshTtlSec * 1000).toISOString(),
+    audience,
+    kind: "refresh",
+    clientId,
+    grantId,
+  });
+  return accessResponse(principalId, clientId, grantId, audience, scope, refreshToken);
+}
+
+/**
+ * The token response for a client one refresh behind, or null if `row` is anything older.
+ *
+ * The presented token was rotated, and its successor is still the live head of the grant. That
+ * happens without theft: a sibling process holding the same token in memory refreshed first, or
+ * the response carrying the successor never reached the client's store. The client gets that
+ * same successor back with a fresh access token, so every holder converges on one chain.
+ * Everything the normal path checks still applies.
+ */
+function catchUp(row: CredentialRow, p: Record<string, string>) {
+  if (!row.grant_id) return null;
+  if (row.expires_at && Date.parse(row.expires_at) < Date.now()) return null;
+  if (row.client_id && row.client_id !== p.client_id) return null;
+  const successor = successorRefreshToken(p.refresh_token);
+  const next = successor ? lookupCredential(successor) : undefined;
+  if (!successor || !next || next.kind !== "refresh" || next.revoked_at) return null;
+  if (next.expires_at && Date.parse(next.expires_at) < Date.now()) return null;
+  if (next.grant_id !== row.grant_id || next.client_id !== row.client_id || next.principal_id !== row.principal_id) return null;
+  const agent = getAgent(row.principal_id);
+  if (!agent || agent.type !== "agent" || !agent.enabled) return null;
+  return accessResponse(
+    row.principal_id,
+    row.client_id ?? p.client_id,
+    row.grant_id,
+    row.audience ?? mcpResource(),
+    agent.scopes.join(" "),
+    successor,
+  );
 }
 
 function exchangeCode(p: Record<string, string>, res: Response): void {
@@ -1077,10 +1136,18 @@ function refresh(p: Record<string, string>, res: Response): void {
     return;
   }
   if (row.revoked_at) {
-    // Rotation means a live refresh token is never presented twice. A revoked one coming
-    // back means it was captured, so the whole family dies.
-    if (row.grant_id) revokeGrant(row.grant_id);
-    audit({ actorType: "agent", actorId: row.principal_id, action: "oauth.refresh_reuse", detail: { grantId: row.grant_id } });
+    const caughtUp = catchUp(row, p);
+    if (caughtUp) {
+      audit({ actorType: "agent", actorId: row.principal_id, action: "oauth.refresh_reuse_tolerated", detail: { grantId: row.grant_id } });
+      res.json(caughtUp);
+      return;
+    }
+    // Two or more refreshes behind, or failing a check, means two parties are spending one
+    // chain, so the whole family dies. Audit only the replay that killed it: a client stuck on
+    // a dead token retries on every start and would otherwise write a row each time.
+    if (row.grant_id && revokeGrant(row.grant_id) > 0) {
+      audit({ actorType: "agent", actorId: row.principal_id, action: "oauth.refresh_reuse", detail: { grantId: row.grant_id } });
+    }
     res.status(400).json({ error: "invalid_grant", error_description: "refresh token reuse detected" });
     return;
   }
@@ -1105,6 +1172,7 @@ function refresh(p: Record<string, string>, res: Response): void {
       row.grant_id ?? `grn_${randomBytes(12).toString("hex")}`,
       row.audience ?? mcpResource(),
       agent.scopes.join(" "),
+      p.refresh_token,
     ),
   );
 }

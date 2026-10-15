@@ -297,6 +297,8 @@ export function issueCredential(
   principalId: string,
   opts?: {
     prefix?: string;
+    /** A precomputed token, used for derived refresh-token successors; `prefix` is then ignored. */
+    token?: string;
     expiresAt?: string;
     /** RFC 8707 audience. Non-null credentials are only accepted at that exact resource. */
     audience?: string | null;
@@ -305,7 +307,7 @@ export function issueCredential(
     grantId?: string | null;
   },
 ): string {
-  const token = newToken(opts?.prefix ?? (principalType === "agent" ? "tl_ag" : "tl_br"));
+  const token = opts?.token ?? newToken(opts?.prefix ?? (principalType === "agent" ? "tl_ag" : "tl_br"));
   getDb()
     .prepare(
       `INSERT INTO credentials(id, principal_type, principal_id, token_hash, token_prefix, created_at, expires_at, kind, audience, client_id, grant_id)

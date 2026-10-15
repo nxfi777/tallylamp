@@ -187,8 +187,17 @@ provider.
   audience and are refused on `/api/v1`.
 - Authorization responses include the RFC 9207 `iss` parameter. RFC 7009 token
   revocation is available at `/oauth/revoke`.
-- Access tokens last one hour by default. Refresh tokens rotate; replaying an
-  authorization code or reusing a refresh token revokes the whole grant.
+- Access tokens last one hour by default. Refresh tokens rotate, and each
+  successor is derived from the token it replaces with a key based on
+  `ADMIN_SECRET`. A client one refresh behind gets the same successor back with
+  a fresh access token, as long as that successor is still unspent. "One refresh
+  behind" means it presents the token that was just rotated. This happens when
+  several processes share one stored login and another one refreshed first, or
+  when a refresh response never reached the client's store. Presenting an older
+  refresh token, or replaying an authorization code, revokes the whole grant.
+  The tradeoff: someone holding the most recently rotated token can keep pace
+  with the real client until one of them falls two refreshes behind. Without
+  `ADMIN_SECRET`, rotation is strict and any reuse revokes the grant.
 
 Protected-resource and authorization-server metadata return HTTP 200 without a
 redirect at both their root and `/mcp`-suffixed well-known paths. `OPTIONS`

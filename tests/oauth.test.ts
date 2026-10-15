@@ -4,7 +4,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { startTestServer, json, type TestCtx } from "./helpers.js";
 import { getDb } from "../src/db.js";
 import { resetRateLimits } from "../src/rate-limit.js";
-import { AGENT_SCOPES } from "../src/auth.js";
+import { AGENT_SCOPES, sha256 } from "../src/auth.js";
+import { successorRefreshToken } from "../src/oauth.js";
 
 let ctx: TestCtx;
 
@@ -132,6 +133,15 @@ async function callMcp(token: string) {
       params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "oauth-host", version: "0" } },
     }),
   });
+}
+
+async function redeem(refreshToken: string, clientId: string) {
+  const res = await fetch(`${ctx.url}/oauth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: clientId }),
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, string> };
 }
 
 describe("oauth for MCP hosts that refuse static bearer tokens", () => {
@@ -502,22 +512,106 @@ describe("oauth for MCP hosts that refuse static bearer tokens", () => {
       assert.ok(call.status === 200 || call.status === 202);
     });
 
-    it("treats refresh reuse as theft and revokes the family", async () => {
+    it("hands a client one refresh behind the same successor and keeps the grant alive", async () => {
+      // Two Codex processes holding one token in memory both refresh it; the second used to
+      // look like theft and log every process out.
       const { clientId, token } = await fullGrant();
-      const first = await fetch(`${ctx.url}/oauth/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token.refresh_token, client_id: clientId }),
-      });
-      const rotated = (await first.json()) as Record<string, string>;
-      const replay = await fetch(`${ctx.url}/oauth/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token.refresh_token, client_id: clientId }),
-      });
+      const first = await redeem(token.refresh_token, clientId);
+      assert.equal(first.status, 200);
+      const lagging = await redeem(token.refresh_token, clientId);
+      assert.equal(lagging.status, 200, "a holder of the just-rotated token must not kill the grant");
+      assert.equal(lagging.body.refresh_token, first.body.refresh_token, "both holders converge on one chain");
+      assert.notEqual(lagging.body.access_token, first.body.access_token);
+      for (const access of [first.body.access_token, lagging.body.access_token]) {
+        const call = await callMcp(access);
+        assert.ok(call.status === 200 || call.status === 202);
+      }
+      const next = await redeem(first.body.refresh_token, clientId);
+      assert.equal(next.status, 200, "the shared successor still rotates");
+    });
+
+    it("treats a token whose successor was already spent as theft and revokes the family", async () => {
+      const { clientId, token } = await fullGrant();
+      const first = await redeem(token.refresh_token, clientId);
+      const second = await redeem(first.body.refresh_token, clientId);
+      assert.equal(second.status, 200);
+      const replay = await redeem(token.refresh_token, clientId);
       assert.equal(replay.status, 400);
-      const after = await callMcp(rotated.access_token);
+      assert.equal(replay.body.refresh_token, undefined);
+      const after = await callMcp(second.body.access_token);
       assert.equal(after.status, 401, "reuse must revoke every token in the family");
+      assert.equal((await redeem(second.body.refresh_token, clientId)).status, 400);
+    });
+
+    it("never hands the successor to another client", async () => {
+      const { clientId, token } = await fullGrant();
+      const first = await redeem(token.refresh_token, clientId);
+      const other = await register();
+      const replay = await redeem(token.refresh_token, (other.body as { client_id: string }).client_id);
+      assert.equal(replay.status, 400);
+      assert.equal(replay.body.refresh_token, undefined);
+      assert.equal((await redeem(first.body.refresh_token, clientId)).status, 400, "a leaked token in other hands kills the family");
+    });
+
+    it("refuses the rotated token once the grant is revoked", async () => {
+      const { clientId, token } = await fullGrant();
+      const first = await redeem(token.refresh_token, clientId);
+      const revoke = await fetch(`${ctx.url}/oauth/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: first.body.refresh_token }),
+      });
+      assert.equal(revoke.status, 200);
+      const replay = await redeem(token.refresh_token, clientId);
+      assert.equal(replay.status, 400);
+      assert.equal(replay.body.refresh_token, undefined);
+    });
+
+    it("refuses the rotated token once the connector is disabled", async () => {
+      // Disabling a connector leaves its credentials in place, so the successor is still live.
+      const { clientId, token } = await fullGrant();
+      await redeem(token.refresh_token, clientId);
+      const connector = await connectorFor(clientId);
+      const patch = await json(`${ctx.url}/api/v1/agents/${connector.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", cookie: ctx.cookie },
+        body: JSON.stringify({ enabled: false }),
+      });
+      assert.equal(patch.status, 200);
+      const replay = await redeem(token.refresh_token, clientId);
+      assert.equal(replay.status, 400);
+      assert.equal(replay.body.refresh_token, undefined);
+    });
+
+    it("audits the replay that kills a grant once, not every retry after it", async () => {
+      const { clientId, token } = await fullGrant();
+      const first = await redeem(token.refresh_token, clientId);
+      await redeem(first.body.refresh_token, clientId);
+      const { grant_id: grantId } = getDb()
+        .prepare(`SELECT grant_id FROM credentials WHERE token_hash = ?`)
+        .get(sha256(token.refresh_token)) as { grant_id: string };
+      assert.equal((await redeem(token.refresh_token, clientId)).status, 400);
+      assert.equal((await redeem(token.refresh_token, clientId)).status, 400);
+      const { n } = getDb()
+        .prepare(`SELECT COUNT(*) AS n FROM audit_events WHERE action = 'oauth.refresh_reuse' AND json_extract(detail_json, '$.grantId') = ?`)
+        .get(grantId) as { n: number };
+      assert.equal(n, 1);
+    });
+
+    it("derives successors from ADMIN_SECRET and keeps rotation strict without one", () => {
+      const saved = process.env.ADMIN_SECRET;
+      try {
+        const successor = successorRefreshToken("tl_rt_parent");
+        assert.ok(successor?.startsWith("tl_rt_"));
+        assert.equal(successorRefreshToken("tl_rt_parent"), successor);
+        assert.notEqual(successorRefreshToken("tl_rt_other"), successor);
+        process.env.ADMIN_SECRET = "a-different-admin-secret";
+        assert.notEqual(successorRefreshToken("tl_rt_parent"), successor, "the key follows ADMIN_SECRET");
+        process.env.ADMIN_SECRET = "";
+        assert.equal(successorRefreshToken("tl_rt_parent"), null, "a guessable key would let old tokens skip reuse detection");
+      } finally {
+        process.env.ADMIN_SECRET = saved;
+      }
     });
 
     it("rejects a refresh token presented by another client", async () => {
