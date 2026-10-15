@@ -35,11 +35,11 @@ and every worker together: while they run different releases, the main instance
 starts nothing on a worker. Redeploys restart running browsers; their profiles
 remain on the persistent volume.
 
-Connectors approved before this release keep working. Their next rotation
-follows the old rule, because the token being replaced was drawn at random. A
-client that falls one refresh behind across the upgrade can still be signed out
-once. From the following rotation on, catching up works. Rotating
-`ADMIN_SECRET` still revokes every OAuth grant.
+Connectors approved before this release keep working, and every rotation 0.11.6
+makes supports catching up, including the first one after the upgrade. The one
+gap is the last rotation made before the upgrade: its successor was drawn at
+random, so a client still holding the token that rotation replaced is signed out
+once. Rotating `ADMIN_SECRET` still revokes every OAuth grant.
 
 Tallylamp Link is unchanged apart from its version number.
 
