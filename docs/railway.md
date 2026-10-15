@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.11.5` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.11.6` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -267,32 +267,32 @@ release: a worker and the instance it joins must run the same release.
 
 ## Releasing and upgrading
 
-The current release is [0.11.5](https://github.com/nxfi777/tallylamp/releases/tag/v0.11.5)
+The current release is [0.11.6](https://github.com/nxfi777/tallylamp/releases/tag/v0.11.6)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:77c612265f08ee24b20471dc0bb63c98069491b393eb04826becce0820029667
+ghcr.io/nxfi777/tallylamp@sha256:33557d1796c3ba09b3482827245a1203e2e9e45e172f49f86d07c7dd0441f179
 ```
 
-The [0.11.5 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/38264021437)
+The [0.11.6 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/38724207043)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, the version and source-revision labels, and the zip's manifest version
 were verified afterward. The image's source revision is
-`60562247995ce48b71808b01594586796e7c7453`.
+`71d09c62e287fe9a7cd75ec92a1cda5905c452f0`.
 
-The Railway template pins the `0.11.5` digest for new installations, and the
+The Railway template pins the `0.11.6` digest for new installations, and the
 [Tallylamp Worker](https://railway.com/deploy/tallylamp-worker) template pins
 the same one. Each template's published configuration was read back after the
 update, and only the image had changed. Existing deployments keep their
-selected image. Version 0.11.5 changes no tables and adds no settings.
+selected image. Version 0.11.6 changes no tables and adds no settings.
 
-A live 0.11.5 test drove the extension tools through production's own `/mcp`
-with a temporary agent and browser: it installed an unpacked extension, ran code
-in its service worker, read a content-script message, opened and snapshotted its
-options page, triggered its toolbar action and uninstalled it. The temporary
-browser was deleted and the test agent disabled, which revokes its credential.
+After the 0.11.6 deploy, production's main instance and its worker both
+reported 0.11.6. A Claude Code connector refreshed its token through the new
+code, its next MCP call succeeded, and the audit log recorded no refresh-token
+reuse. The release's tests cover a client one refresh behind; production only
+exercises that path when a client actually falls behind.
 
 A live 0.11.3 test sent concurrent browser calls through one MCP session:
 browser B responded in 131 ms while browser A's delayed call took 2.62 seconds.
@@ -351,8 +351,9 @@ worker](release-0.11.0.md), [0.11.1 notes on choosing permissions when you
 create an agent](release-0.11.1.md), [0.11.2 notes on resetting a
 browser's thread counts](release-0.11.2.md), [0.11.3 notes on shared MCP
 browser routing](release-0.11.3.md), [0.11.4 notes on linked-browser bridges
-on workers](release-0.11.4.md), and [0.11.5 notes on extension debugging,
-export and import](release-0.11.5.md).
+on workers](release-0.11.4.md), [0.11.5 notes on extension debugging,
+export and import](release-0.11.5.md), and [0.11.6 notes on OAuth refresh
+tokens for clients with several processes](release-0.11.6.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing
