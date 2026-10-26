@@ -41,7 +41,8 @@ projects, so a worker in another one cannot be reached.
 
 To put a browser you already have on the worker, choose **Move to…** from its
 menu. A running browser stops for the copy and starts again on the worker,
-logins and tabs included.
+logins and tabs included. A browser that reaches the web through a gateway, a
+computer of yours, stays on the main instance.
 
 ## Why Deploy Tallylamp Worker on Railway?
 
@@ -61,7 +62,7 @@ internet.
 ## Dependencies for Tallylamp Worker
 
 A running Tallylamp in the same Railway project, on the release this template
-installs, currently 0.11.6. A worker that tries to join a different release
+installs, currently 0.12.0. A worker that tries to join a different release
 refuses to start and names both versions.
 
 ### Deployment Dependencies

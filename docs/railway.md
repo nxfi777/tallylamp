@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.11.6` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.12.0` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -267,32 +267,35 @@ release: a worker and the instance it joins must run the same release.
 
 ## Releasing and upgrading
 
-The current release is [0.11.6](https://github.com/nxfi777/tallylamp/releases/tag/v0.11.6)
+The current release is [0.12.0](https://github.com/nxfi777/tallylamp/releases/tag/v0.12.0)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:33557d1796c3ba09b3482827245a1203e2e9e45e172f49f86d07c7dd0441f179
+ghcr.io/nxfi777/tallylamp@sha256:ccb6b5d1eda69bbc355351cb6bf8d43e8a1362641e0d7f28b9aa6f3cd01c7bdb
 ```
 
-The [0.11.6 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/38724207043)
+The [0.12.0 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/40259910270)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, the version and source-revision labels, and the zip's manifest version
 were verified afterward. The image's source revision is
-`71d09c62e287fe9a7cd75ec92a1cda5905c452f0`.
+`c6fc1217f1b84bcc09f013e572420aaec2c9c76e`.
 
-The Railway template pins the `0.11.6` digest for new installations, and the
+The Railway template pins the `0.12.0` digest for new installations, and the
 [Tallylamp Worker](https://railway.com/deploy/tallylamp-worker) template pins
 the same one. Each template's published configuration was read back after the
 update, and only the image had changed. Existing deployments keep their
-selected image. Version 0.11.6 changes no tables and adds no settings.
+selected image. Version 0.12.0 adds a `gateways` table and a `browsers.gateway_id`
+column at startup, and no settings. Before rolling back to an older image, switch
+every browser off its gateway: older releases ignore the column and would start
+those browsers on the host's own address.
 
-After the 0.11.6 deploy, production's main instance and its worker both
-reported 0.11.6. A Claude Code connector refreshed its token through the new
-code, its next MCP call succeeded, and the audit log recorded no refresh-token
-reuse. The release's tests cover a client one refresh behind; production only
-exercises that path when a client actually falls behind.
+After the 0.12.0 deploy, production's main instance listed the gateway routes
+and served the gateway client at `/tallylamp.mjs`, byte for byte the release's
+`bin/tallylamp.mjs`, and its worker reported 0.12.0. Before release, that client
+carried HTTPS through a gateway to Cloudflare, which saw the gateway computer's
+own address, and a 2.5 MB download arrived intact (`npm run test:gateway-net`).
 
 A live 0.11.3 test sent concurrent browser calls through one MCP session:
 browser B responded in 131 ms while browser A's delayed call took 2.62 seconds.
@@ -352,8 +355,9 @@ create an agent](release-0.11.1.md), [0.11.2 notes on resetting a
 browser's thread counts](release-0.11.2.md), [0.11.3 notes on shared MCP
 browser routing](release-0.11.3.md), [0.11.4 notes on linked-browser bridges
 on workers](release-0.11.4.md), [0.11.5 notes on extension debugging,
-export and import](release-0.11.5.md), and [0.11.6 notes on OAuth refresh
-tokens for clients with several processes](release-0.11.6.md).
+export and import](release-0.11.5.md), [0.11.6 notes on OAuth refresh
+tokens for clients with several processes](release-0.11.6.md), and [0.12.0
+notes on gateways and viewer mouse input](release-0.12.0.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing

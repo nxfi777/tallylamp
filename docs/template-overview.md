@@ -78,9 +78,8 @@ you have control.
 ## Chrome extensions
 
 Tab view is the page. Full browser is Chrome's toolbar and dialogs. Take control,
-then switch to Full browser to install from the Chrome Web Store. New browsers
-have the Extensions switch on already; if it was turned off, stop the browser and
-turn it back on first.
+then switch to Full browser to install from the Chrome Web Store. Extensions are
+on for new browsers; if it is off, stop the browser and turn it on.
 
 Chrome's own UI can open files on the host and change browser settings. An
 installed extension can read signed-in pages. Use this only with administrators
@@ -90,9 +89,6 @@ Allow agent control is a separate toggle. It lets the owning agent see and use
 that native UI, including settings and host-file dialogs. New agent-owned
 browsers start with it on. Set `TALLYLAMP_AGENT_DESKTOP_DEFAULT=0` if you do not
 trust every new agent-owned browser with that access.
-
-Agents can debug extensions too, and the owning agent can install unpacked ones
-from the server.
 
 ## Use your own browser
 
@@ -135,10 +131,8 @@ Enter the proxy server and optional login in **New browser**, or stop a browser
 and choose **Configure** beside **Proxy**. The API and MCP tools accept the same
 settings, and Railway needs no shared proxy variable or credential.
 
-Settings persist on `/data` but are not copied into saved profile templates.
-HTTP and HTTPS CONNECT proxies are supported; SOCKS and PAC are not. DNS stays
-on the server, loopback tunnels keep their own route, and proxy failures never
-fall back to direct access.
+HTTP and HTTPS CONNECT proxies are supported; SOCKS and PAC are not. Proxy
+failures never fall back to direct access.
 
 Proxy credentials are hidden from API responses but stored unencrypted in
 SQLite. Protect the volume and its backups, and prefer an HTTPS proxy so the
@@ -146,12 +140,19 @@ proxy login is encrypted in transit. The [proxy guide](https://github.com/nxfi77
 covers connection limits. A proxy is not a VPN or a guarantee that sites will
 accept automation.
 
+## Use your own connection
+
+Some sites refuse Railway's datacenter address. Add a gateway in the dashboard
+and run its command on your computer: browsers you assign then reach the web
+from your connection, never falling back to Railway's. See the
+[gateway guide](https://github.com/nxfi777/tallylamp/blob/main/docs/gateways.md).
+
 ## Updates are your choice
 
-The current release is `ghcr.io/nxfi777/tallylamp:0.11.6`. Pin this digest:
+The current release is `ghcr.io/nxfi777/tallylamp:0.12.0`. Pin this digest:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:33557d1796c3ba09b3482827245a1203e2e9e45e172f49f86d07c7dd0441f179
+ghcr.io/nxfi777/tallylamp@sha256:ccb6b5d1eda69bbc355351cb6bf8d43e8a1362641e0d7f28b9aa6f3cd01c7bdb
 ```
 
 Automatic image updates are disabled. Neither a source push nor a new release
@@ -179,8 +180,6 @@ Agents can load and update profiles through MCP. Allow loading and saving
 separately when you create the agent or under **Agents → Permissions**. Saving
 requires `seed:write`; borrowing a browser never permits exporting its logins.
 Share profiles only with agents you trust.
-
-Site badges show detected or reported sign-ins, not every saved login.
 
 Railway limits a service to 1,000 processes and threads, shared by all browsers.
 Tallylamp queues starts until they fit and holds room for pinned browsers. If one

@@ -62,3 +62,24 @@ connection. Older releases do not know about gateways and would start those
 browsers on the host's own address.
 
 Tallylamp Link is unchanged apart from its version number.
+
+## Release validation
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/40259910270)
+passed application, headed Chrome, and running-container checks before
+publishing the tested image. Its anonymous registry access, digest, version and
+source-revision labels were verified, along with the extension zip's manifest
+version. Pin this Linux amd64 artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:ccb6b5d1eda69bbc355351cb6bf8d43e8a1362641e0d7f28b9aa6f3cd01c7bdb
+```
+
+Before release, the gateway client carried HTTPS through a gateway to
+Cloudflare, which saw the gateway computer's own address, and a 2.5 MB download
+arrived with every byte (`npm run test:gateway-net`). After deploying the
+artifact, production listed the gateway routes and served the same client at
+`/tallylamp.mjs`, and its worker reported 0.12.0.
+
+See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
+backups and deployment settings.
