@@ -8,6 +8,7 @@ import { McpGateway } from "../src/mcp.js";
 import { createApp } from "../src/server.js";
 import { attachViewerUpgrade } from "../src/viewer.js";
 import { attachTunnelUpgrade } from "../src/tunnels.js";
+import { attachGatewayUpgrade, closeAllGateways } from "../src/gateways.js";
 import { attachLinkUpgrade, closeAllLinks } from "../src/linked.js";
 import { createAgent } from "../src/auth.js";
 import { resetRateLimits } from "../src/rate-limit.js";
@@ -49,6 +50,7 @@ export async function startTestServer(opts?: {
   const server = http.createServer(app);
   attachViewerUpgrade(server, browsers);
   attachTunnelUpgrade(server);
+  attachGatewayUpgrade(server);
   attachLinkUpgrade(server, browsers);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   const addr = server.address();
@@ -79,6 +81,7 @@ export async function startTestServer(opts?: {
       // An upgraded socket is no longer the HTTP server's to close, so a test that failed
       // before hanging up its fake extension would otherwise hold the process open.
       closeAllLinks();
+      closeAllGateways();
       await browsers.shutdown();
       await new Promise<void>((resolve) => {
         server.closeAllConnections?.();

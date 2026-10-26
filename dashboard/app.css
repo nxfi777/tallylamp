@@ -690,6 +690,8 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
 .banner.asks { border-left: 3px solid var(--warn); }
 /* The host ran out of processes: the same attention state, about the machine rather than a person. */
 .banner.host { border-left: 3px solid var(--warn); }
+/* Its gateway is not connected: attention about the route out, not a failure of Chrome. */
+.banner.gateway { border-left: 3px solid var(--warn); }
 .asks-h { font-size: 0.95rem; margin: 0 0 0.15rem; }
 /* One row per request, and the rule between them rather than a card each: three nested cards
    inside a panel is three borders saying the same thing. */

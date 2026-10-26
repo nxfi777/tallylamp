@@ -18,6 +18,7 @@ import { audit } from "./audit.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dashboardDir = path.resolve(here, "../dashboard");
+const cliPath = path.resolve(here, "../bin/tallylamp.mjs");
 
 export function originOk(req: Request): boolean {
   const origin = req.header("origin");
@@ -135,8 +136,15 @@ export function createApp(browsers: BrowserManager, mcp: McpHandler): express.Ex
   mountGuest(app, browsers);
   mountApi(app, browsers);
 
+  // The command-line client, for a gateway or a tunnel on a computer with no checkout. It is the
+  // same file the image ships in bin/, so it always matches this instance's release.
+  app.get("/tallylamp.mjs", (_req, res) => {
+    res.type("text/javascript");
+    res.setHeader("Cache-Control", "no-cache");
+    res.sendFile(cliPath);
+  });
   app.use(express.static(dashboardDir));
-  app.get(["/", "/login", "/browsers", "/browsers/:id", "/agents", "/seeds", "/workers", "/security", "/pair"], (_req, res) => {
+  app.get(["/", "/login", "/browsers", "/browsers/:id", "/agents", "/seeds", "/workers", "/gateways", "/security", "/pair"], (_req, res) => {
     res.sendFile(path.join(dashboardDir, "index.html"));
   });
 

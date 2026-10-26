@@ -9,14 +9,20 @@ import { log } from "./log.js";
 export type EgressProxy = { port: number; close: () => Promise<void> };
 /** null means unbound; rejection means bound but unavailable, and must never fall back. */
 export type TunnelDialer = (host: string, port: number) => Promise<Duplex | null>;
+/** Takes the vetted, pinned address, never a name. Rejection is final: there is no fallback. */
+export type GatewayDialer = (address: string, port: number) => Promise<Duplex>;
 export type EgressOptions = {
   browserId?: string;
   dial?: TunnelDialer;
   upstream?: BrowserProxy | null;
+  /** Set when the browser reaches the web through a gateway (gateways.ts) instead of from here. */
+  gateway?: GatewayDialer;
 };
 
 class Denied extends Error {}
 class TunnelUnavailable extends Error {}
+/** Carries the reason a person should read, because a plain-http page shows it as the page. */
+class GatewayDown extends Error {}
 const badGateway = "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
 
 function originHeaders(headers: IncomingHttpHeaders, host: string): IncomingHttpHeaders {
@@ -64,6 +70,14 @@ export async function startEgressProxy(opts: EgressOptions = {}): Promise<Egress
       const vetted = await resolveVetted(host);
       if (!vetted.ok || !vetted.addresses[0]) throw new Denied();
       if (controller.signal.aborted) throw new Error("cancelled");
+      // Pinned here, so the gateway connects to exactly what was vetted and resolves nothing.
+      if (opts.gateway) {
+        try {
+          return await opts.gateway(vetted.addresses[0].address, port);
+        } catch (e) {
+          throw new GatewayDown((e as Error).message);
+        }
+      }
       if (opts.upstream) return dialUpstreamProxy(opts.upstream, vetted.addresses[0].address, port, controller.signal);
       return new Promise<Socket>((resolve, reject) => {
         const socket = createConnection({ host: vetted.addresses[0].address, port, signal: controller.signal });
@@ -146,10 +160,14 @@ export async function startEgressProxy(opts: EgressOptions = {}): Promise<Egress
       res.once("close", () => { outgoing.destroy(); peer.destroy(); });
       req.pipe(outgoing);
     }, (error) => {
-      if (!res.destroyed) {
-        res.writeHead(error instanceof Denied ? 403 : 502, { connection: "close" });
-        res.end(error instanceof TunnelUnavailable ? "tunnel unavailable" : undefined);
+      if (res.destroyed) return;
+      if (error instanceof GatewayDown) {
+        res.writeHead(502, { connection: "close", "content-type": "text/plain; charset=utf-8" });
+        res.end(error.message);
+        return;
       }
+      res.writeHead(error instanceof Denied ? 403 : 502, { connection: "close" });
+      res.end(error instanceof TunnelUnavailable ? "tunnel unavailable" : undefined);
     });
   });
   server.on("upgrade", (req, client, head) => {

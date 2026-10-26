@@ -235,6 +235,9 @@ function findBinding(browserId: string, host: string, port: number): TunnelRow |
 
 type StreamState = { duplex: Duplex; settle?: (err: Error | null, unbound?: boolean) => void };
 
+/** A tunnel carries one dev server; a gateway carries a whole browser, so it needs more room. */
+export type MuxLimits = { maxStreams?: number; openTimeoutMs?: number };
+
 /**
  * The side of a tunnel socket that opens streams: this instance towards whoever holds the
  * tunnel (TunnelConnection below), or a worker towards this instance (worker.ts). Opening
@@ -250,6 +253,7 @@ export class TunnelMux {
   constructor(
     protected readonly ws: WebSocket,
     private readonly what: Record<string, unknown>,
+    private readonly limits: MuxLimits = {},
   ) {
     ws.on("message", (data, isBinary) => {
       if (!isBinary) return;
@@ -315,8 +319,9 @@ export class TunnelMux {
 
   async open(host: string, port: number): Promise<Duplex | null> {
     if (this.closed) throw new TunnelUnavailable("tunnel is closing");
-    if (this.streams.size >= config.tunnelMaxStreams) {
-      throw new TunnelUnavailable(`tunnel is at its stream limit (${config.tunnelMaxStreams})`);
+    const maxStreams = this.limits.maxStreams ?? config.tunnelMaxStreams;
+    if (this.streams.size >= maxStreams) {
+      throw new TunnelUnavailable(`tunnel is at its stream limit (${maxStreams})`);
     }
     const streamId = this.nextId++;
     // uint32 wrap is not reachable in a tunnel's lifetime, but a wrapped id would collide
@@ -365,7 +370,7 @@ export class TunnelMux {
         state.settle = undefined;
         this.dropStream(streamId);
         reject(new TunnelUnavailable("tunnel did not answer the open in time"));
-      }, config.tunnelOpenTimeoutMs);
+      }, this.limits.openTimeoutMs ?? config.tunnelOpenTimeoutMs);
       timer.unref?.();
       state.settle = (err, unbound) => {
         clearTimeout(timer);
@@ -377,7 +382,8 @@ export class TunnelMux {
     return bound ? duplex : null;
   }
 
-  shutdown(reason: string): void {
+  /** `code` lets the far side tell "stop for good" (4xxx) from a drop it should retry. */
+  shutdown(reason: string, code = 1000): void {
     if (this.closed) return;
     this.closed = true;
     for (const [id, st] of this.streams) {
@@ -387,7 +393,7 @@ export class TunnelMux {
       if (!st.duplex.destroyed) st.duplex.destroy();
     }
     try {
-      this.ws.close(1000, reason.slice(0, 100));
+      this.ws.close(code, reason.slice(0, 100));
     } catch {
       /* already gone */
     }

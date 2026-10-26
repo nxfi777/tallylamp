@@ -272,6 +272,62 @@ export function cleanPaste(raw: unknown): string | null {
   return text.length > PASTE_MAX ? text.slice(0, PASTE_MAX) : text;
 }
 
+/** CDP's mouse buttons, each with the bit it sets in `buttons`, in the order a drag names one. */
+const MOUSE_BUTTONS = [["left", 1], ["right", 2], ["middle", 4], ["back", 8], ["forward", 16]] as const;
+const BUTTON_BIT: Record<string, number> = Object.fromEntries(MOUSE_BUTTONS);
+
+/**
+ * The CDP events for one operator mouse message, shaped the way a real mouse's arrive.
+ *
+ * Left to CDP's defaults, every hover reached the page as a drag with the left button held at
+ * zero pressure, and every press at zero pressure. No mouse produces either: on hardware with no
+ * pressure sensor the platform reports 0.5 while a button is down and 0 otherwise. So the one
+ * person on the page, solving a "verify you are human" box, was the input that looked synthetic.
+ *
+ * `tracked` is what this socket last held. The dashboard sends the real mouse's `buttons`; an
+ * older one sends none, and then presses and releases are tracked here instead. A button that
+ * was let go outside the viewer, where no release could be seen, is released before the move
+ * that reveals it, as a window delivers a release that happens outside it.
+ */
+export function mouseInput(msg: Record<string, unknown>, tracked: number): { events: Array<Record<string, unknown>>; held: number } {
+  const x = Number(msg.x);
+  const y = Number(msg.y);
+  // No event is a press, as it always was. Anything else unrecognised is dropped, not guessed at.
+  const type = msg.event === undefined ? "mousePressed" : msg.event;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || (type !== "mousePressed" && type !== "mouseMoved" && type !== "mouseReleased")) {
+    return { events: [], held: tracked };
+  }
+  const button = typeof msg.button === "string" && msg.button in BUTTON_BIT ? msg.button : "left";
+  const reported = typeof msg.buttons === "number" && Number.isInteger(msg.buttons) && msg.buttons >= 0 && msg.buttons <= 31
+    ? msg.buttons : null;
+  let held = reported ?? tracked;
+  if (reported === null && type === "mousePressed") held |= BUTTON_BIT[button]!;
+  if (reported === null && type === "mouseReleased") held &= ~BUTTON_BIT[button]!;
+  const modifiers = typeof msg.modifiers === "number" ? msg.modifiers : undefined;
+  const at = { x: Math.round(x), y: Math.round(y) };
+  const events: Array<Record<string, unknown>> = [];
+  if (type === "mouseMoved") {
+    let down = tracked;
+    for (const [name, bit] of MOUSE_BUTTONS) {
+      if (!(down & bit) || held & bit) continue;
+      down &= ~bit;
+      events.push({ type: "mouseReleased", ...at, button: name, buttons: down, clickCount: 1, force: down ? 0.5 : 0, modifiers });
+    }
+  }
+  const dragging = MOUSE_BUTTONS.find(([, bit]) => held & bit)?.[0];
+  events.push({
+    type,
+    ...at,
+    // A move names the button it drags with, or none; a press or release names its own.
+    button: type === "mouseMoved" ? dragging ?? "none" : button,
+    buttons: held,
+    clickCount: type === "mouseMoved" ? 0 : Number.isInteger(msg.clickCount) && (msg.clickCount as number) > 0 ? msg.clickCount : 1,
+    force: held ? 0.5 : 0,
+    modifiers,
+  });
+  return { events, held };
+}
+
 /**
  * A start page for about:blank. Chrome's own blank tab is a white void, which tells an
  * operator who has just taken over a browser nothing at all — not which browser it is, not
@@ -435,6 +491,8 @@ async function runViewer(
   let tabTimer: NodeJS.Timeout | undefined;
   let tabTokens = 10;
   let tabLast = Date.now();
+  /** Mouse buttons the operator holds, as `buttons` bits (mouseInput). */
+  let heldButtons = 0;
   let cursorWorld: number | undefined;
   let cursorBusy = false;
   let lastCursorAt = 0;
@@ -1522,20 +1580,9 @@ async function runViewer(
       };
       if (msg.type === "mouse") {
         if (msg.event !== "mouseMoved") lastInputAt = Date.now();
-        void cdp!
-          .send(
-            "Input.dispatchMouseEvent",
-            {
-              type: msg.event ?? "mousePressed",
-              x: msg.x,
-              y: msg.y,
-              button: msg.button ?? "left",
-              clickCount: msg.clickCount ?? 1,
-              modifiers: typeof msg.modifiers === "number" ? msg.modifiers : undefined,
-            },
-            pageSession,
-          )
-          .catch(noop);
+        const input = mouseInput(msg, heldButtons);
+        heldButtons = input.held;
+        for (const params of input.events) void cdp!.send("Input.dispatchMouseEvent", params, pageSession).catch(noop);
         // The remote cursor shape is the only feedback that says "this is a link". Without it
         // the operator cannot tell a mis-aimed click from a dead one.
         if (msg.event === "mouseMoved" && typeof msg.x === "number" && typeof msg.y === "number") {

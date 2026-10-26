@@ -150,6 +150,16 @@ export const config = {
   /** Concurrent forwarded connections on one tunnel. A page opens several; a loop opens many. */
   get tunnelMaxStreams() { return int("TALLYLAMP_TUNNEL_MAX_STREAMS", 64); },
   get tunnelOpenTimeoutMs() { return int("TALLYLAMP_TUNNEL_OPEN_TIMEOUT_SEC", 10) * 1000; },
+  /**
+   * Concurrent connections over one gateway, across every browser assigned to it. Chrome keeps
+   * at most 32 sockets per proxy, so a browser stays well under this; WebSockets come on top.
+   */
+  get gatewayMaxStreams() { return int("TALLYLAMP_GATEWAY_MAX_STREAMS", 256); },
+  /**
+   * The gateway's own TCP connect to the site happens inside this. The egress proxy gives up on
+   * the whole dial after 10 seconds anyway (PROXY_HANDSHAKE_TIMEOUT_MS), so more buys nothing.
+   */
+  get gatewayOpenTimeoutMs() { return int("TALLYLAMP_GATEWAY_OPEN_TIMEOUT_SEC", 10) * 1000; },
   get startupTimeoutMs() { return int("TALLYLAMP_STARTUP_TIMEOUT_SEC", 45) * 1000; },
   get shutdownTimeoutMs() { return int("TALLYLAMP_SHUTDOWN_TIMEOUT_SEC", 15) * 1000; },
   get sandbox() { return enumVal("TALLYLAMP_SANDBOX", ["auto", "on", "off"] as const, "auto"); },

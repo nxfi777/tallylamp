@@ -12,6 +12,7 @@ It walks through hosting Tallylamp, connecting an agent, and trying a browser ha
 | Install a Chrome extension or open Full browser | [Chrome extensions](usage.md#chrome-extensions-and-full-browser) |
 | Let someone else sign in or clear 2FA in one browser | [Guest links](guest-access.md) |
 | Route a browser through an HTTP or HTTPS proxy | [Per-browser proxies](proxies.md) |
+| Let a browser reach the web from your own computer, when sites refuse the host | [Gateways](gateways.md) |
 | Run more browsers than one host's process limit allows | [Workers](workers.md) |
 | Understand permissions and network access | [Security model](security.md) |
 | Understand the server and browser lifecycle | [Architecture](architecture.md) |

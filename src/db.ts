@@ -279,6 +279,25 @@ CREATE TABLE IF NOT EXISTS browser_tunnels (
   bytes_down INTEGER NOT NULL DEFAULT 0
 );
 
+-- A computer the operator owns, dialled in over an outbound socket, that the browsers assigned
+-- to it (browsers.gateway_id) reach the web from. Admin-created; the token is shown once.
+-- Every destination is still vetted and pinned here first: the gateway only ever connects to
+-- a public address it was handed, never to a name, so it cannot be pointed at its own network.
+CREATE TABLE IF NOT EXISTS gateways (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_by_type TEXT NOT NULL,
+  created_by_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  connected_at TEXT,
+  last_seen_at TEXT,
+  remote_address TEXT,
+  client_json TEXT,
+  bytes_up INTEGER NOT NULL DEFAULT 0,
+  bytes_down INTEGER NOT NULL DEFAULT 0
+);
+
 -- The standing credential for ONE linked browser: a person's own Chromium, reached through
 -- the Tallylamp extension over a socket it dials outward. One live row per browser. The
 -- token is minted when the extension claims an approved pairing, so it exists in plaintext
@@ -462,6 +481,8 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   ["browsers", "peak_threads", "INTEGER"],
   // Null: its Chrome and its profile are on this instance. Otherwise the worker that has them.
   ["browsers", "worker_id", "TEXT"],
+  // Null: it reaches the web from the host its Chrome runs on. Otherwise the gateway it uses.
+  ["browsers", "gateway_id", "TEXT"],
   // Lending gained an access level. 'control' is the right default for both: it is what every
   // grant and request written before the column existed meant, so an upgrade changes nobody's
   // standing access.

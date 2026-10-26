@@ -119,6 +119,20 @@ export const openApiSpec = {
     "/workers/{id}": {
       delete: { summary: "Remove a worker that holds no browsers (administrator only).", responses: { "200": { description: "removed" }, "409": { description: "browsers still live on it" } } },
     },
+    "/gateways": {
+      get: { summary: "List gateways: the operator's computers that browsers can reach the web from, with their status and the browsers using them (administrator only).", responses: { "200": { description: "ok" } } },
+      post: { summary: "Add a gateway (administrator only). Returns its token, once, and the command to run on that computer. See docs/gateways.md.",
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["name"], properties: { name: { type: "string", maxLength: 60 } } } } } },
+        responses: { "201": { description: "created; includes the token and the command" }, "409": { description: "a gateway with that name exists" } } },
+    },
+    "/gateways/{id}": {
+      delete: { summary: "Remove a gateway and close its connection (administrator only).", responses: { "200": { description: "removed" }, "409": { description: "a browser still uses it" } } },
+    },
+    "/browsers/{id}/gateway": {
+      put: { summary: "Route a stopped browser through a gateway, or back through this host with null (administrator only). Never falls back to a direct connection while the gateway is offline.",
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["gatewayId"], properties: { gatewayId: { type: ["string", "null"] } } } } } },
+        responses: { "200": { description: "updated" }, "409": { description: "running, on a worker, or has a proxy" }, "403": { description: "administrator required" }, "404": { description: "no such gateway" } } },
+    },
     "/workers/join": {
       post: { summary: "A worker joining with its one-time token. Called by the worker, not by people.", security: [], responses: { "200": { description: "joined; returns the worker's id and secret" }, "403": { description: "unknown, used or expired token" }, "409": { description: "the worker runs a different release" } } },
     },

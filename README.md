@@ -309,6 +309,21 @@ ends a tunnel the client opened. A tunnel an agent opened stays until it expires
 the agent closes it, or you close it in the dashboard. See [loopback tunnels](docs/usage.md#loopback-tunnels)
 and the [security rules](docs/security.md#loopback-tunnels).
 
+### Gateways
+
+Some sites refuse a datacenter address before anyone touches the page.
+Cloudflare can show a check that you cannot pass from the viewer, and a
+signed-in ChatGPT can stop with "The browser check couldn't finish". A gateway
+lets a browser reach the web from a computer of yours instead, so sites see
+your connection.
+
+Add one under **Gateways** in the dashboard and run the command it shows on that
+computer, with Node 22 or newer. Then stop the browser and choose the gateway in
+its Settings. The client dials out, so nothing listens on your computer. It
+refuses your own network and every port but 80 and 443, and HTTPS stays
+encrypted to the site. While the gateway is not running, that browser's pages
+fail instead of quietly using the host's address. See [gateways](docs/gateways.md).
+
 ### Use the browser you already have
 
 An agent can also drive a tab in your own Chrome, Edge, Brave or other Chromium

@@ -11,6 +11,7 @@ import { sweepGuests } from "./guests.js";
 import { createApp } from "./server.js";
 import { attachViewerUpgrade } from "./viewer.js";
 import { attachTunnelUpgrade, closeAllTunnels, sweepTunnels } from "./tunnels.js";
+import { attachGatewayUpgrade, closeAllGateways, sweepGateways } from "./gateways.js";
 import { attachLinkUpgrade, closeAllLinks, sweepLinks } from "./linked.js";
 
 async function main(): Promise<void> {
@@ -62,6 +63,7 @@ async function main(): Promise<void> {
   const server = http.createServer(app);
   attachViewerUpgrade(server, browsers);
   attachTunnelUpgrade(server);
+  attachGatewayUpgrade(server);
   attachLinkUpgrade(server, browsers);
 
   const reap = setInterval(() => {
@@ -77,6 +79,11 @@ async function main(): Promise<void> {
       sweepTunnels();
     } catch (e) {
       log.warn("tunnel sweep failed", { error: (e as Error).message });
+    }
+    try {
+      sweepGateways();
+    } catch (e) {
+      log.warn("gateway sweep failed", { error: (e as Error).message });
     }
     try {
       sweepLinks();
@@ -119,6 +126,8 @@ async function main(): Promise<void> {
     // Kill the bridge children before the browsers, or they outlive the process.
     await mcp.closeAll();
     closeAllTunnels();
+    // 1012: each gateway reconnects on its own once this instance is back.
+    closeAllGateways();
     closeAllLinks();
     await browsers.shutdown();
     process.exit(0);

@@ -53,6 +53,14 @@ A `tl_tn_…` token authenticates a WebSocket connection to one tunnel binding.
 It is shown once, stored as a SHA-256 hash in `browser_tunnels`, and refused
 as a bearer credential on both `/api/v1` and `/mcp`.
 
+### Gateway tokens
+
+A `tl_gw_…` token authenticates a [gateway](gateways.md)'s WebSocket. It is
+shown once, stored as a SHA-256 hash in `gateways`, and refused as a bearer
+credential on both `/api/v1` and `/mcp`. The client sends it as a WebSocket
+subprotocol, not in the URL, so access logs never record it. It does not
+expire; remove the gateway to revoke it, which also closes its connection.
+
 ### Link tokens
 
 A `tl_ln_…` token authenticates the Tallylamp Link extension's WebSocket for one
@@ -362,6 +370,32 @@ there can register a service worker and write storage. Those changes survive the
 tunnel's closure, and a later binding to the same authority inherits them.
 Delete the browser if a tunnel served content you do not trust.
 
+## Gateways
+
+A [gateway](gateways.md) lets a browser reach the web from a computer the
+operator owns. It carries all of that browser's traffic, so:
+
+- Only the administrator can create, assign or remove one. An agent, owner or
+  not, cannot route a browser through a gateway or change its route.
+- The egress proxy resolves and vets each destination exactly as for a direct
+  connection, then gives the gateway a pinned public IP and port. The gateway
+  never resolves a name, so a page cannot steer it at the network it sits on by
+  DNS.
+- The client refuses, on its own side, loopback, RFC1918, CGNAT (including
+  Tailscale), link-local, multicast, reserved and documentation ranges, NAT64 and
+  6to4 addresses, and the subnets of the computer's own interfaces. It connects
+  only to ports 80 and 443 unless told otherwise. A misconfigured or compromised
+  Tallylamp therefore cannot use it to reach that computer's network, though it
+  could still use it to reach public sites on those ports.
+- TLS runs from Chrome to the site through CONNECT, so the gateway relays
+  ciphertext. It does see destination addresses and timing. Plain `http://`
+  pages are as readable to it as to any network.
+- A browser whose gateway is not connected gets 502s. It never falls back to a
+  direct connection.
+- QUIC and WebRTC's non-proxied UDP are disabled for that browser at launch.
+- A browser on a worker cannot use a gateway, and a browser with a gateway
+  cannot be moved to one.
+
 ## Granting an agent access to your browser
 
 An agent can ask for a managed browser you own. The request reaches you in the
@@ -463,7 +497,10 @@ do not use one deployment for mutually untrusted tenants.
 Tallylamp aims to avoid accidental automation artefacts while running stock
 headed Chrome. It does not guarantee that sites will accept the browser or avoid
 fingerprinting and bans. It does not spoof unavailable GPUs or solve CAPTCHAs.
-Use human takeover when a site requires human input.
+Use human takeover when a site requires human input. A person's clicks in the
+viewer reach the page as a real mouse's do: the buttons actually held, and a
+press at the 0.5 pressure a mouse reports. When a site refuses the host's own
+address, a [gateway](gateways.md) changes where the traffic comes from.
 
 ## Reporting
 

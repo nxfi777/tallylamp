@@ -24,6 +24,7 @@ import { rateLimit } from "./rate-limit.js";
 import type { BrowserManager } from "./browsers.js";
 import { inbox, answerRequest, revokeGrant } from "./lending.js";
 import { assertMaySeeTunnels, createTunnel, listTunnels, revokeTunnel, tunnelIsConnected } from "./tunnels.js";
+import { createGateway, gatewayCommand, gatewayView, listGateways, removeGateway } from "./gateways.js";
 import { audit, listActivity, listAudit } from "./audit.js";
 import { approvePairing, denyPairing, describePairing, dropLinksFor, linkedAccess, pollPairing, setLinkedAccess, startPairing } from "./linked.js";
 import { hub } from "./events.js";
@@ -235,6 +236,26 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
   api.delete("/api/v1/workers/:id", requireAdmin, (req, res) => {
     browsers.workers.remove(req.params.id, req.principal!);
     res.json({ removed: req.params.id });
+  });
+  // Gateways: computers the operator owns, which browsers can reach the web from instead of
+  // from this host. Admin only: a gateway carries a browser's traffic.
+  api.get("/api/v1/gateways", requireAdmin, (_req, res) => {
+    res.json({ gateways: listGateways() });
+  });
+  api.post("/api/v1/gateways", requireAdmin, (req, res) => {
+    const { row, token } = createGateway(req.principal!, { name: req.body?.name });
+    // The token is in this response and nowhere else. Only its hash is stored.
+    res.status(201).json({ gateway: gatewayView(row), token, command: gatewayCommand(token) });
+  });
+  api.delete("/api/v1/gateways/:id", requireAdmin, (req, res) => {
+    removeGateway(req.principal!, req.params.id);
+    res.json({ removed: req.params.id });
+  });
+  api.put("/api/v1/browsers/:id/gateway", requireAdmin, (req, res) => {
+    if (!req.body || !("gatewayId" in req.body)) {
+      throw Err.invalid("gatewayId is required: a gateway's id, or null for this host's connection");
+    }
+    res.json({ browser: browsers.publicView(browsers.updateGateway(req.params.id, req.body.gatewayId, req.principal!)) });
   });
   api.post("/api/v1/browsers/:id/move", requireAdmin, asyncRoute(async (req, res) => {
     const to = req.body?.workerId;

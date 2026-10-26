@@ -4,6 +4,10 @@ Each browser can use its own HTTP or HTTPS proxy. Tallylamp supports proxies
 with no login or with a Basic-auth username and password. SOCKS and PAC files
 are not supported.
 
+To reach the web from a computer of your own instead, use a
+[gateway](gateways.md). A browser has one route out: this host, a proxy or a
+gateway.
+
 ## Dashboard
 
 Enter the proxy server and optional credentials when creating a browser.

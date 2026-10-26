@@ -20,6 +20,7 @@ import { browserWsUrl, listPages, CdpClient } from "./cdp.js";
 import { startEgressProxy, type EgressProxy } from "./egress-proxy.js";
 import { parseBrowserProxy, proxyView } from "./browser-proxy.js";
 import { dialTunnel, dropTunnelsFor } from "./tunnels.js";
+import { dialGateway, gatewayBrief, gatewayExists } from "./gateways.js";
 import { startFakeChrome } from "./fake-chrome.js";
 import { startLinkedRuntime } from "./linked-cdp.js";
 import { dropLinksFor, linkedAllows, linkView, liveLink } from "./linked.js";
@@ -64,6 +65,8 @@ export type BrowserRow = {
   lendable: number;
   /** Internal, may contain credentials. Never serialize the raw browser row. */
   proxy_json: string | null;
+  /** Set when it reaches the web through a gateway (gateways.ts) rather than from its host. */
+  gateway_id: string | null;
   extensions_enabled: number;
   agent_desktop_enabled: number;
   /** 'managed': a Chrome this process launched. 'linked': a person's own browser, via the extension. */
@@ -910,6 +913,9 @@ export class BrowserManager {
     const to = hostName(workerId);
     // Checked before anything stops: a move that cannot happen must not cost a restart.
     if (workerId) {
+      if (row.gateway_id) {
+        throw Err.conflict(`${row.name} uses a gateway, and gateways work only on the main instance. Switch it to this host's connection first.`);
+      }
       const problem = this.workers.unusable(this.workers.row(workerId));
       if (problem) throw Err.browserUnavailable(problem);
     }
@@ -1051,6 +1057,14 @@ export class BrowserManager {
           })()
         : row.worker_id
         ? await (async () => {
+            // A worker's egress proxy cannot reach a gateway, which connects to this instance.
+            // Starting it there would send it to the web from the datacenter, the one thing its
+            // operator assigned the gateway to avoid. updateGateway and moveTo refuse this pair.
+            if (row.gateway_id) {
+              throw Err.browserUnavailable(
+                `${row.name} uses a gateway, and gateways work only for browsers on the main instance. Move it back to start it.`,
+              );
+            }
             // Its Chrome starts on the worker, which checks its own ceiling. What comes back
             // is a local endpoint relaying to it, so from here on it is a runtime like any.
             const remote = await this.workers.startRuntime(row);
@@ -1068,10 +1082,12 @@ export class BrowserManager {
             // A crash is only noticed by the 15s reaper, so a restart can arrive while the
             // previous listener is still open; overwriting the map entry would orphan it.
             await this.closeProxy(id);
+            const gatewayId = row.gateway_id;
             const proxy = await startEgressProxy({
               browserId: id,
               dial: (host, port) => dialTunnel(id, host, port),
               upstream: parseBrowserProxy(row.proxy_json ? JSON.parse(row.proxy_json) : null),
+              gateway: gatewayId ? (address, port) => dialGateway(gatewayId, address, port) : undefined,
             });
             this.proxies.set(id, proxy);
             try {
@@ -1079,7 +1095,9 @@ export class BrowserManager {
                 profileDir: row.profile_path,
                 downloadDir: downloadDir(id),
                 proxyPort: proxy.port,
-                upstreamProxy: Boolean(row.proxy_json),
+                // Off for a gateway too: QUIC and WebRTC's UDP cannot cross it, and going
+                // around it would show sites this host's address after all.
+                upstreamProxy: Boolean(row.proxy_json) || Boolean(gatewayId),
                 extensionsEnabled: Boolean(row.extensions_enabled) && config.fullBrowser,
               });
             } catch (e) {
@@ -1268,9 +1286,40 @@ export class BrowserManager {
       throw Err.browserUnavailable("stop the browser before changing its proxy");
     }
     const proxy = parseBrowserProxy(input);
+    // One route out. A proxy behind a gateway would put the gateway's traffic on a third
+    // network, and the operator chose the gateway to browse from their own.
+    if (proxy && row.gateway_id) throw Err.conflict("this browser uses a gateway; switch it back to this host's connection before adding a proxy");
     getDb().prepare(`UPDATE browsers SET proxy_json = ? WHERE id = ?`).run(proxy ? JSON.stringify(proxy) : null, id);
     audit({ actorType: principal.type, actorId: principal.id, action: "browser.proxy.updated", targetType: "browser", targetId: id,
       detail: { configured: proxy !== null } });
+    hub.emitEvent("browser.updated", {}, id);
+    return this.row(id);
+  }
+
+  /**
+   * Route a browser through a gateway, or back through this host with null. Operator only: the
+   * gateway carries the browser's traffic, so an agent, owner or not, does not get to pick one.
+   * Read at launch, like the proxy, so the browser has to be stopped.
+   */
+  updateGateway(id: string, gatewayId: unknown, principal: Principal): BrowserRow {
+    this.assertNoExport();
+    if (principal.type !== "admin") throw Err.unauthorized("only the administrator can route a browser through a gateway");
+    if (gatewayId !== null && typeof gatewayId !== "string") throw Err.invalid("gatewayId must be a gateway's id, or null for this host's connection");
+    const row = this.row(id);
+    this.assertManaged(id, "a gateway");
+    if (gatewayId === row.gateway_id) return row;
+    if (gatewayId) {
+      if (!gatewayExists(gatewayId)) throw Err.notFound("gateway not found");
+      if (row.worker_id) throw Err.conflict("gateways work only for browsers on the main instance; move this browser back first");
+      if (row.proxy_json) throw Err.conflict("this browser has a proxy; remove it before choosing a gateway");
+    }
+    if (this.runtimes.has(id) || this.starting.has(id) || this.profileSaves.has(id) ||
+        !["stopped", "crashed"].includes(row.status)) {
+      throw Err.browserUnavailable("stop the browser before changing how it connects");
+    }
+    getDb().prepare(`UPDATE browsers SET gateway_id = ? WHERE id = ?`).run(gatewayId, id);
+    audit({ actorType: principal.type, actorId: principal.id, action: "browser.gateway.updated", targetType: "browser", targetId: id,
+      detail: { gatewayId } });
     hub.emitEvent("browser.updated", {}, id);
     return this.row(id);
   }
@@ -1555,6 +1604,9 @@ export class BrowserManager {
       reportedClient: row.client_name ? { name: row.client_name, version: row.client_version } : null,
       metadata,
       proxy: proxyView(parseBrowserProxy(row.proxy_json ? JSON.parse(row.proxy_json) : null)),
+      // Null: it reaches the web from the host its Chrome runs on. Otherwise the gateway, and
+      // whether it is connected; when it is not, every page fails until it is.
+      gateway: row.gateway_id ? gatewayBrief(row.gateway_id) : null,
       extensionsEnabled: Boolean(row.extensions_enabled),
       agentDesktopEnabled: Boolean(row.agent_desktop_enabled),
       savedProfileId: row.seed_id && prepare(`SELECT id FROM seeds WHERE id = ?`).get(row.seed_id) ? row.seed_id : null,

@@ -253,7 +253,7 @@ function scopesWith(current, ticked) {
  * to share one textarea, so Copy returned the credential with a sentence of English stapled to
  * it — which is not a credential any more once it is pasted into a header.
  */
-function revealToken(title, token, { note, command } = {}) {
+function revealToken(title, token, { note, command, commandLabel = "To point Claude Code at this deployment:" } = {}) {
   const status = h("span", { class: "sub", role: "status" }, "");
 
   const copyButton = (label, getText, primary) => h("button", {
@@ -271,7 +271,7 @@ function revealToken(title, token, { note, command } = {}) {
 
   const tokenField = h("textarea", { class: "token", readonly: "readonly", rows: "2", spellcheck: "false", "aria-label": `${title} — the token` }, token);
   const commandField = command
-    ? h("textarea", { class: "token", readonly: "readonly", rows: "3", spellcheck: "false", "aria-label": "Command to add this server to Claude Code" }, command)
+    ? h("textarea", { class: "token", readonly: "readonly", rows: "3", spellcheck: "false", "aria-label": commandLabel.replace(/:$/, "") }, command)
     : null;
 
   openModal(title, (close) => [
@@ -279,7 +279,7 @@ function revealToken(title, token, { note, command } = {}) {
     h("p", { class: "sub" }, "Tallylamp keeps only a hash of this, so it cannot show it to you again. Copy it now."),
     tokenField,
     h("div", { class: "row" }, copyButton("Token", () => token, true)),
-    command ? h("p", { class: "sub cmd-label" }, "To point Claude Code at this deployment:") : null,
+    command ? h("p", { class: "sub cmd-label" }, commandLabel) : null,
     commandField,
     command ? h("div", { class: "row" }, copyButton("Command", () => command, false)) : null,
     note ? h("p", { class: "sub" }, note) : null,
@@ -569,7 +569,8 @@ const state = {
   events: [],
   requests: [],
   workers: [],
-  data: Object.fromEntries(["status", "browsers", "agents", "seeds", "requests", "workers"].map(name =>
+  gateways: [],
+  data: Object.fromEntries(["status", "browsers", "agents", "seeds", "requests", "workers", "gateways"].map(name =>
     [name, { loading: false, error: "", loadedAt: null }])),
 };
 
@@ -673,6 +674,7 @@ function route() {
   if (p.startsWith("/agents")) return { name: "agents" };
   if (p.startsWith("/seeds")) return { name: "seeds" };
   if (p.startsWith("/workers")) return { name: "workers" };
+  if (p.startsWith("/gateways")) return { name: "gateways" };
   if (p.startsWith("/security")) return { name: "security" };
   if (p.startsWith("/login")) return { name: "login" };
   // Where the extension sends the operator. The code rides in the query so a logged-out visit
@@ -771,6 +773,10 @@ wideNav.addEventListener("change", e => {
 function badge(b) {
   if (b.control?.controllerType === "human") return h("span", { class: "badge human" }, guestHolds(b) ? "Guest" : "Human");
   if (b.kind === "linked" && b.status !== "running") return h("span", { class: "badge idle" }, linkStatus(b));
+  // Running, and every page failing: its route out is a gateway that is not connected.
+  if (b.status === "running" && b.gateway && !b.gateway.online) {
+    return h("span", { class: "badge warn", title: `Its gateway, ${b.gateway.name}, is not connected` }, "Gateway offline");
+  }
   if (b.status === "running") return h("span", { class: "badge live" }, "Live");
   if (b.status === "unhealthy") return h("span", { class: "badge warn", title: b.health?.reason || false }, "Unhealthy");
   return h("span", { class: "badge idle" }, b.status || "stopped");
@@ -791,6 +797,7 @@ function layout(main) {
           ["/agents", "agents", "Agents"],
           ["/seeds", "seeds", "Saved profiles"],
           ["/workers", "workers", "Workers"],
+          ["/gateways", "gateways", "Gateways"],
           ["/security", "security", "Security"],
         ].map(([href, name, label]) => {
           const active = route().name === name;
@@ -1426,12 +1433,25 @@ function settingsSection(b) {
   const loans = b.lentTo || [];
   return [
     locked ? h("p", { class: "sub settings-note" }, b.savingProfile
-      ? "A profile save is running. Proxy and extensions unlock when it finishes."
-      : "Proxy and extensions change only while the browser is stopped.") : null,
+      ? "A profile save is running. Proxy, gateway and extensions unlock when it finishes."
+      : "Proxy, gateway and extensions change only while the browser is stopped.") : null,
     h("div", { class: "settings" },
       settingRow("Proxy",
-        b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? ", authenticated" : ""}` : "Direct, no upstream proxy",
-        h("button", { class: "btn", "aria-label": "Configure proxy", disabled: locked, title: why, onClick: () => editProxy(b) }, "Configure")),
+        b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? ", authenticated" : ""}`
+          : b.gateway ? "None. It uses a gateway instead." : "Direct, no upstream proxy",
+        h("button", { class: "btn", "aria-label": "Configure proxy", disabled: locked || Boolean(b.gateway),
+          title: why || (b.gateway ? "This browser uses a gateway. Switch the gateway off to use a proxy." : false), onClick: () => editProxy(b) }, "Configure")),
+      // A browser has one route out: this host, a proxy, or a gateway. Not on a worker, whose
+      // Chrome cannot reach a gateway connected here.
+      b.kind !== "linked" ? settingRow("Gateway",
+        b.gateway
+          ? `Through ${b.gateway.name}${b.gateway.online ? "" : ", which is not connected, so its pages fail"}. Sites see that computer's connection.`
+          : b.worker ? "Off. Gateways work only for browsers on the main instance." : "Off. It reaches the web from this host.",
+        h("button", { class: "btn", "aria-label": "Choose gateway",
+          disabled: locked || (!b.gateway && (Boolean(b.proxy) || Boolean(b.worker))),
+          title: why || (!b.gateway && b.proxy ? "Remove the proxy first. A browser has one route out."
+            : !b.gateway && b.worker ? "Move it to the main instance first." : false),
+          onClick: () => chooseGateway(b) }, "Choose…")) : null,
       settingRow("Extensions",
         b.extensionsEnabled ? "On. Take control and open Full browser to install or manage them. A persistent profile keeps them."
           : full ? "Off" : "Off. This host cannot run Full browser, which extensions need.",
@@ -1974,6 +1994,10 @@ async function browserView(id, seq) {
           ]
       ).map((line) => h("p", {}, line)),
     ) : null,
+    b.status === "running" && b.gateway && !b.gateway.online ? h("div", { class: "banner gateway", role: "status" },
+      h("p", {}, `Pages will not load: this browser reaches the web through ${b.gateway.name}, which is not connected.`),
+      h("p", {}, "Start the gateway on that computer and reload the page. It never falls back to this host's connection. ",
+        h("a", { href: "/gateways", onClick: (e) => { e.preventDefault(); go("/gateways"); } }, "Open Gateways"))) : null,
     // Full browser streams a whole 2560-wide desktop into this box and letterboxes it to fit,
     // so Chrome's own toolbar and tab strip are drawn at whatever fraction of their real size
     // the stage leaves them. Give that view the sidebar's 320px and let the facts sit below it.
@@ -2558,18 +2582,19 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
       if (ui.newTabBtn) ui.newTabBtn.onclick = () => send({ type: "newTab" });
     }
 
-    img.onmousemove = (e) => { const p = at(e); if (p) send({ type: "mouse", event: "mouseMoved", ...p }); };
+    // `buttons` is the real mouse's state, so a hover reaches the page as a hover and a drag as a drag.
+    img.onmousemove = (e) => { const p = at(e); if (p) send({ type: "mouse", event: "mouseMoved", buttons: e.buttons, ...p }); };
     img.onmousedown = (e) => {
       const p = at(e);
       if (!p) return;
       e.preventDefault();
       img.focus();
-      send({ type: "mouse", event: "mousePressed", button: CDP_BUTTON[e.button] || "left", clickCount: e.detail || 1, modifiers: mouseMods(e), ...p });
+      send({ type: "mouse", event: "mousePressed", button: CDP_BUTTON[e.button] || "left", buttons: e.buttons, clickCount: e.detail || 1, modifiers: mouseMods(e), ...p });
     };
     img.onmouseup = (e) => {
       const p = at(e);
       if (!p) return;
-      send({ type: "mouse", event: "mouseReleased", button: CDP_BUTTON[e.button] || "left", clickCount: e.detail || 1, modifiers: mouseMods(e), ...p });
+      send({ type: "mouse", event: "mouseReleased", button: CDP_BUTTON[e.button] || "left", buttons: e.buttons, clickCount: e.detail || 1, modifiers: mouseMods(e), ...p });
     };
     // Right-click belongs to the remote page, not to the dashboard's context menu.
     img.oncontextmenu = (e) => e.preventDefault();
@@ -3043,6 +3068,105 @@ async function removeWorker(w) {
   void workersView();
 }
 
+/**
+ * Gateways: computers of the operator's that browsers can reach the web from.
+ *
+ * Some sites refuse a datacenter address before anyone touches the page, and accept the same
+ * browser arriving from a home connection. Adding a gateway is rare and deliberate, so this is a
+ * list and one button. Which browser uses which gateway is set on the browser, where it matters.
+ */
+async function gatewaysView() {
+  const gateways = state.gateways || [];
+  const where = (g) => [g.client?.hostname, g.remoteAddress ? `from ${g.remoteAddress}` : ""].filter(Boolean).join(" · ");
+  const status = (g) => g.online
+    ? h("td", {}, "Connected", h("div", { class: "sub" }, where(g)))
+    : h("td", {}, h("span", { class: "warn" }, "Not connected"),
+      h("div", { class: "sub" }, g.lastSeenAt ? `Last seen ${new Date(g.lastSeenAt).toLocaleString()}` : "Never connected yet. Run its command on that computer."));
+  const row = (g) => h("tr", {},
+    h("td", {}, g.name),
+    status(g),
+    h("td", {}, g.browsers.length ? g.browsers.map((b) => b.name).join(", ") : h("span", { class: "sub" }, "None")),
+    h("td", {}, megabytes(g.bytesDown), h("div", { class: "sub" }, `${megabytes(g.bytesUp)} sent`)),
+    h("td", {},
+      h("button", { class: "btn danger", disabled: g.browsers.length > 0,
+        title: g.browsers.length > 0 ? "Switch its browsers to another connection first." : false,
+        onClick: () => act(() => removeGatewayUi(g)) }, "Remove")),
+  );
+  layout([
+    h("div", { class: "top" },
+      h("div", {},
+        h("h1", {}, "Gateways"),
+        h("div", { class: "sub" }, "A gateway is a computer of yours that browsers reach the web from, so sites see your connection instead of this host's."),
+      ),
+      h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => act(addGatewayUi) }, "Add gateway")),
+    ),
+    dataNotice("gateways", "gateways"),
+    gateways.length
+      ? h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": "Gateways" },
+          h("table", { class: "table" },
+            h("thead", {}, h("tr", {},
+              h("th", { scope: "col" }, "Name"),
+              h("th", { scope: "col" }, "Status"),
+              h("th", { scope: "col" }, "Browsers"),
+              h("th", { scope: "col" }, "Received"),
+              h("th", { scope: "col" }, "Actions"),
+            )),
+            h("tbody", {}, ...gateways.map(row))))
+      : !state.data.gateways.loadedAt ? null : h("p", {}, "No gateways yet. Every browser reaches the web from this host."),
+    h("h2", {}, "When to use one"),
+    h("p", {}, "Some sites judge the address a browser comes from before anyone touches the page. From a datacenter, Cloudflare can show a check that a person at the viewer cannot pass, and a signed-in ChatGPT can refuse to load. Through a gateway, the same browser arrives from your own connection."),
+    h("h2", {}, "What a gateway can reach"),
+    h("p", {}, "Tallylamp checks every address first and hands the gateway only public ones. The gateway refuses its own network on top: your router, your other devices, and anything on a VPN or Tailscale. HTTPS stays encrypted from the browser to the site, so the gateway passes on bytes it cannot read. It does see which sites are visited, and when."),
+    h("p", {}, "A browser on a gateway works only while that computer is awake and running the command. It never falls back to this host's connection, so its pages fail until the gateway is back. Pages load at your connection's upload speed. Gateways work for browsers on the main instance, not on workers."),
+  ]);
+}
+
+async function addGatewayUi() {
+  let made = null;
+  const answers = await askFor("Add a gateway", [
+    { name: "name", label: "Computer name", placeholder: "Studio Mac", required: true, maxLength: 60,
+      hint: "Name it after the computer it will run on. Browsers show this name as their connection." },
+  ], "Create gateway", async (values) => {
+    made = await api("/api/v1/gateways", { method: "POST", body: { name: values.name } });
+  });
+  if (!answers || !made) return;
+  await loadDataset("gateways");
+  void gatewaysView();
+  revealToken(`Run ${made.gateway.name}`, made.token, {
+    command: made.command,
+    commandLabel: "Run this in a terminal on that computer. It needs Node 22 or newer:",
+    note: "It keeps running, reconnects on its own and, on a Mac, keeps the computer from idling to sleep. Ctrl-C stops it. Then open a browser, stop it, and choose this gateway under Settings.",
+  });
+}
+
+async function removeGatewayUi(g) {
+  if (!confirm(`Remove ${g.name}? Its command stops on that computer, and its token stops working.`)) return;
+  await api(`/api/v1/gateways/${g.id}`, { method: "DELETE" });
+  flash(`${g.name} removed.`, true);
+  await loadDataset("gateways");
+  void gatewaysView();
+}
+
+async function chooseGateway(b) {
+  await loadDataset("gateways");
+  const gateways = state.gateways || [];
+  if (!gateways.length) {
+    if (confirm("There are no gateways yet. A gateway is a computer of yours that this browser can reach the web from.\n\nOpen Gateways to add one?")) go("/gateways");
+    return;
+  }
+  const answers = await askFor("Choose how it connects", [
+    { name: "gatewayId", label: "Reach the web from", value: b.gateway?.id || "",
+      options: [{ value: "", label: "This host" },
+        ...gateways.map((g) => ({ value: g.id, label: g.online ? g.name : `${g.name} (not connected)` }))],
+      hint: "Through a gateway, sites see that computer's connection. While it is not running, this browser's pages fail. It never falls back to this host." },
+  ], "Save", async (values) => {
+    await api(`/api/v1/browsers/${b.id}/gateway`, { method: "PUT", body: { gatewayId: values.gatewayId || null } });
+  });
+  if (!answers) return;
+  flash(answers.gatewayId ? "Gateway saved. Start the browser to use it." : "Saved. It reaches the web from this host when it starts.", true);
+  await render();
+}
+
 /** Somewhere else to put it: a managed browser, and at least one host besides its own. */
 function canMove(b) {
   return b.kind !== "linked" && (state.workers.length > 0 || Boolean(b.worker));
@@ -3497,7 +3621,7 @@ async function logout() {
   }
 }
 
-const DATA_PATHS = Object.fromEntries(["status", "browsers", "agents", "seeds", "requests", "workers"].map(name => [name, `/api/v1/${name}`]));
+const DATA_PATHS = Object.fromEntries(["status", "browsers", "agents", "seeds", "requests", "workers", "gateways"].map(name => [name, `/api/v1/${name}`]));
 const dataLoads = new Map();
 
 async function retryDataset(name) {
@@ -3508,6 +3632,7 @@ async function retryDataset(name) {
   else if (current === "agents") void agentsView();
   else if (current === "seeds") void seedsView();
   else if (current === "workers") void workersView();
+  else if (current === "gateways") void gatewaysView();
   else if (current === "security") void securityView();
   else if (current === "browser") detailMetadataRefresh?.();
 }
@@ -3536,7 +3661,7 @@ function loadDataset(name) {
   if (dataLoads.has(name)) return dataLoads.get(name);
   const data = state.data[name];
   data.loading = true;
-  const adminOnly = ["agents", "seeds", "workers"].includes(name);
+  const adminOnly = ["agents", "seeds", "workers", "gateways"].includes(name);
   const pending = (adminOnly && state.me?.type !== "admin" ? Promise.resolve({ [name]: [] }) : api(DATA_PATHS[name]))
     .then(value => {
       state[name] = name === "status" ? value : value[name];
@@ -3721,7 +3846,7 @@ async function pairView(code) {
   );
 }
 
-const TITLES = { pair: "Link a browser", home: "Browsers", agents: "Agents", seeds: "Saved profiles", workers: "Workers", security: "Security state", login: "Sign in" };
+const TITLES = { pair: "Link a browser", home: "Browsers", agents: "Agents", seeds: "Saved profiles", workers: "Workers", gateways: "Gateways", security: "Security state", login: "Sign in" };
 
 let renderSeq = 0;
 
@@ -3764,6 +3889,7 @@ async function render() {
     } else if (r.name === "agents" && (!name || name === "agents")) void agentsView();
     else if (r.name === "seeds" && (!name || ["seeds", "browsers"].includes(name))) void seedsView();
     else if (r.name === "workers" && (!name || name === "workers")) void workersView();
+    else if (r.name === "gateways" && (!name || name === "gateways")) void gatewaysView();
     else if (r.name === "security" && (!name || name === "status")) void securityView();
   };
   try {
@@ -3821,6 +3947,8 @@ function startEvents() {
         // A worker joining or dropping off is an event too. Not while a dialog is open: the
         // join token is shown once, and the page behind it can wait.
         if (route().name === "workers" && !document.querySelector(".modal")) void workersView();
+        // A gateway connecting or dropping is what that page is for.
+        if (route().name === "gateways" && !document.querySelector(".modal")) void gatewaysView();
         const sitesPanel = document.getElementById("profile-sites");
         const current = sitesPanel && state.browsers.find(b => b.id === sitesPanel.dataset.browserId);
         if (current) sitesPanel.updateSites(current.signedInSites || []);

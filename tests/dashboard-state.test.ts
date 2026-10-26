@@ -10,7 +10,7 @@ function fn(name: string) {
   assert.ok(start >= 0, name);
   return source.slice(start, source.indexOf("\n}", start) + 2);
 }
-const names = ["status", "browsers", "agents", "seeds", "requests", "workers"];
+const names = ["status", "browsers", "agents", "seeds", "requests", "workers", "gateways"];
 function state() {
   return { me: { type: "admin" }, browsers: [], agents: [], requests: [], status: null,
     data: Object.fromEntries(names.map(name => [name, { loading: false, error: "", loadedAt: null }])) } as any;
