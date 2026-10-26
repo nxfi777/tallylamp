@@ -364,6 +364,11 @@ precedence. Failed upstream connections return 502 rather than falling back to
 direct access. When an upstream is set, Chrome disables QUIC and WebRTC's
 non-proxied UDP; the setting is not a system-wide VPN.
 
+A [gateway](gateways.md) is the other way to change a browser's route: a
+computer of yours that the browser reaches the web from, for sites that refuse
+the server's address. The same checks run first, and a browser whose gateway is
+offline gets errors, never the direct route.
+
 ### Loopback tunnels
 
 Chrome runs on the server, so an address such as `localhost:5173` refers to the
