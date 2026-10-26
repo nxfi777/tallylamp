@@ -81,5 +81,12 @@ arrived with every byte (`npm run test:gateway-net`). After deploying the
 artifact, production listed the gateway routes and served the same client at
 `/tallylamp.mjs`, and its worker reported 0.12.0.
 
+Then a production browser was put on a gateway. Cloudflare saw it at the
+gateway computer's own address, in its own country, instead of Railway's.
+claude.ai's sign-in page, which had stopped at Cloudflare's "Verify you are
+human" from Railway, loaded with no check. A signed-in ChatGPT that had stopped
+at "The browser check couldn't finish" loaded the account, its projects and its
+chat history.
+
 See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
 backups and deployment settings.

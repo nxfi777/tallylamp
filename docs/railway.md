@@ -296,6 +296,9 @@ and served the gateway client at `/tallylamp.mjs`, byte for byte the release's
 `bin/tallylamp.mjs`, and its worker reported 0.12.0. Before release, that client
 carried HTTPS through a gateway to Cloudflare, which saw the gateway computer's
 own address, and a 2.5 MB download arrived intact (`npm run test:gateway-net`).
+On production, a browser on a gateway loaded claude.ai's sign-in page with no
+Cloudflare check, and a signed-in ChatGPT that had stopped at "The browser check
+couldn't finish" from Railway's address loaded normally.
 
 A live 0.11.3 test sent concurrent browser calls through one MCP session:
 browser B responded in 131 ms while browser A's delayed call took 2.62 seconds.
