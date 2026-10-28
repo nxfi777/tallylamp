@@ -170,10 +170,12 @@ describe("profile site inventory", () => {
     });
     const id = (created.body as { browser: { id: string } }).browser.id;
     let signedIn = false;
+    let evaluations = 0;
     const ws = new WebSocketServer({ port: 0, host: "127.0.0.1" });
     await new Promise<void>(resolve => ws.once("listening", resolve));
     ws.on("connection", client => client.on("message", raw => {
       const message = JSON.parse(String(raw));
+      evaluations++;
       client.send(JSON.stringify({ id: message.id, result: { result: { value: { origin: "https://example.com", signedIn } } } }));
     }));
     try {
@@ -189,10 +191,14 @@ describe("profile site inventory", () => {
       assert.equal(sites.length, 1);
       assert.equal(sites[0].reportedBy.type, "system");
       assert.equal(sites[0].state, "confirmed");
+      const recorded = evaluations;
+      await detector.scan(id, pages, () => true, true);
+      assert.equal(evaluations, recorded, "a site already on record is not inspected again");
       removeSiteAccess(id, sites[0].id, { type: "admin", id: "admin", name: "Administrator", scopes: ["*"] });
       // A fresh detector simulates restarting the service, not just another poll.
       await new SiteDetector().scan(id, pages, () => true);
       assert.deepEqual(listSiteAccess(id), []);
+      assert.equal(evaluations, recorded, "nor is one the operator dismissed");
     } finally {
       for (const client of ws.clients) client.terminate();
       await new Promise<void>(resolve => ws.close(() => resolve()));

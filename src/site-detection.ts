@@ -44,9 +44,16 @@ export class SiteDetector {
 
   private async inspect(browserId: string, pages: Array<{ type: string; url: string; webSocketDebuggerUrl?: string }>, isRunning: () => boolean): Promise<void> {
       const deadline = Date.now() + 4_000;
+      const known = new Set(listSiteAccess(browserId).map(site => site.origin));
       for (const page of pages.filter(p => p.type === "page" && /^https?:\/\//.test(p.url)).slice(0, 8)) {
         if (!isRunning() || Date.now() >= deadline) break;
         if (!page.webSocketDebuggerUrl) continue;
+        // A site already on record, or dismissed, ends the same way whatever the page shows, so
+        // it is not worth a DevTools session and a style pass over its controls every 15 s. A
+        // long-running browser usually sits on exactly such a site.
+        let origin: string;
+        try { origin = new URL(page.url).origin; } catch { continue; }
+        if (known.has(origin) || isSiteDetectionDismissed(browserId, origin)) continue;
         const cdp = new CdpClient(page.webSocketDebuggerUrl, 1_000);
         try {
           await cdp.connect();

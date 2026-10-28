@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
 import { log } from "./log.js";
@@ -16,6 +16,11 @@ import { log } from "./log.js";
  *
  * DONTNEED drops only clean, unmapped pages: a running Chrome's mapped binary is untouched, and
  * the delay gives writeback time to clean what Chrome flushed on its way out.
+ *
+ * Chrome's own directory is not all it reads. Its GTK, NSS and X libraries, the fonts it lays
+ * text out with, and Xvfb's libraries stay cached too: on the 0.12.0 image, 240 MB of them were
+ * still resident after the sweep, against 120 MB of file cache in all at boot. Node's own
+ * mapped libraries in the same directories are untouched, for the same reason as above.
  */
 
 export interface InUse {
@@ -26,15 +31,22 @@ export interface InUse {
 }
 
 /** What to evict once the delay has passed. Pure, so the choice can be tested without vmtouch. */
-export function evictionTargets(stopped: Iterable<string>, inUse: InUse, dataDir: string, chromeDir: string | null): string[] {
+export function evictionTargets(stopped: Iterable<string>, inUse: InUse, dataDir: string, chromeDir: string | null, shared: string[] = []): string[] {
   const busy = new Set(inUse.dirs);
   const targets = new Set([...stopped].filter((d) => d && !busy.has(d)));
   // Idle, the whole volume is fair game: snapshots and clones are copied through the cache too.
   if (inUse.idle) {
     targets.add(dataDir);
     if (chromeDir) targets.add(chromeDir);
+    for (const dir of shared) targets.add(dir);
   }
   return [...targets];
+}
+
+/** System directories a Chrome run leaves in the cache: shared libraries and fonts. */
+export function sharedSystemDirs(): string[] {
+  if (process.platform !== "linux") return [];
+  return ["/usr/lib", "/usr/share/fonts"].filter((dir) => existsSync(dir));
 }
 
 /** The directory Chrome's binaries live in, or null where that is a shared bin directory. */
@@ -71,6 +83,7 @@ export class PageCacheEvictor {
       run?: (paths: string[]) => void;
       dataDir?: () => string;
       chromeDir?: () => string | null;
+      sharedDirs?: () => string[];
     } = {},
   ) {}
 
@@ -90,6 +103,7 @@ export class PageCacheEvictor {
       this.inUse(),
       (this.opts.dataDir ?? (() => config.dataDir))(),
       (this.opts.chromeDir ?? chromeInstallDir)(),
+      (this.opts.sharedDirs ?? sharedSystemDirs)(),
     );
     this.pending.clear();
     if (targets.length) (this.opts.run ?? vmtouchEvict)(targets);

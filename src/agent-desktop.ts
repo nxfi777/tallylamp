@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import type { Principal } from "./auth.js";
 import { getAgent, requireScope } from "./auth.js";
 import type { BrowserManager } from "./browsers.js";
-import type { ChromeRuntime } from "./chrome.js";
+import { exited, type ChromeRuntime } from "./chrome.js";
 import { config } from "./config.js";
 import { Err } from "./errors.js";
 import { hub } from "./events.js";
@@ -70,7 +70,7 @@ export function authorizeAgentDesktop(browsers: BrowserManager, p: Principal, id
   const control = browsers.controlState(id);
   if (control.controllerType === "agent" && control.controllerId !== p.id) throw Err.alreadyControlled();
   const rt = browsers.runtime(id);
-  if (!rt?.display || !(rt.desktopSpawn || (config.fullBrowser && rt.xvfb)) || rt.chrome.exitCode !== null) {
+  if (!rt?.display || !(rt.desktopSpawn || (config.fullBrowser && rt.xvfb)) || exited(rt.chrome)) {
     throw Err.browserUnavailable("native browser tools need a running browser with a dedicated Xvfb display");
   }
   if (rt.screen.width * rt.screen.height > 16_000_000) throw Err.invalid("desktop exceeds the capture size limit");

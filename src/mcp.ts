@@ -38,6 +38,7 @@ import {
 } from "./lending.js";
 import { reportSiteAccess } from "./site-access.js";
 import { agentDesktop } from "./agent-desktop.js";
+import { exited } from "./chrome.js";
 import { readPidLimit } from "./host-limits.js";
 import { LINKED_BRIDGE_THREADS } from "./linked-bridge.js";
 
@@ -1658,7 +1659,7 @@ export class McpGateway {
     }
     try {
       this.assertBindingOpen(session, binding);
-      if (rt.chrome.exitCode !== null) throw Err.browserUnavailable("Browser binding was cancelled; try again.");
+      if (exited(rt.chrome)) throw Err.browserUnavailable("Browser binding was cancelled; try again.");
       if (this.bindLevel(session.principal, this.browsers.row(row.id)) !== access) throw Err.unauthorized("Browser access changed while connecting; bind again.");
       if (remote?.transport.closed) throw Err.browserUnavailable("Worker disconnected while the control bridge was starting.");
     } catch (error) {

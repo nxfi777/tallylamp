@@ -13,7 +13,7 @@ import { WebSocketServer } from "ws";
 import { setTimeout as sleep } from "node:timers/promises";
 import { config } from "./config.js";
 import { log } from "./log.js";
-import { chromeVersion, clearSingletonLocks, launchChrome, stopRuntime, type ChromeRuntime, type GpuStatus, type SandboxStatus } from "./chrome.js";
+import { chromeVersion, clearSingletonLocks, exited, launchChrome, stopRuntime, type ChromeRuntime, type GpuStatus, type SandboxStatus } from "./chrome.js";
 import { startFakeChrome } from "./fake-chrome.js";
 import { startEgressProxy, type EgressProxy } from "./egress-proxy.js";
 import { parseBrowserProxy } from "./browser-proxy.js";
@@ -24,6 +24,7 @@ import { MAX_CHUNK, TunnelMux } from "./tunnels.js";
 import { allowedFfmpeg, allowedXdotool, xFrame, X_ERROR, X_EXIT, X_STDOUT } from "./x11-remote.js";
 import { acceptLinkedBridge, LINKED_BRIDGE_THREADS } from "./linked-bridge.js";
 import { bridgeFilesDir } from "./bridge-files.js";
+import { PageCacheEvictor } from "./page-cache.js";
 
 /**
  * A worker: this image started with TALLYLAMP_JOIN. It runs Chrome for another Tallylamp
@@ -162,6 +163,15 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   const dialTunnel = async (id: string, host: string, port: number) =>
     hostLooksPrivate(host) ? (await tunnels.get(id)?.open(host, port)) ?? null : null;
 
+  // Railway bills a worker's page cache as memory, exactly as it does the main instance's, and
+  // nothing in a 32 GB cgroup makes the kernel give it back. Without this a worker held about
+  // 0.75 GB for hours after its last Chrome had exited.
+  const pageCache = new PageCacheEvictor(() => {
+    const dirs = [...running.values()].filter((e) => !e.closeFake).map((e) => e.rt.profileDir);
+    for (const id of starting.keys()) dirs.push(path.join(profiles, id));
+    return { dirs, idle: dirs.length === 0 };
+  }, { dataDir: () => opts.dataDir });
+
   const performDrop = async (id: string): Promise<void> => {
     tunnels.get(id)?.shutdown("browser stopped");
     tunnels.delete(id);
@@ -174,6 +184,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
       else {
         try { await stopRuntime(e.rt); }
         catch (error) { uncleanStops.add(id); throw error; }
+        pageCache.stopped(e.rt.profileDir);
         if (e.rt.chrome.signalCode !== null || e.rt.chrome.exitCode !== 0) uncleanStops.add(id);
       }
     } finally {
@@ -194,7 +205,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
     if (exporting.has(id)) throw new Refused(409, "browser_unavailable", "this browser is being exported", true);
     uncleanStops.delete(id);
     const existing = running.get(id);
-    if (existing && existing.rt.chrome.exitCode === null) return existing;
+    if (existing && !exited(existing.rt.chrome)) return existing;
     if (existing) await drop(id);
     const inflight = starting.get(id);
     if (inflight) return inflight.promise;
@@ -253,7 +264,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
       linkedBridges: [...bridges].map(([id, b]) => ({ id, threads: procs?.find((p) => p.pid === b.pid)?.threads ?? null })),
       linkedBridgeFilesRoot: bridgeFilesDir(""),
       browsers: [...running].map(([id, e]) => {
-        const alive = e.rt.chrome.exitCode === null;
+        const alive = !exited(e.rt.chrome);
         // The test fake's "Chrome" is this very process; counting it would count the worker.
         const u = alive && procs && e.rt.chrome.pid && !e.closeFake
           ? browserUsage(procs, { chromePid: e.rt.chrome.pid, xvfbPid: e.rt.xvfb?.pid, cdpPort: e.rt.cdpPort })
@@ -392,7 +403,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   app.post("/worker/v1/browsers/:id/x11", express.json({ limit: "64kb" }), route((req, res) => {
     const id = browserId(req);
     const e = running.get(id);
-    const display = e && e.rt.chrome.exitCode === null && config.fullBrowser && e.rt.xvfb ? e.rt.display : null;
+    const display = e && !exited(e.rt.chrome) && config.fullBrowser && e.rt.xvfb ? e.rt.display : null;
     if (!display) throw new Refused(409, "browser_unavailable", "that browser has no display on this worker", true);
     const { tool, args, stdout } = (req.body ?? {}) as { tool?: unknown; args?: unknown; stdout?: unknown };
     const list = Array.isArray(args) && args.length <= 64 && args.every((a) => typeof a === "string") ? (args as string[]) : null;
@@ -453,7 +464,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
       throw new Refused(400, "invalid_request", "not an upload name");
     }
     const e = running.get(id);
-    if (!e || e.rt.chrome.exitCode !== null) throw new Refused(409, "browser_unavailable", "that browser is not running on this worker", true);
+    if (!e || exited(e.rt.chrome)) throw new Refused(409, "browser_unavailable", "that browser is not running on this worker", true);
     const folder = path.join(uploadStaging(id), dir);
     mkdirSync(folder, { recursive: true });
     const dest = path.join(folder, name);
@@ -481,7 +492,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
   app.all("/worker/v1/browsers/:id/cdp/*", route((req, res) => {
     const id = browserId(req);
     const e = running.get(id);
-    if (!e || e.rt.chrome.exitCode !== null) throw new Refused(409, "browser_unavailable", "that browser is not running on this worker", true);
+    if (!e || exited(e.rt.chrome)) throw new Refused(409, "browser_unavailable", "that browser is not running on this worker", true);
     forwardHttp(req, res, { host: "127.0.0.1", port: e.rt.cdpPort, path: req.originalUrl.slice(`/worker/v1/browsers/${id}/cdp`.length) || "/", headers: { authorization: undefined } });
   }));
 
@@ -533,7 +544,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
     if (t) {
       const id = t[1]!;
       const e = running.get(id);
-      if (!authorized(req.headers.authorization) || !e || e.rt.chrome.exitCode !== null) {
+      if (!authorized(req.headers.authorization) || !e || exited(e.rt.chrome)) {
         socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
         socket.destroy();
         return;
@@ -551,7 +562,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
     }
     const m = /^\/worker\/v1\/browsers\/([0-9a-f]{16})\/cdp(\/.*)$/.exec(req.url ?? "");
     const e = m ? running.get(m[1]!) : undefined;
-    if (!m || !authorized(req.headers.authorization) || !e || e.rt.chrome.exitCode !== null) {
+    if (!m || !authorized(req.headers.authorization) || !e || exited(e.rt.chrome)) {
       socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
       socket.destroy();
       return;
@@ -570,6 +581,7 @@ export async function startWorker(opts: WorkerOptions): Promise<{
     await Promise.all([...bridges.values()].map((b) => b.close()));
     bridgeSockets.close();
     for (const id of [...running.keys()]) await drop(id).catch((e) => log.warn("worker stop failed", { id, error: (e as Error).message }));
+    pageCache.cancel();
     server.closeAllConnections?.();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   };

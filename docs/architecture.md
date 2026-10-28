@@ -258,9 +258,16 @@ One Node process, plus one Chrome per running browser, plus one chrome-devtools-
 per bound MCP session. Earlier development measurements recorded these footprints;
 actual use depends on the pages, Chrome version, and environment:
 
-- Idle, zero browsers: ~61 MB. The MCP SDK (~20 MB resident) is imported on the first
-  `/mcp` request rather than at boot, so a deployment serving only the dashboard does not load it.
-- Each running Chrome: ~930 MB-1.2 GB depending on the page. `--disable-extensions` and
+- Idle, zero browsers: ~61 MB in early development; 111 MB resident on the 0.12.0 image
+  (about 200 MB of container memory with file cache). The MCP SDK's client and message schemas
+  (~20 MB resident) load at boot through the worker and linked-bridge modules; the MCP server
+  gateway itself is imported on the first `/mcp` request.
+- Each browser's Xvfb: about 37 MB with SwiftShader, where it runs without GLX. Its Mesa GLX
+  loaded a 117 MB LLVM that nothing used, and took about 107 MB.
+- Each running Chrome: ~930 MB-1.2 GB depending on the page.
+- After the last Chrome stops, a minute of quiet evicts the page cache it left behind
+  (`TALLYLAMP_EVICT_PAGE_CACHE`). Railway counts that cache as memory, and nothing in a 32 GB
+  cgroup reclaims it. Kernel inode and dentry caches, about 60 MB after a browser has run, stay. `--disable-extensions` and
   `--disable-component-extensions-with-background-pages` remove four renderer processes
   Chrome would otherwise start for its own component extensions.
 - Each MCP bridge child: a full Node process carrying puppeteer-core. Capped with

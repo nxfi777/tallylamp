@@ -15,7 +15,7 @@ import { activity, audit, type AuditActor } from "./audit.js";
 import { isValidName, slugify } from "./names.js";
 import { sanitizeMetadata, type BrowserMetadata } from "./metadata.js";
 import { requireScope, type Principal } from "./auth.js";
-import { launchChrome, stopRuntime, type ChromeRuntime, chromeVersion, clearSingletonLocks, parseSize } from "./chrome.js";
+import { launchChrome, stopRuntime, type ChromeRuntime, chromeVersion, clearSingletonLocks, exited, parseSize, releaseEnded } from "./chrome.js";
 import { browserWsUrl, listPages, CdpClient } from "./cdp.js";
 import { startEgressProxy, type EgressProxy } from "./egress-proxy.js";
 import { parseBrowserProxy, proxyView } from "./browser-proxy.js";
@@ -206,7 +206,7 @@ export class BrowserManager {
     // Existence is not enough: a crashed Chrome lingers in `runtimes` until it is reaped, and
     // going through cdpWs() would call ensureRunning() and relaunch a browser nobody asked for
     // just to resize a window that no longer exists.
-    if (!this.windowContents.has(id) || !rt || rt.chrome.exitCode !== null) return;
+    if (!this.windowContents.has(id) || !rt || exited(rt.chrome)) return;
     this.windowContents.delete(id);
     const launch = parseSize(config.windowSize, { width: 1280, height: 800 });
     let cdp: CdpClient | undefined;
@@ -489,7 +489,7 @@ export class BrowserManager {
    */
   async markUnhealthy(id: string, reason: string): Promise<void> {
     const rt = this.runtimes.get(id);
-    if (!rt || rt.chrome.exitCode !== null || this.shuttingDown || this.busy(id)) return;
+    if (!rt || exited(rt.chrome) || this.shuttingDown || this.busy(id)) return;
     const row = this.row(id);
     if (row.kind === "linked" || row.status !== "running") return;
     const clock = new Date().toISOString().slice(11, 19);
@@ -920,7 +920,7 @@ export class BrowserManager {
       if (problem) throw Err.browserUnavailable(problem);
     }
     const rt = this.runtimes.get(id);
-    const wasRunning = Boolean(rt && rt.chrome.exitCode === null);
+    const wasRunning = Boolean(rt && !exited(rt.chrome));
     this.moving.add(id);
     const progress = { to, phase: "stopping", copied: 0 };
     this.movingNow.set(id, progress);
@@ -991,7 +991,7 @@ export class BrowserManager {
     if (this.shuttingDown) throw Err.browserUnavailable("tallylamp is shutting down");
     if (this.moving.has(id)) throw Err.browserUnavailable("this browser is being moved to another host; retry when that finishes");
     const existing = this.runtimes.get(id);
-    if (existing && existing.chrome.exitCode === null) return existing;
+    if (existing && !exited(existing.chrome)) return existing;
     const inflight = this.starting.get(id);
     if (inflight) return inflight;
     // `runtimes` alone was a time-of-check race, not a cap: start() only lands in it once
@@ -1708,12 +1708,17 @@ export class BrowserManager {
       // A start in flight owns a freshly created proxy that is not yet paired with a runtime;
       // stopping underneath it would close the new listener and leave Chrome pointed at a
       // dead port.
-      if (this.deleting.has(id) || this.starting.has(id) || this.profileSaves.has(id)) continue;
-      if (rt.chrome.exitCode !== null) {
+      // A stop in progress owns its runtime too: its Chrome exits, or is killed, on the way out,
+      // and that is not a crash.
+      if (this.deleting.has(id) || this.starting.has(id) || this.profileSaves.has(id) || this.stopping.has(id)) continue;
+      if (exited(rt.chrome)) {
         this.runtimes.delete(id);
         this.windowContents.delete(id);
         this.capacity.stopped(id);
-        if (!this.shimClosers.has(id)) this.pageCache.stopped(rt.profileDir);
+        if (!this.shimClosers.has(id)) {
+          releaseEnded(rt);
+          this.pageCache.stopped(rt.profileDir);
+        }
         this.unhealthy.delete(id);
         this.abortedNavs.delete(id);
         await this.closeProxy(id);
@@ -1813,7 +1818,7 @@ export class BrowserManager {
     // Publish a new immutable directory, then atomically move the DB pointer.
     // Readers continue using the old complete snapshot throughout an update.
     const dest = seedDir(`${id}-${randomBytes(6).toString("hex")}`);
-    const wasRunning = !!this.runtimes.get(browserId) && this.runtimes.get(browserId)!.chrome.exitCode === null;
+    const wasRunning = !!this.runtimes.get(browserId) && !exited(this.runtimes.get(browserId)!.chrome);
     if (wasRunning) this.resumeReservations.add(browserId);
     const work = Promise.resolve().then(async (): Promise<SavedProfileResult> => {
       let saved = false;

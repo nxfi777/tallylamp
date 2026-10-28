@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { hub } from "./events.js";
 import { audit } from "./audit.js";
 import { CdpClient, browserWsUrl } from "./cdp.js";
+import { exited } from "./chrome.js";
 import { log } from "./log.js";
 
 type Message = { type: string; [key: string]: unknown };
@@ -289,7 +290,7 @@ export function runDesktopViewer(ws: WebSocket, browsers: BrowserManager, id: st
   const ping = setInterval(() => { if (!pong) ws.terminate(); else { pong = false; ws.ping(); } }, config.viewerPingMs);
   ping.unref();
   const leaseCheck = setInterval(() => {
-    if (browsers.runtime(id) !== rt || rt.chrome.exitCode !== null) { ws.close(1011, "browser stopped"); return; }
+    if (browsers.runtime(id) !== rt || exited(rt.chrome)) { ws.close(1011, "browser stopped"); return; }
     if (boundLease && !validLease()) { releaseInputs(); boundLease = null; send({ type: "error", message: "lease expired" }); }
   }, 250);
   leaseCheck.unref();

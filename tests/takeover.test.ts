@@ -458,6 +458,36 @@ describe("viewer tab strip and 1:1 window", () => {
     }
   });
 
+  it("stops the screencast while the dashboard tab is hidden, and resumes with a fresh frame", async () => {
+    const lease = own.browsers.acquireControl(id, "human", "admin", { force: true });
+    const { ws } = await openSocket("control");
+    let frames = 0;
+    ws.on("message", (_raw, isBinary) => { if (isBinary) frames++; });
+    const count = (method: string) => fakeCdpCalls.filter((c) => c.method === method).length;
+    try {
+      ws.send(JSON.stringify({ type: "heartbeat", leaseToken: lease.leaseToken }));
+      await new Promise((r) => setTimeout(r, 100));
+      resetFakeCdp();
+      ws.send(JSON.stringify({ type: "visibility", visible: false }));
+      await settle();
+      assert.equal(count("Page.stopScreencast"), 1, "hiding the tab must stop the cast");
+      ws.send(JSON.stringify({ type: "viewport", width: 900, height: 700 }));
+      await settle();
+      assert.equal(count("Page.startScreencast"), 0, "a resize while hidden must not restart it");
+      const before = frames;
+      ws.send(JSON.stringify({ type: "visibility", visible: true }));
+      await settle();
+      assert.equal(count("Page.startScreencast"), 1, "showing the tab must restart the cast");
+      assert.ok(frames > before, "and send a frame straight away");
+      ws.send(JSON.stringify({ type: "viewport", width: 1000, height: 650 }));
+      await settle();
+      assert.equal(count("Page.stopScreencast"), count("Page.startScreencast"), "a later restart still stops the running cast first");
+    } finally {
+      ws.close();
+      own.browsers.releaseControl(id);
+    }
+  });
+
   it("clamps every hostile dimension instead of passing it to Chrome", async () => {
     const lease = own.browsers.acquireControl(id, "human", "admin", { force: true });
     const { ws } = await openSocket("control");

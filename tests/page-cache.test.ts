@@ -20,6 +20,18 @@ describe("page cache eviction", () => {
     assert.deepEqual(evictionTargets([], inUse, "/data", null), ["/data"]);
   });
 
+  it("takes shared libraries and fonts only once nothing runs", () => {
+    const shared = ["/usr/lib", "/usr/share/fonts"];
+    assert.deepEqual(
+      evictionTargets(["/data/profiles/a"], { dirs: [], idle: true }, "/data", "/opt/google/chrome", shared),
+      ["/data/profiles/a", "/data", "/opt/google/chrome", "/usr/lib", "/usr/share/fonts"],
+    );
+    assert.deepEqual(
+      evictionTargets(["/data/profiles/a"], { dirs: ["/data/profiles/b"], idle: false }, "/data", "/opt/google/chrome", shared),
+      ["/data/profiles/a"],
+    );
+  });
+
   it("does not treat a shared bin directory as Chrome's install", () => {
     assert.equal(chromeInstallDir("/bin/sh"), null);
     assert.equal(chromeInstallDir("/no/such/chrome"), null);
@@ -35,6 +47,7 @@ describe("page cache eviction", () => {
       run: (paths) => runs.push(paths),
       dataDir: () => "/data",
       chromeDir: () => "/opt/google/chrome",
+      sharedDirs: () => ["/usr/lib"],
     });
     try {
       evictor.stopped("/data/profiles/a");
@@ -48,7 +61,7 @@ describe("page cache eviction", () => {
       inUse = { dirs: [], idle: true };
       evictor.stopped("/data/profiles/a");
       await new Promise((r) => setTimeout(r, 70));
-      assert.deepEqual(runs[1], ["/data/profiles/a", "/data", "/opt/google/chrome"]);
+      assert.deepEqual(runs[1], ["/data/profiles/a", "/data", "/opt/google/chrome", "/usr/lib"]);
     } finally {
       evictor.cancel();
       if (prev === undefined) delete process.env.TALLYLAMP_EVICT_PAGE_CACHE;

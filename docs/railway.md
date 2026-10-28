@@ -55,7 +55,7 @@ unencrypted at rest. See [proxy setup and limits](proxies.md).
 | `TALLYLAMP_IDLE_TTL_SEC` | no | default 900. Idle *unattached* browsers are stopped (profiles kept). `0` disables reaping. |
 | `TALLYLAMP_ATTACHED_IDLE_TTL_SEC` | no | default 14400. Applies while a watcher with the tab in view, or a human controller, is attached. |
 | `TALLYLAMP_MCP_ATTACHED_IDLE_TTL_SEC` | no | default 1800. Applies when an MCP session is the only attachment. Tool calls reset the clock; a client left open does not. |
-| `TALLYLAMP_EVICT_PAGE_CACHE` | no | default on for Linux. Drops the file cache a stopped Chrome leaves behind, which Railway bills as memory. Needs `vmtouch`, which the image includes. |
+| `TALLYLAMP_EVICT_PAGE_CACHE` | no | default on for Linux, on the main instance and on workers. Drops the file cache a stopped Chrome leaves behind, which Railway bills as memory: its profile, and once no Chrome is running, the volume, Chrome's binaries and the system libraries and fonts it loaded. The next start reads them from disk again. Needs `vmtouch`, which the image includes. |
 | `TALLYLAMP_MCP_SESSION_IDLE_SEC` | no | default 600. Closes an MCP session whose client vanished without `DELETE /mcp`. |
 
 ## Process limit settings

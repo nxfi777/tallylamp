@@ -230,7 +230,11 @@ export async function launchChrome(opts: {
   if (config.xvfb) {
     display = nextDisplay();
     const xvfbSize = `${screenDims.width}x${screenDims.height}x24`;
-    xvfb = spawn("Xvfb", [display, "-screen", "0", xvfbSize, "-nolisten", "tcp", "-ac"], {
+    // On SwiftShader, Chrome renders in its own GPU process and only hands the display finished
+    // pixels, so nothing uses the X server's GLX. Xvfb loads Mesa for it anyway, and with Mesa
+    // its 117 MB LLVM: about 85 MB resident per browser, and the same again in page cache.
+    const glx = gpu.status === "software" ? ["-extension", "GLX"] : [];
+    xvfb = spawn("Xvfb", [display, "-screen", "0", xvfbSize, "-nolisten", "tcp", "-ac", ...glx], {
       env: sanitizedChromeEnv(),
       stdio: "ignore",
       detached: true,
@@ -341,8 +345,27 @@ export function killProcessTree(pid?: number): void {
   }
 }
 
-function exited(child: ChildProcess): boolean {
-  return child.exitCode !== null || child.signalCode !== null;
+/**
+ * True once a process has ended, by exit code or by signal. A Chrome killed by a signal has a
+ * null `exitCode` and is still gone. Stand-ins for worker and linked browsers leave `signalCode`
+ * undefined, so both fields are compared loosely.
+ */
+export function exited(child: Pick<ChildProcess, "exitCode" | "signalCode">): boolean {
+  return child.exitCode != null || child.signalCode != null;
+}
+
+/**
+ * Release what a Chrome that ended by itself leaves behind. Its renderers and GPU process can
+ * outlive it in its process group, and its Xvfb, spawned separately, always does: about 85 MB
+ * at the default screen size, kept for the life of the process.
+ */
+export function releaseEnded(rt: ChromeRuntime): void {
+  if (rt.pgid && rt.pgid !== process.pid) {
+    try { process.kill(-rt.pgid, "SIGKILL"); } catch { /* the group has already gone */ }
+  }
+  if (rt.xvfb?.pid) {
+    try { process.kill(rt.xvfb.pid, "SIGKILL"); } catch { /* ignore */ }
+  }
 }
 
 async function closeChrome(rt: ChromeRuntime, timeoutMs: number): Promise<void> {

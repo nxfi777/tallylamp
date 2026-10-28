@@ -465,6 +465,8 @@ async function runViewer(
   // The session a screencast is running on, and the queue restarts wait in (see startCast).
   let castSession: string | undefined;
   let castQueue: Promise<void> = Promise.resolve();
+  // Set while the client's tab is hidden. Nobody sees those frames, so Chrome encodes none.
+  let castPaused = false;
   // Bumped on every attach. A frame or a deferred send carrying a stale epoch is dropped, so
   // the tab you switched away from cannot paint over the one you switched to.
   let epoch = 0;
@@ -843,7 +845,7 @@ async function runViewer(
      * captureScreenshot accepts webp; the fallback covers builds where it does not.
      */
     const refine = async (): Promise<void> => {
-      if (mode !== "control" || refined || !cdp || !pageSession) return;
+      if (mode !== "control" || refined || castPaused || !cdp || !pageSession) return;
       if (writing || pending) return;
       const sid = pageSession;
       const my = epoch;
@@ -968,6 +970,9 @@ async function runViewer(
      */
     const startCast = (sid: string, geometryChanged = true): Promise<void> => {
       const run = castQueue.then(async () => {
+        // Resizes, rung changes and tab switches still arrive while hidden. Showing the tab
+        // again starts the cast on whatever session is current by then.
+        if (castPaused) return;
         const r = mode === "control" ? RUNGS[rung]! : { scale: 1, quality: baseQuality };
         void geometryChanged;
         // A hard ceiling as well as the rung, so a very large stage does not start out at a
@@ -992,6 +997,34 @@ async function runViewer(
       });
       castQueue = run.catch(noop);
       return run;
+    };
+
+    /**
+     * A hidden dashboard tab used to keep Chrome encoding JPEGs, ten a second for an animated
+     * page, that the client then threw away; the desktop viewer already stopped for the same
+     * reason. Shown again, the cast restarts on the current tab with a primed frame, so the
+     * picture is fresh at once rather than at the page's next repaint.
+     */
+    const setCastPaused = (paused: boolean): void => {
+      if (paused === castPaused) return;
+      castPaused = paused;
+      if (paused) {
+        castQueue = castQueue
+          .then(async () => {
+            if (!castPaused || !castSession) return;
+            const sid = castSession;
+            castSession = undefined;
+            await cdp?.send("Page.stopScreencast", {}, sid).catch(noop);
+          })
+          .catch(noop);
+        return;
+      }
+      const sid = pageSession;
+      if (!sid) return;
+      const my = epoch;
+      void startCast(sid)
+        .then(() => primeFrame(sid, my))
+        .catch((e) => log.warn("viewer resume failed", { error: (e as Error).message }));
     };
 
     /**
@@ -1186,7 +1219,7 @@ async function runViewer(
       await cdp!.send("Page.enable", {}, sid);
       await cdp!.send("Input.setIgnoreInputEvents", { ignore: mode !== "control" }, sid).catch(noop);
       await startCast(sid);
-      await primeFrame(sid, my);
+      if (!castPaused) await primeFrame(sid, my);
       pushTabs();
       await showStartPage(sid, targetId, targets.get(targetId)?.url);
     };
@@ -1540,6 +1573,7 @@ async function runViewer(
           if (visible) browsers.attachViewer(browserId);
           else browsers.detachViewer(browserId);
         }
+        setCastPaused(!visible);
         return;
       }
       if (msg.type === "heartbeat" && mode === "control" && typeof msg.leaseToken === "string") {
