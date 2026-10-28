@@ -62,7 +62,7 @@ internet.
 ## Dependencies for Tallylamp Worker
 
 A running Tallylamp in the same Railway project, on the release this template
-installs, currently 0.12.0. A worker that tries to join a different release
+installs, currently 0.12.1. A worker that tries to join a different release
 refuses to start and names both versions.
 
 ### Deployment Dependencies

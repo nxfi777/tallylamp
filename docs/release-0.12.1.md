@@ -48,5 +48,29 @@ off, now on workers too.
 
 Tallylamp Link is unchanged apart from its version number.
 
+## Release validation
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/40681152841)
+passed application, headed Chrome, and running-container checks before
+publishing the tested image. Its anonymous registry access, digest, version and
+source-revision labels were verified, and `tallylamp-link.zip` is attached to the
+release. Pin this Linux amd64 artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:12f81452827a66e122542fc61a8e6ed7540c6e58cf4634f49aa666be82f18523
+```
+
+Before release, the same Dockerfile was built and run on Linux amd64 with Google
+Chrome 156, starting each run from a cold page cache, as a new container does.
+A main instance and a worker on a private network reproduced production's idle
+worker: 785 MiB a minute after its browser stopped, 128 MiB with this release.
+The browser rendered the same canvas, WebGL, screenshot and X display bytes as
+0.12.0, and a viewer in a hidden tab received no frames while Chrome's CPU fell
+by about a third. All 519 service tests passed.
+
+After the deploy, production's worker reported 0.12.1 and ran its next scheduled
+browser for twelve minutes. As that Chrome exited the worker held 0.60 GB, and a
+minute later 0.13 GB. On 0.12.0, the same job left it at about 0.75 GB for hours.
+
 See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
 backups and deployment settings.
