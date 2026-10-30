@@ -108,17 +108,23 @@ test("GET requests time out and mutations receive no automatic timeout or retry"
   assert.equal(calls, 2);
 });
 
-test("success feedback keeps its semantic type until a new navigation clears it", () => {
+test("success goes to a toast; an error holds the banner until a new navigation clears it", () => {
   const current = state();
   let renders = 0;
+  const toasts: string[] = [];
   const actions = runInNewContext(`${fn("flash")}\n${fn("go")}; ({flash,go})`, { state: current,
-    document: { querySelector: () => null }, history: { pushState() {} }, render: () => { renders++; } });
+    document: { querySelector: () => null }, history: { pushState() {} }, render: () => { renders++; },
+    toast: (message: string) => toasts.push(message) });
   actions.flash("Saved", true);
-  assert.equal(current.flash, "Saved");
-  assert.equal(current.flashSuccess, true);
+  assert.deepEqual(toasts, ["Saved"]);
+  assert.equal(current.flash, "");
+  actions.flash("Could not save");
+  assert.equal(current.flash, "Could not save");
+  assert.equal(current.flashSuccess, false);
   actions.go("/agents", { preserveFlash: true });
-  assert.equal(current.flash, "Saved");
+  assert.equal(current.flash, "Could not save");
   actions.go("/");
   assert.equal(current.flash, "");
   assert.equal(renders, 2);
+  assert.deepEqual(toasts, ["Saved"]);
 });

@@ -368,6 +368,12 @@ input::placeholder { color: var(--muted); }
   content: ""; position: absolute; left: -12px; top: 50%; transform: translateY(-50%);
   width: 1px; height: 20px; background: var(--line-strong);
 }
+/* Solid red is kept for the one moment a destructive action is the answer: the last button of
+   a confirmation. The fill is fixed rather than the theme's danger tone, because white on the
+   dark theme's lighter red measured below AA. */
+.btn.danger-solid { background: #dc2626; border-color: #dc2626; color: #fff; }
+.btn.danger-solid:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; }
+.btn.sm { min-height: 28px; padding: 0 10px; font-size: 12px; }
 .btn.human { background: var(--human); border-color: var(--human); color: var(--human-fg); }
 .btn.ok { background: var(--ok); border-color: var(--ok); color: var(--ok-fg); }
 .grid {
@@ -694,8 +700,13 @@ input::placeholder { color: var(--muted); }
 }
 .switch::after {
   content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
-  border-radius: 50%; background: var(--muted); transition: transform 0.15s, background 0.15s;
+  border-radius: 999px; background: var(--muted);
+  transition: transform var(--d) var(--ease-spring), width var(--d-fast) var(--ease-out), background var(--d-fast);
 }
+/* The thumb stretches under a press and springs across on release, so the switch answers the
+   finger before the server answers the request. */
+.switch:active:not(:disabled)::after { width: 20px; }
+.switch[aria-checked="true"]:active:not(:disabled)::after { transform: translateX(12px); }
 /* On is the text colour, not a green: the palette is monochrome plus one amber, and green on
    this page already means "the agent's turn". */
 .switch[aria-checked="true"] { background: var(--text); border-color: var(--text); }
@@ -888,11 +899,13 @@ body.busy::before {
 .modal {
   position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
   background: var(--scrim);
+  animation: scrim-in var(--d) var(--ease-out);
 }
 .modal-box {
   width: min(560px, 92vw); background: var(--surface);
-  border: 1px solid var(--line-strong); border-radius: 12px;
-  padding: 20px; box-shadow: var(--shadow);
+  border: 1px solid var(--line-2); border-radius: var(--radius-lg);
+  padding: 20px; box-shadow: var(--shadow-pop);
+  animation: dialog-in 220ms var(--ease-out);
   /* A form taller than the screen, like New agent with its permissions on a phone, ran off both
      edges with nothing to scroll: the backdrop is fixed and centres the box. */
   max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto;
@@ -1005,4 +1018,58 @@ body.busy::before {
   .switch::after { top: 12px; left: 4px; }
   .switch[aria-checked="true"] { background: transparent; }
   .switch[aria-checked="true"]::before { background: var(--text); border-color: var(--text); }
+}
+
+/* ---------- dialogs, toasts, tooltips ---------- */
+@keyframes scrim-in { from { opacity: 0; } }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } }
+.confirm-form { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.confirm-form label { color: var(--muted); font-size: 13px; }
+.confirm-form label code { color: var(--text); }
+.confirm-form .modal-foot { margin-top: 8px; }
+.modal-box > p.sub + p.sub { margin-top: 8px; }
+
+/* Bottom right, above everything but a dialog's scrim, and out of the way of the page. */
+.toasts { position: fixed; right: 16px; bottom: 16px; z-index: 90; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.toasts-live { display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  position: relative; overflow: hidden; pointer-events: auto;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 12px 8px 12px 14px; border-radius: var(--radius);
+  background: var(--surface-2); border: 1px solid var(--line-2); box-shadow: var(--shadow-pop);
+  font-size: 13px; line-height: 18px;
+  animation: toast-in 320ms var(--ease-spring);
+}
+.toast.out { animation: toast-out 200ms ease-in forwards; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(16px) scale(0.97); } }
+@keyframes toast-out { to { opacity: 0; transform: translateX(24px); } }
+.toast-body { flex: 1; min-width: 0; padding-top: 1px; }
+.toast-t { font-weight: 500; }
+.toast-d { color: var(--muted); margin-top: 2px; }
+.toast .btn.sm { flex: none; margin-top: -4px; }
+.toast-x {
+  flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin-top: -3px;
+  border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted);
+}
+.toast-x:hover { background: var(--hover); color: var(--text); }
+.toast-x .icon { width: 14px; height: 14px; }
+.toast-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--line-strong);
+  transform-origin: left; animation: toast-bar linear forwards; opacity: 0.5;
+}
+@keyframes toast-bar { to { transform: scaleX(0); } }
+
+.tip {
+  position: fixed; z-index: 300; max-width: 280px; pointer-events: none;
+  padding: 6px 8px; border-radius: var(--radius-sm);
+  background: #18181b; color: #fafafa; font-size: 12px; line-height: 16px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: tip-in var(--d-fast) var(--ease-out);
+}
+@keyframes tip-in { from { opacity: 0; transform: translateY(2px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal, .modal-box, .toast, .toast.out, .tip { animation: none; }
+  .switch:active:not(:disabled)::after { width: 16px; }
+  .switch[aria-checked="true"]:active:not(:disabled)::after { transform: translateX(16px); }
 }

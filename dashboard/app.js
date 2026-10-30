@@ -18,8 +18,12 @@ window.addEventListener("beforeunload", teardownViewer);
 // immediately follows it used to rebuild the layout and throw the message away — so the messages
 // this code takes care to compose were unreachable exactly when they mattered.
 function flash(message, success = false) {
+  // Success is said once, in a toast, and then leaves. It used to sit in this banner until the
+  // next navigation, styled like the errors and pushing the page down; only an error holds the
+  // banner now, because an error has to stay until it is read.
+  if (success && message) { toast(message); message = ""; }
   state.flash = message || "";
-  state.flashSuccess = success;
+  state.flashSuccess = false;
   const el = document.querySelector(".flash");
   if (el) {
     el.textContent = state.flash;
@@ -291,6 +295,159 @@ function revealToken(title, token, { note, command, commandLabel = "To point Cla
 }
 
 /**
+ * Toasts. Hovering or focusing one holds it, so an Undo is never taken away mid-reach, and the
+ * bar along its foot shows how long it has left. Three at most; the oldest makes room.
+ *
+ * The stack is a live region that exists before anything is put in it: a region created
+ * together with its first message is one most screen readers never announce.
+ */
+function toastStack() {
+  let stack = document.querySelector(".toasts");
+  if (!stack) {
+    stack = h("div", { class: "toasts", role: "region", "aria-label": "Notifications" },
+      h("div", { class: "toasts-live", "aria-live": "polite", "aria-atomic": "false" }));
+    document.body.append(stack);
+  }
+  return stack.firstChild;
+}
+
+function toast(message, { detail, undo, ms = undo ? 8000 : 5000 } = {}) {
+  const live = toastStack();
+  let timer = 0;
+  let left = ms;
+  let started = Date.now();
+  const dismiss = () => {
+    clearTimeout(timer);
+    if (el.classList.contains("out")) return;
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 200);
+  };
+  const bar = h("span", { class: "toast-bar", "aria-hidden": "true", style: `animation-duration: ${ms}ms` });
+  const el = h("div", { class: "toast" },
+    h("div", { class: "toast-body" }, h("div", { class: "toast-t" }, message), detail ? h("div", { class: "toast-d" }, detail) : null),
+    undo ? h("button", { class: "btn sm", type: "button", onClick: () => { dismiss(); undo(); } }, "Undo") : null,
+    h("button", { class: "toast-x", type: "button", "aria-label": "Dismiss", onClick: dismiss }, icon(ICON_CLOSE)),
+    bar);
+  const hold = () => { clearTimeout(timer); left -= Date.now() - started; bar.style.animationPlayState = "paused"; };
+  const resume = () => {
+    if (el.matches(":hover") || el.contains(document.activeElement)) return;
+    started = Date.now();
+    timer = setTimeout(dismiss, Math.max(1500, left));
+    bar.style.animationPlayState = "running";
+  };
+  el.addEventListener("pointerenter", hold);
+  el.addEventListener("pointerleave", resume);
+  el.addEventListener("focusin", hold);
+  el.addEventListener("focusout", () => setTimeout(resume));
+  const shown = [...live.children].filter((t) => !t.classList.contains("out"));
+  for (const old of shown.slice(0, Math.max(0, shown.length - 2))) old.remove();
+  live.append(el);
+  timer = setTimeout(dismiss, ms);
+  return dismiss;
+}
+
+/**
+ * The question before a consequential action, asked in the page. confirm() froze the whole tab,
+ * gave the dangerous button and the safe one the same weight, and labelled them OK and Cancel,
+ * so the operator had to read a paragraph to learn what OK would do. The button here says it.
+ *
+ * Danger moves the starting focus to Cancel, so a reflexive Enter is the safe answer. typeName
+ * is for what cannot be undone: the action stays disabled until the name is typed.
+ */
+function confirmDialog({ title, body, action, danger = false, typeName }) {
+  return new Promise((resolve) => {
+    let input = null;
+    let go = null;
+    let cancel = null;
+    openModal(title, (close) => {
+      go = h("button", { class: danger ? "btn danger-solid" : "btn primary", type: "submit", disabled: Boolean(typeName) }, action);
+      cancel = h("button", { class: "btn", type: "button", onClick: () => close(false) }, "Cancel");
+      if (typeName) {
+        input = h("input", { id: "confirm-name", type: "text", autocomplete: "off", spellcheck: "false",
+          onInput: () => { go.disabled = input.value.trim() !== typeName; } });
+      }
+      const form = h("form", { class: "confirm-form", onSubmit: (e) => { e.preventDefault(); if (!go.disabled) close(true); } },
+        typeName ? h("label", { for: "confirm-name" }, "Type ", h("code", {}, typeName), " to confirm") : null,
+        input,
+        h("div", { class: "row modal-foot" }, go, cancel));
+      return [h("h2", {}, title), ...[body].flat().filter(Boolean).map((text) => h("p", { class: "sub" }, text)), form];
+    }, (result) => resolve(result === true));
+    (input || (danger ? cancel : go)).focus();
+  });
+}
+
+/**
+ * Tooltips for every title the dashboard already writes. The native one waits about a second,
+ * cannot be styled, and never appears for the keyboard. This shows after 500ms, at once while
+ * moving between neighbours, and on keyboard focus.
+ *
+ * The title moves to data-tip the first time it is used, so the native tooltip does not show as
+ * well. What it said stays available to assistive technology: as the name of an element with
+ * no text of its own, and as its description otherwise.
+ */
+let tipEl = null;
+let tipTimer = 0;
+let tipWarmUntil = 0;
+
+function tipFor(target) {
+  const el = target?.closest?.("[data-tip], [title]");
+  if (!el || el.disabled) return null;
+  if (el.hasAttribute("title")) {
+    const text = el.getAttribute("title");
+    el.removeAttribute("title");
+    el.dataset.tip = text;
+    if (!el.hasAttribute("aria-label")) {
+      if (el.textContent.trim()) el.setAttribute("aria-description", text);
+      else el.setAttribute("aria-label", text);
+    }
+  }
+  return el.dataset.tip ? el : null;
+}
+
+function showTip(el) {
+  hideTip(true);
+  if (!el.isConnected) return;
+  tipEl = h("div", { class: "tip", role: "tooltip" }, el.dataset.tip);
+  document.body.append(tipEl);
+  const r = el.getBoundingClientRect();
+  const t = tipEl.getBoundingClientRect();
+  let top = r.top - t.height - 8;
+  if (top < 8) top = r.bottom + 8;
+  const left = Math.max(8, Math.min(r.left + r.width / 2 - t.width / 2, window.innerWidth - t.width - 8));
+  tipEl.style.top = `${Math.round(top)}px`;
+  tipEl.style.left = `${Math.round(left)}px`;
+}
+
+function hideTip(moving = false) {
+  clearTimeout(tipTimer);
+  if (!tipEl) return;
+  tipEl.remove();
+  tipEl = null;
+  if (!moving) tipWarmUntil = Date.now() + 300;
+}
+
+document.addEventListener("pointerover", (e) => {
+  if (e.pointerType !== "mouse") return;
+  const el = tipFor(e.target);
+  if (!el) return;
+  clearTimeout(tipTimer);
+  if (tipEl || Date.now() < tipWarmUntil) showTip(el);
+  else tipTimer = setTimeout(() => showTip(el), 500);
+});
+document.addEventListener("pointerout", (e) => {
+  const el = e.target?.closest?.("[data-tip]");
+  if (el && !el.contains(e.relatedTarget)) hideTip();
+});
+document.addEventListener("focusin", (e) => {
+  const el = tipFor(e.target);
+  if (el && el.matches(":focus-visible")) showTip(el);
+});
+document.addEventListener("focusout", () => hideTip());
+document.addEventListener("pointerdown", () => hideTip(), true);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && tipEl) hideTip(); }, true);
+window.addEventListener("scroll", () => hideTip(), true);
+
+/**
  * Theme. Three states, not two: light, dark, and "follow the system" — which is the default and
  * stays reachable, because an operator who never chose should keep tracking their OS.
  * `data-theme` is absent in that third state, which is what the CSS keys off.
@@ -473,7 +630,8 @@ function browserMenu(b) {
       b.link && {
         label: "Revoke link…", danger: true,
         onSelect: async () => {
-          if (!confirm(`Revoke the link to "${b.name}"?\n\nIts extension is disconnected at once, its token stops working, and every shared tab is handed back. To use it again, press Connect in the extension and approve a new code.`)) return;
+          if (!(await confirmDialog({ title: `Revoke the link to ${b.name}?`, action: "Revoke link", danger: true,
+            body: "Its extension is disconnected at once, its token stops working, and every shared tab is handed back. To use it again, press Connect in the extension and approve a new code." }))) return;
           await act(async () => {
             await api(`/api/v1/browsers/${b.id}/link`, { method: "DELETE" });
             await render();
@@ -509,7 +667,7 @@ function browserMenu(b) {
       : { label: "Take control", onSelect: () => takeControl(b.id) },
     "-",
     running
-      ? { label: "Stop browser", onSelect: () => call(`/api/v1/browsers/${b.id}/stop`) }
+      ? { label: "Stop browser", onSelect: () => stopBrowser(b) }
       : { label: "Start", onSelect: () => call(`/api/v1/browsers/${b.id}/start`) },
     running && { label: "Restart", onSelect: () => call(`/api/v1/browsers/${b.id}/restart`) },
     "-",
@@ -549,8 +707,10 @@ async function act(fn) {
   try {
     flash("");
     await fn();
+    return true;
   } catch (e) {
     flash(e.message);
+    return false;
   }
 }
 
@@ -1178,7 +1338,7 @@ function askRow(r) {
               ? `${who} can now read ${r.browserName} ${how}${asked === "control" ? ", but not control it" : ""}. Revoke it from that browser's page.`
               : `${who} can now control ${r.browserName} ${how}. Revoke it from that browser's page.`
             : `Declined ${who}.`,
-          decision === "grant",
+          true,
         );
       } catch (e) {
         for (const b of actions.querySelectorAll("button")) b.disabled = false;
@@ -1457,9 +1617,10 @@ function settingsSection(b) {
           : full ? "Off" : "Off. This host cannot run Full browser, which extensions need.",
         switchButton("Extensions", b.extensionsEnabled, { disabled: (!full && !b.extensionsEnabled) || locked, title: why,
           onToggle: (enabled) => act(async () => {
-            if (enabled && !confirm("Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust.\n\nEnable extension support?")) return;
+            if (enabled && !(await confirmDialog({ title: "Enable extension support?", action: "Enable extensions",
+              body: "Extensions can read signed-in pages and change proxy settings. They can keep running when you return control to an agent. Only enable this for extensions you trust." }))) return;
             await api(`/api/v1/browsers/${id}/extensions`, { method: "PUT", body: { enabled } });
-            flash(enabled ? "Extension support enabled. Start the browser, take control and open Full browser." : "Extensions disabled on the next start. Their saved data has not been deleted.");
+            flash(enabled ? "Extension support enabled. Start the browser, take control and open Full browser." : "Extensions disabled on the next start. Their saved data has not been deleted.", true);
             await render();
           }) })),
       b.owner.type === "agent" ? settingRow("Allow agent control",
@@ -1467,7 +1628,8 @@ function settingsSection(b) {
           : "Off. Turn it on to let the owning agent use extension popups and Chrome's own UI.",
         switchButton("Allow agent control", b.agentDesktopEnabled, { disabled: !full && !b.agentDesktopEnabled,
           onToggle: (enabled) => act(async () => {
-            if (enabled && !confirm("This lets the owning agent see and control all of Chrome's native UI, including settings and host-file dialogs. It is broader than access to extension popups. Only allow an agent you trust with that access.\n\nAllow agent control?")) return;
+            if (enabled && !(await confirmDialog({ title: "Allow agent control?", action: "Allow agent control",
+              body: "This lets the owning agent see and control all of Chrome's native UI, including settings and host-file dialogs. It is broader than access to extension popups. Only allow an agent you trust with that access." }))) return;
             await api(`/api/v1/browsers/${id}/agent-desktop`, { method: "PUT", body: { enabled } });
             flash(enabled ? "Agent native control allowed. Human takeover still blocks its input." : "Agent native control blocked.", true);
             if (viewer) { viewer.cancel(true); viewer = null; }
@@ -1489,9 +1651,10 @@ function settingsSection(b) {
           : "Off. It shares the host's processes with every other browser, and may be stopped when idle to make room.",
         switchButton("Pinned", b.pinned, {
           onToggle: (on) => act(async () => {
-            if (on && !confirm("When this host runs short of processes, Tallylamp will stop other browsers to keep this one running, including browsers an agent is using. Their profiles and tabs are kept.\n\nPin this browser?")) return;
+            if (on && !(await confirmDialog({ title: "Pin this browser?", action: "Pin browser",
+              body: "When this host runs short of processes, Tallylamp will stop other browsers to keep this one running, including browsers an agent is using. Their profiles and tabs are kept." }))) return;
             await api(`/api/v1/browsers/${id}/pinned`, { method: "PUT", body: { pinned: on } });
-            flash(on ? `${b.name} is pinned.` : `${b.name} is no longer pinned.`);
+            flash(on ? `${b.name} is pinned.` : `${b.name} is no longer pinned.`, true);
             await render();
           }) })) : null,
       // What it is sized at decides whether its next start is admitted, and one heavy run can
@@ -1736,9 +1899,10 @@ async function browserView(id, seq) {
   // Full browser shows the display of whichever host runs its Chrome: this instance, or its worker.
   const fullHere = Boolean(b.worker ? b.worker.fullBrowser : state.status?.fullBrowser);
   const surface = fullHere && viewerSurfaces.get(id) === "desktop" ? "desktop" : "tab";
-  const switchSurface = (next) => {
+  const switchSurface = async (next) => {
     if (next === surface) return;
-    if (next === "desktop" && !confirm("Full browser lets you use Chrome's toolbar and extension popups. It also gives access to Chrome settings and files on the host. Only install extensions you trust.\n\nOpen full browser?")) return;
+    if (next === "desktop" && !(await confirmDialog({ title: "Open full browser?", action: "Open full browser",
+      body: "Full browser lets you use Chrome's toolbar and extension popups. It also gives access to Chrome settings and files on the host. Only install extensions you trust." }))) return;
     viewerSurfaces.set(id, next);
     if (viewer) { viewer.cancel(true); viewer = null; }
     void render();
@@ -1960,7 +2124,7 @@ async function browserView(id, seq) {
           ? h("button", { class: "btn", disabled: true }, "Moving…")
           : ["stopped", "crashed"].includes(b.status)
           ? h("button", { class: human ? "btn" : "btn human", onClick: (e) => call(`/api/v1/browsers/${id}/start`, e.currentTarget) }, "Start")
-          : h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/stop`, e.currentTarget) }, "Stop browser"),
+          : h("button", { class: "btn", onClick: (e) => stopBrowser(b, e.currentTarget) }, "Stop browser"),
         h("button", { class: "btn", "data-move-action": "", hidden: !canMove(b), disabled: b.status === "moving" || b.savingProfile, onClick: () => moveBrowser(b) }, "Move to…"),
         b.worker ? null : h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
         !b.worker && b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
@@ -2947,7 +3111,8 @@ async function editPermissions(agent) {
 }
 
 async function deleteSavedProfile(profile) {
-  if (!confirm(`Delete saved profile "${profile.name}"?\n\nThis removes the reusable snapshot and its metadata. Existing browsers and their logins stay unchanged. You will no longer be able to create browsers from this saved profile.\n\nThis cannot be undone.`)) return;
+  if (!(await confirmDialog({ title: `Delete ${profile.name}?`, action: "Delete saved profile", danger: true, typeName: profile.name,
+    body: ["This removes the reusable snapshot and its metadata. Existing browsers and their logins stay unchanged. You will no longer be able to create browsers from this saved profile.", "This cannot be undone."] }))) return;
   await act(async () => {
     const result = await api(`/api/v1/seeds/${profile.id}`, { method: "DELETE", body: { confirmName: profile.name } });
     await render();
@@ -3061,7 +3226,8 @@ async function addWorker() {
 }
 
 async function removeWorker(w) {
-  if (!confirm(`Remove ${w.name}? It stops answering to this instance. Delete its Railway service as well, or it will keep running and keep failing to start.`)) return;
+  if (!(await confirmDialog({ title: `Remove ${w.name}?`, action: "Remove worker", danger: true,
+    body: "It stops answering to this instance. Delete its Railway service as well, or it will keep running and keep failing to start." }))) return;
   await api(`/api/v1/workers/${w.id}`, { method: "DELETE" });
   flash(`${w.name} removed.`, true);
   await refresh();
@@ -3140,7 +3306,8 @@ async function addGatewayUi() {
 }
 
 async function removeGatewayUi(g) {
-  if (!confirm(`Remove ${g.name}? Its command stops on that computer, and its token stops working.`)) return;
+  if (!(await confirmDialog({ title: `Remove ${g.name}?`, action: "Remove gateway", danger: true,
+    body: "Its command stops on that computer, and its token stops working." }))) return;
   await api(`/api/v1/gateways/${g.id}`, { method: "DELETE" });
   flash(`${g.name} removed.`, true);
   await loadDataset("gateways");
@@ -3151,7 +3318,8 @@ async function chooseGateway(b) {
   await loadDataset("gateways");
   const gateways = state.gateways || [];
   if (!gateways.length) {
-    if (confirm("There are no gateways yet. A gateway is a computer of yours that this browser can reach the web from.\n\nOpen Gateways to add one?")) go("/gateways");
+    if (await confirmDialog({ title: "No gateways yet", action: "Open Gateways",
+      body: "A gateway is a computer of yours that this browser can reach the web from. Add one, then choose it here." })) go("/gateways");
     return;
   }
   const answers = await askFor("Choose how it connects", [
@@ -3515,7 +3683,8 @@ async function rotate(id) {
 async function toggleAgent(a) {
   if (
     a.enabled &&
-    !confirm(`Revoke ${a.name}?\n\nIts token stops working immediately and anything using it is disconnected. You can enable it again, but the same token will not come back.`)
+    !(await confirmDialog({ title: `Revoke ${a.name}?`, action: "Revoke agent", danger: true,
+      body: "Its token stops working immediately and anything using it is disconnected. You can enable it again, but the same token will not come back." }))
   ) return;
   await act(async () => {
     await api(`/api/v1/agents/${a.id}`, { method: "PATCH", body: { enabled: !a.enabled } });
@@ -3535,7 +3704,8 @@ async function takeControl(id) {
       held?.controllerType === "human" &&
       held.controllerId &&
       held.controllerId !== state.me?.id &&
-      !confirm("Someone else is controlling this browser right now. Taking it will cut them off part-way through whatever they are doing.\n\nTake control anyway?")
+      !(await confirmDialog({ title: "Someone else has control", action: "Take control anyway", danger: true,
+        body: "Another person is controlling this browser right now. Taking it cuts them off part-way through whatever they are doing." }))
     ) return;
     await api(`/api/v1/browsers/${id}/control`, { method: "POST", body: { force: true } });
     // Always go to the viewer. The lease is short and only the detail page's socket heartbeat
@@ -3566,7 +3736,7 @@ async function call(path, button) {
     button.textContent = PENDING[path.split("/").pop()] || label;
   }
   try {
-    await act(async () => {
+    return await act(async () => {
       await api(path, { method: "POST" });
       await render();
     });
@@ -3578,11 +3748,23 @@ async function call(path, button) {
   }
 }
 
+/**
+ * Stopping a persistent browser keeps its logins, data and tabs, so it runs at once and offers
+ * Undo instead of asking first. A temporary browser makes no such promise and gets no Undo.
+ */
+async function stopBrowser(b, button) {
+  if (!(await call(`/api/v1/browsers/${b.id}/stop`, button))) return;
+  toast(`${b.name} stopped`, b.persistent
+    ? { detail: "Its logins and data are kept.", undo: () => call(`/api/v1/browsers/${b.id}/start`) }
+    : {});
+}
+
 async function destroyBrowser(id, name, linked = false) {
   // A linked browser's profile lives on its owner's machine and is not touched. Promising
   // that logins will be lost would be untrue, and would scare people off a harmless cleanup.
   if (linked) {
-    if (!confirm(`Delete "${name}"?\n\nThis removes it from Tallylamp and revokes its link. Nothing in the browser itself changes: its tabs, logins and history stay exactly as they are.`)) return;
+    if (!(await confirmDialog({ title: `Delete ${name}?`, action: "Delete", danger: true,
+      body: "This removes it from Tallylamp and revokes its link. Nothing in the browser itself changes: its tabs, logins and history stay exactly as they are." }))) return;
     return act(async () => {
       await api(`/api/v1/browsers/${id}`, { method: "DELETE" });
       go("/");
@@ -3590,7 +3772,8 @@ async function destroyBrowser(id, name, linked = false) {
   }
   // Name the browser, and say what actually goes: browsers.ts removes the profile directory AND
   // the download directory, which the old wording never mentioned.
-  if (!confirm(`Delete "${name}"?\n\nIts profile and its downloaded files are removed, and its saved logins go with them. You will have to sign in to those sites again. This cannot be undone.`)) return;
+  if (!(await confirmDialog({ title: `Delete ${name}?`, action: "Delete browser", danger: true, typeName: name,
+    body: ["Its profile and its downloaded files are removed, and its saved logins go with them. You will have to sign in to those sites again.", "This cannot be undone."] }))) return;
   await act(async () => {
     await api(`/api/v1/browsers/${id}`, { method: "DELETE" });
     go("/");
