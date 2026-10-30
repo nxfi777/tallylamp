@@ -23,7 +23,7 @@ the lease when you are done.
 
 ### Share one browser with a person
 
-**Share with a person…**, under **Guest links** on a browser's page, makes a
+**Share with a person…**, under **Guest links** on a browser's **Access** tab, makes a
 single-use link for one other person. They can watch that browser and, if you
 allow it, take control of it. They cannot see or change anything else. Use it
 when someone else has to sign in or answer a 2FA prompt. While a guest holds
@@ -141,7 +141,7 @@ A linked browser is your own Chrome, Edge, Brave or other Chromium browser,
 reached through the Tallylamp Link extension. Choose **Link your own browser** on
 the Browsers page for the three setup steps. After that, share a tab from the
 extension's side panel and the agents you ticked for it can use it. Change that
-list under **Who can use it** on the browser's page.
+list under **Who can use it** on the browser's **Settings** tab.
 It gets no other tab. [Linked browsers](linked-browsers.md) covers what the agent
 can and cannot reach, and what a linked browser does not support.
 
@@ -200,8 +200,10 @@ access level that lets one see pages without acting on them.
 
 ## Browser details and identity
 
-Choose **Edit browser details** to change a browser's name, project, purpose,
-or task. These details belong to the browser, not a saved profile. The action
+Click a browser's name at the top of its page to rename it there: Enter or
+clicking away saves, Escape cancels, and the confirmation offers Undo. Choose
+**Edit browser details** in the **⋯** menu, or **Edit** beside **About**, to change
+its name, project, purpose, or task. These details belong to the browser, not a saved profile. The action
 works even when you have never loaded or saved a profile template.
 
 The browser page shows **Browser ID** with a **Copy browser ID** button. The
@@ -227,7 +229,7 @@ timestamp, and reporter. It contains no cookies or tokens.
 These records power the site badges. They are not a complete list of saved logins:
 a missing badge does not mean its cookies were lost. Detection recognises visible
 sign-out controls and Google's signed-in account-menu link. It can miss hidden
-menus or tabs closed before inspection. **Record signed-in site** lets you add a
+menus or tabs closed before inspection. **Record a site…**, on the browser's **Access** tab, lets you add a
 missed observation. It does not sign you in, copy cookies, or save a profile.
 **Save profile** copies the current records into the snapshot along with all
 saved logins and storage, not just the sites in the inventory.

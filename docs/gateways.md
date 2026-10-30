@@ -16,8 +16,9 @@ internet provider.
    the computer it will run on.
 2. Copy the command it shows and run it in a terminal on that computer. It needs
    Node 22 or newer. The token in it is shown once.
-3. Open the browser that should use it, stop it, and choose **Choose…** beside
-   **Gateway** in its Settings. Start it again.
+3. Open the browser that should use it. On its **Settings** tab, under
+   **Connection**, choose **A gateway**, pick the gateway and save. A running
+   browser is stopped, switched and started again; its logins are kept.
 
 The command looks like this:
 

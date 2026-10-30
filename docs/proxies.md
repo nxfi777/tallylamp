@@ -11,11 +11,12 @@ gateway.
 ## Dashboard
 
 Enter the proxy server and optional credentials when creating a browser.
-For an existing browser, stop it, then choose **Configure** beside **Proxy** in its Settings.
-Save the settings and start the browser again. Clear all three fields to return
-to direct access.
+For an existing browser, open its **Settings** tab and, under **Connection**,
+choose **A proxy**. Enter the server and optional credentials and save. A running
+browser is stopped, changed and started again; its logins are kept. Choose
+**This host** and save to return to direct access.
 
-The sidebar shows the saved server and whether it uses authentication, not its
+The browser's page shows the saved server, not its
 credentials. To edit an authenticated proxy, re-enter both credentials. A saved
 setting does not mean the proxy has been tested or is reachable.
 

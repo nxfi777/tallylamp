@@ -20,7 +20,7 @@ or use one kept for that site.
 ## Create a link
 
 1. Open the browser in the dashboard.
-2. Under **Guest links**, choose **Share with a person…**.
+2. On its **Access** tab, under **Guest links**, choose **Share with a person…**.
 3. Fill in:
    - **Who is it for?** A name the guest will see. It is also the name the
      audit log records against everything they do.
@@ -103,7 +103,7 @@ somewhere, the browser's profile and network have to stop it, not the list.
 
 ## Take it back
 
-- **Revoke.** Under **Guest links**, choose **Revoke**. The guest's session ends,
+- **Revoke.** On the browser's **Access** tab, under **Guest links**, choose **Revoke**. The guest's session ends,
   their live view closes, and if they held control it goes back to the agent at
   once. A link cannot be used again after it is revoked.
 - **Take control.** You can always take control from a guest. Their view drops

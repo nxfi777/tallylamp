@@ -154,7 +154,7 @@ describe("agent native access", () => {
   });
   it("tells agents where to request permission and to wait instead of bypassing it", () => {
     for (const name of ["tallylamp_desktop_screenshot", "tallylamp_desktop_action"]) {
-      assert.match(LIFECYCLE_TOOLS.find(t => t.name === name)!.description!, /ask the user.*dashboard > Extensions > Allow agent control.*wait for approval/);
+      assert.match(LIFECYCLE_TOOLS.find(t => t.name === name)!.description!, /ask the user.*dashboard > Settings > Extensions > Allow agent control.*wait for approval/);
     }
   });
 });

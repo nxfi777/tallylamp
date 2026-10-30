@@ -552,7 +552,7 @@ function closeMenu() {
  * step and no client dependencies, so a React/Radix menu would mean adopting a bundler for one
  * widget.
  */
-function showMenu(x, y, items, label) {
+function showMenu(x, y, items, label, { align = "start" } = {}) {
   closeMenu();
   const restoreFocus = document.activeElement;
   const entries = items.filter(Boolean);
@@ -583,9 +583,12 @@ function showMenu(x, y, items, label) {
   document.body.append(menu);
 
   // Measure, then keep it on screen: flip rather than let the viewport clip a Delete item.
-  const r = menu.getBoundingClientRect();
+  // Layout size, not the bounding box: the entrance animation starts it scaled to 0.97, which
+  // made an end-aligned menu overhang its button by a few pixels.
+  const r = { width: menu.offsetWidth, height: menu.offsetHeight };
   const pad = 8;
-  const left = x + r.width + pad > window.innerWidth ? Math.max(pad, x - r.width) : x;
+  // `end` hangs it from a button's right edge, for a ⋯ at the end of a row.
+  const left = align === "end" || x + r.width + pad > window.innerWidth ? Math.max(pad, x - r.width) : x;
   const top = y + r.height + pad > window.innerHeight ? Math.max(pad, y - r.height) : y;
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
@@ -634,17 +637,7 @@ function browserMenu(b) {
       { label: "Watch", onSelect: () => go(`/browsers/${b.id}`) },
       "-",
       running && { label: "Hand back its shared tabs", onSelect: () => call(`/api/v1/browsers/${b.id}/stop`) },
-      b.link && {
-        label: "Revoke link…", danger: true,
-        onSelect: async () => {
-          if (!(await confirmDialog({ title: `Revoke the link to ${b.name}?`, action: "Revoke link", danger: true,
-            body: "Its extension is disconnected at once, its token stops working, and every shared tab is handed back. To use it again, press Connect in the extension and approve a new code." }))) return;
-          await act(async () => {
-            await api(`/api/v1/browsers/${b.id}/link`, { method: "DELETE" });
-            await render();
-          });
-        },
-      },
+      b.link && { label: "Revoke link…", danger: true, onSelect: () => revokeLink(b) },
       "-",
       { label: "Edit browser details…", onSelect: () => editBrowser(b) },
       { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
@@ -685,6 +678,16 @@ function browserMenu(b) {
     { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
     { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name) },
   ];
+}
+
+/** Cut a linked browser off: its extension disconnects and every shared tab is handed back. */
+async function revokeLink(b) {
+  if (!(await confirmDialog({ title: `Revoke the link to ${b.name}?`, action: "Revoke link", danger: true,
+    body: "Its extension is disconnected at once, its token stops working, and every shared tab is handed back. To use it again, press Connect in the extension and approve a new code." }))) return;
+  await act(async () => {
+    await api(`/api/v1/browsers/${b.id}/link`, { method: "DELETE" });
+    await render();
+  });
 }
 
 async function copyBrowserId(b) {
@@ -836,6 +839,10 @@ const ICON_SEARCH = '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>';
 const ICON_KEYBOARD = '<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>';
 const ICON_UPDOWN = '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>';
 const ICON_CHECK = '<path d="M20 6 9 17l-5-5"/>';
+const ICON_GLOBE = '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>';
+const ICON_COPY = '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>';
+const ICON_MORE = '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>';
+const ICON_CHEVRON = '<path d="m9 18 6-6-6-6"/>';
 
 /** Keys as keycaps. "G then B" is a sequence, not a chord, and says so. */
 function kbds(keys) {
@@ -1828,47 +1835,260 @@ function threadsStatus(b) {
     : `Its launch is not measured yet, so its next start is assumed to need about ${b.startThreads}.`);
 }
 
+/** A titled section of a browser's page: the heading, anything that acts on the whole section, then the body. */
+function pageSection(title, aside, ...body) {
+  return h("section", { class: "dsec" },
+    h("div", { class: "sec-h" }, h("h2", {}, title), typeof aside === "string" ? h("span", { class: "sub" }, aside) : aside),
+    ...body);
+}
+
+/** A box with a heading bar, for the facts beside the live view. */
+function railPanel(title, aside, ...body) {
+  return h("section", { class: "panel" },
+    h("div", { class: "panel-h" }, h("h2", {}, title), aside),
+    h("div", { class: "panel-b" }, ...body));
+}
+
 /**
- * Proxy, extensions, agent control and lending, as four rows.
+ * Proxy, gateway or neither, as one choice.
  *
- * Each was its own heading with a status sentence, a bordered button and a paragraph or two of
- * caveats under it: nine buttons of equal weight down the column, and more explanation than
- * interface. The warnings that matter are asked at the moment of the decision, in the confirm
- * each risky switch already raises, so they do not also need to sit on the page for ever. The
- * agent row stays directly under Extensions because the server tells agents to send people
- * to "Extensions, Allow agent control".
+ * They were two rows with a button each, and each refused while the other was set, so moving a
+ * browser from a proxy to a gateway meant reading why one button was greyed out, undoing the
+ * other, and then doing the thing. A browser has exactly one route out, so this is one radio
+ * group, and saving does the undoing in the order the server needs.
+ *
+ * The server changes either only while Chrome is stopped. Saving a running browser stops it,
+ * changes the route and starts it again, and the bar says so before anything is pressed.
  */
-function settingsSection(b) {
+function connectionSection(b) {
+  const current = b.gateway ? "gateway" : b.proxy ? "proxy" : "direct";
+  let chosen = current;
+  const running = ["running", "unhealthy"].includes(b.status);
+  const busyWhy = b.savingProfile ? "A profile save is running. The connection unlocks when it finishes."
+    : ["starting", "stopping", "moving", "queued"].includes(b.status) ? "Wait until the browser has started or stopped." : null;
+  const gatewayBlocked = !b.gateway && b.worker ? "Gateways work only for browsers on the main instance. Move it there first." : null;
+
+  const gwSelect = h("select", { "aria-label": "Gateway" });
+  const gwHost = h("div", { class: "conn-fields" });
+  const fillGateways = () => {
+    const list = state.gateways || [];
+    if (!list.length) {
+      gwHost.replaceChildren(
+        h("p", { class: "sub" }, "No gateways yet. A gateway is a computer of yours that this browser can reach the web from."),
+        h("div", {}, h("button", { class: "btn sm", type: "button", onClick: () => go("/gateways") }, "Add a gateway")));
+      return;
+    }
+    const keep = gwSelect.value || b.gateway?.id || "";
+    gwSelect.replaceChildren(...list.map((g) => h("option", { value: g.id }, g.online ? g.name : `${g.name} · not connected`)));
+    if (list.some((g) => g.id === keep)) gwSelect.value = keep;
+    gwHost.replaceChildren(
+      h("label", { class: "cfield" }, h("span", {}, "Gateway"), gwSelect),
+      h("p", { class: "sub" }, "Sites see that computer's connection. While it is not running, this browser's pages fail. It never falls back to this host."));
+  };
+
+  const server = h("input", { type: "text", class: "mono", value: b.proxy?.server || "", placeholder: "https://proxy.example.com:8443",
+    maxlength: "2048", spellcheck: "false", autocomplete: "off", autocapitalize: "off" });
+  const user = h("input", { type: "text", placeholder: "Optional", maxlength: "1024", autocomplete: "off", autocapitalize: "off" });
+  const pass = h("input", { type: "password", placeholder: "Optional", maxlength: "1024", autocomplete: "new-password" });
+  const field = (label, input) => h("label", { class: "cfield" }, h("span", {}, label), input);
+  const proxyHost = h("div", { class: "conn-fields" },
+    h("div", { class: "proxy-grid" }, field("Proxy server", server), field("Username", user), field("Password", pass)),
+    h("p", { class: "sub" }, b.proxy?.hasAuthentication
+      ? "HTTP or HTTPS CONNECT, with no credentials in the address. Re-enter both credentials to keep authentication; they are never shown here."
+      : "HTTP or HTTPS CONNECT, with no credentials in the address. SOCKS is not supported. Give both credentials or neither; they are not copied into saved profiles."));
+
+  const cardEls = [
+    ["direct", ICON_GLOBE, "This host", "Straight from the machine it runs on."],
+    ["gateway", ICON_ROUTER, "A gateway", "Through a computer of yours, so sites see your connection."],
+    ["proxy", ICON_SERVER, "A proxy", "Through an HTTP proxy you run or rent."],
+  ].map(([value, paths, title, desc]) => {
+    const blocked = busyWhy || (value === "gateway" ? gatewayBlocked : null);
+    const card = h("button", { type: "button", role: "radio", class: "rcard", "aria-checked": "false",
+      "aria-disabled": blocked ? "true" : false, title: blocked || false,
+      onClick: () => { if (!blocked) { chosen = value; sync(); } } },
+      h("span", { class: "rdot", "aria-hidden": "true" }), icon(paths),
+      h("span", { class: "rcard-t" }, title), h("span", { class: "rcard-d" }, desc));
+    card.dataset.value = value;
+    return card;
+  });
+  const cards = h("div", { class: "rcards", role: "radiogroup", "aria-label": "How it reaches the web" }, ...cardEls);
+  // Arrow keys move the choice, as in any radio group, and skip a card that cannot be chosen.
+  cards.addEventListener("keydown", (e) => {
+    const i = cardEls.indexOf(document.activeElement);
+    const step = ["ArrowRight", "ArrowDown"].includes(e.key) ? 1 : ["ArrowLeft", "ArrowUp"].includes(e.key) ? -1 : 0;
+    if (i < 0 || !step) return;
+    e.preventDefault();
+    for (let n = 1; n < cardEls.length; n++) {
+      const next = cardEls[(((i + step * n) % cardEls.length) + cardEls.length) % cardEls.length];
+      if (next.getAttribute("aria-disabled") === "true") continue;
+      chosen = next.dataset.value;
+      sync();
+      next.focus();
+      return;
+    }
+  });
+
+  const reveal = (...kids) => h("div", { class: "reveal" }, h("div", {}, ...kids));
+  const gwReveal = reveal(gwHost);
+  const proxyReveal = reveal(proxyHost);
+  const note = h("span", { class: "savebar-note", role: "status" });
+  const cancel = h("button", { class: "btn sm", type: "button", onClick: () => reset() }, "Cancel");
+  const save = h("button", { class: "btn sm primary", type: "button", onClick: () => void submit() }, running ? "Save and restart" : "Save");
+  const barReveal = reveal(h("div", { class: "savebar" }, note, cancel, save));
+  const show = (el, on) => { el.classList.toggle("on", on); el.inert = !on; };
+
+  const dirty = () => chosen !== current
+    || (chosen === "gateway" && Boolean(gwSelect.value) && gwSelect.value !== b.gateway?.id)
+    || (chosen === "proxy" && (server.value.trim() !== (b.proxy?.server || "") || Boolean(user.value) || Boolean(pass.value)));
+  const sync = () => {
+    // Roving focus: the chosen card is the one Tab lands on. With nothing choosable, the first.
+    const target = cardEls.find((c) => c.dataset.value === chosen) || cardEls[0];
+    for (const c of cardEls) {
+      c.setAttribute("aria-checked", String(c.dataset.value === chosen));
+      c.tabIndex = c === target ? 0 : -1;
+    }
+    show(gwReveal, chosen === "gateway");
+    show(proxyReveal, chosen === "proxy");
+    show(barReveal, dirty());
+    note.classList.remove("err");
+    note.textContent = running
+      ? "Saving stops this browser, changes its route and starts it again. Its logins are kept."
+      : "It takes effect the next time the browser starts.";
+    save.disabled = chosen === "gateway" && !(state.gateways || []).length;
+  };
+  const reset = () => {
+    chosen = current;
+    server.value = b.proxy?.server || "";
+    user.value = "";
+    pass.value = "";
+    if (b.gateway) gwSelect.value = b.gateway.id;
+    sync();
+  };
+  for (const input of [server, user, pass]) input.addEventListener("input", sync);
+  gwSelect.addEventListener("change", sync);
+
+  const refuse = (message) => {
+    note.textContent = message;
+    note.classList.add("err");
+  };
+  const submit = async () => {
+    let proxy = null;
+    if (chosen === "proxy") {
+      const address = server.value.trim();
+      let parsed = null;
+      try { parsed = new URL(address); } catch { /* reported below */ }
+      if (!address) return refuse("Enter the proxy server, or choose This host.");
+      if (!parsed || !["http:", "https:"].includes(parsed.protocol)) return refuse("The proxy server needs to be an http:// or https:// address.");
+      if (Boolean(user.value) !== Boolean(pass.value)) return refuse("Give both the username and the password, or neither.");
+      if (b.proxy?.hasAuthentication && !user.value) {
+        return refuse("Re-enter the username and password to keep authentication. To drop it, choose This host and save first.");
+      }
+      proxy = proxyFromFields({ proxyServer: address, proxyUsername: user.value, proxyPassword: pass.value });
+    }
+    const gatewayName = (state.gateways || []).find((g) => g.id === gwSelect.value)?.name;
+    for (const el of [save, cancel]) el.disabled = true;
+    let error = null;
+    try {
+      if (running) {
+        save.textContent = "Stopping…";
+        await api(`/api/v1/browsers/${b.id}/stop`, { method: "POST" });
+      }
+      save.textContent = "Saving…";
+      // One route out: the server refuses the new one until the old one is cleared.
+      if (b.gateway && chosen !== "gateway") await api(`/api/v1/browsers/${b.id}/gateway`, { method: "PUT", body: { gatewayId: null } });
+      if (b.proxy && chosen !== "proxy") await api(`/api/v1/browsers/${b.id}`, { method: "PATCH", body: { proxy: null } });
+      if (chosen === "gateway") await api(`/api/v1/browsers/${b.id}/gateway`, { method: "PUT", body: { gatewayId: gwSelect.value } });
+      if (chosen === "proxy") await api(`/api/v1/browsers/${b.id}`, { method: "PATCH", body: { proxy } });
+    } catch (e) {
+      error = e;
+    }
+    // Started again even when the change failed: the operator asked for a different route, not
+    // for the browser to stay down.
+    if (running) {
+      save.textContent = "Starting…";
+      try { await api(`/api/v1/browsers/${b.id}/start`, { method: "POST" }); } catch (e) { error = error || e; }
+    }
+    if (error) {
+      flash(error.message);
+    } else {
+      const route = chosen === "gateway" ? `through ${gatewayName || "the gateway"}` : chosen === "proxy" ? `via ${proxy.server}` : "from the host it runs on";
+      toast(running ? `${b.name} restarted` : "Connection saved", { detail: `It reaches the web ${route}.` });
+    }
+    await render();
+  };
+
+  const section = h("div", { class: "panel conn" },
+    h("div", { class: "panel-b" },
+      busyWhy ? h("p", { class: "sub conn-note" }, busyWhy) : null,
+      cards, gwReveal, proxyReveal),
+    barReveal);
+  // The gateway list can arrive after the page has painted.
+  section.refresh = () => {
+    if (gwHost.contains(document.activeElement)) return;
+    fillGateways();
+    sync();
+  };
+  fillGateways();
+  sync();
+  return section;
+}
+
+/**
+ * Everything else a browser can be set to, in three groups: how it behaves, where it lives and
+ * what it keeps, and the one irreversible action.
+ *
+ * Each row used to be a heading with a status sentence, a bordered button and a paragraph of
+ * caveats. The warnings that matter are asked at the moment of the decision, in the confirm each
+ * risky switch raises, so they do not also need to sit on the page for ever. Allow agent control
+ * stays directly under Extensions because the server tells agents to send people to
+ * "Extensions, Allow agent control".
+ */
+function settingsSections(b) {
   const id = b.id;
   const locked = !["stopped", "crashed"].includes(b.status) || b.savingProfile;
   // The display is on whichever host runs its Chrome: this instance, or its worker.
   const full = Boolean(b.worker ? b.worker.fullBrowser : state.status?.fullBrowser);
   const why = b.savingProfile ? "Wait for the profile save to finish." : locked ? "Stop the browser to change this." : false;
-  const loans = b.lentTo || [];
+  const seed = b.savedProfileId ? state.seeds.find((s) => s.id === b.savedProfileId) : null;
   return [
-    locked ? h("p", { class: "sub settings-note" }, b.savingProfile
-      ? "A profile save is running. Proxy, gateway and extensions unlock when it finishes."
-      : "Proxy, gateway and extensions change only while the browser is stopped.") : null,
-    h("div", { class: "settings" },
-      settingRow("Proxy",
-        b.proxy ? `Via ${b.proxy.server}${b.proxy.hasAuthentication ? ", authenticated" : ""}`
-          : b.gateway ? "None. It uses a gateway instead." : "Direct, no upstream proxy",
-        h("button", { class: "btn", "aria-label": "Configure proxy", disabled: locked || Boolean(b.gateway),
-          title: why || (b.gateway ? "This browser uses a gateway. Switch the gateway off to use a proxy." : false), onClick: () => editProxy(b) }, "Configure")),
-      // A browser has one route out: this host, a proxy, or a gateway. Not on a worker, whose
-      // Chrome cannot reach a gateway connected here.
-      b.kind !== "linked" ? settingRow("Gateway",
-        b.gateway
-          ? `Through ${b.gateway.name}${b.gateway.online ? "" : ", which is not connected, so its pages fail"}. Sites see that computer's connection.`
-          : b.worker ? "Off. Gateways work only for browsers on the main instance." : "Off. It reaches the web from this host.",
-        h("button", { class: "btn", "aria-label": "Choose gateway",
-          disabled: locked || (!b.gateway && (Boolean(b.proxy) || Boolean(b.worker))),
-          title: why || (!b.gateway && b.proxy ? "Remove the proxy first. A browser has one route out."
-            : !b.gateway && b.worker ? "Move it to the main instance first." : false),
-          onClick: () => chooseGateway(b) }, "Choose…")) : null,
+    pageSection("Behaviour", null, h("div", { class: "settings" },
+      settingRow("Pinned",
+        b.worker
+          ? (b.pinned
+            ? "On. It skips the idle timeout. On a worker no room is held for it, and nothing is stopped to make room."
+            : "Off. It shares its worker's processes with the other browsers there.")
+          : b.pinned
+          ? `On. Room is held for it on this host, and other browsers are stopped before it runs short.${b.peakThreads ? ` It has reached ${b.peakThreads} processes and threads.` : ""}`
+          : "Off. It shares the host's processes with every other browser, and may be stopped when idle to make room.",
+        switchButton("Pinned", b.pinned, {
+          onToggle: (on) => act(async () => {
+            if (on && !(await confirmDialog({ title: "Pin this browser?", action: "Pin browser",
+              body: "When this host runs short of processes, Tallylamp will stop other browsers to keep this one running, including browsers an agent is using. Their profiles and tabs are kept." }))) return;
+            await api(`/api/v1/browsers/${id}/pinned`, { method: "PUT", body: { pinned: on } });
+            flash(on ? `${b.name} is pinned.` : `${b.name} is no longer pinned.`, true);
+            await render();
+          }) })),
+      settingRow("Lend when idle",
+        b.lendable ? "On. A waiting agent can borrow it after a couple of idle minutes, logins included." : "Off. It is lent only when you say so.",
+        switchButton("Lend when idle", b.lendable, {
+          onToggle: (on, el) => act(async () => {
+            el.setAttribute("aria-checked", String(on)); // answer the click now; the server follows
+            try {
+              await api(`/api/v1/browsers/${id}/lendable`, { method: "POST", body: { lendable: on } });
+              flash(on ? `${b.name} can now be lent out when idle.` : `${b.name} will only be lent if you say so.`, true);
+              await render();
+            } catch (err) {
+              el.setAttribute("aria-checked", String(!on)); // put the switch back; the server did not move
+              throw err;
+            }
+          }) })),
+      h("details", { class: "setting-more" },
+        h("summary", {}, "How lending works"),
+        h("p", {}, "Off by default. With it on, a waiting agent gets this browser once it has sat idle for a couple of minutes, without asking you. That is what lets a browser be recovered when its owning agent crashes. The borrower gets the live logins in this profile, so leave it off for anything you would not hand over.")),
       settingRow("Extensions",
-        b.extensionsEnabled ? "On. Take control and open Full browser to install or manage them. A persistent profile keeps them."
-          : full ? "Off" : "Off. This host cannot run Full browser, which extensions need.",
+        [b.extensionsEnabled ? "On. Take control and open Full browser to install or manage them. A persistent profile keeps them."
+          : full ? "Off." : "Off. This host cannot run Full browser, which extensions need.",
+        locked && (full || b.extensionsEnabled) ? ` ${why}` : ""].join(""),
         switchButton("Extensions", b.extensionsEnabled, { disabled: (!full && !b.extensionsEnabled) || locked, title: why,
           onToggle: (enabled) => act(async () => {
             if (enabled && !(await confirmDialog({ title: "Enable extension support?", action: "Enable extensions",
@@ -1889,31 +2109,25 @@ function settingsSection(b) {
             if (viewer) { viewer.cancel(true); viewer = null; }
             await render();
           }) }), true) : null,
-      b.kind !== "linked" && (state.workers.length || b.worker) ? settingRow("Runs on",
+    )),
+    pageSection("Placement and storage", null, h("div", { class: "settings" },
+      state.workers.length || b.worker ? settingRow("Runs on",
         b.worker
           ? `${b.worker.name}${b.worker.online ? "" : ", which is not answering"}. Its Chrome and profile are on that worker.`
           : "This instance.",
-        h("button", { class: "btn", "aria-label": "Move to another host", disabled: b.status === "moving" || b.savingProfile,
+        h("button", { class: "btn", "data-move-action": "", hidden: !canMove(b), disabled: b.status === "moving" || b.savingProfile,
           onClick: () => moveBrowser(b) }, "Move…")) : null,
-      b.kind !== "linked" ? settingRow("Pinned",
-        b.worker
-          ? (b.pinned
-            ? "On. It skips the idle timeout. On a worker no room is held for it, and nothing is stopped to make room."
-            : "Off. It shares its worker's processes with the other browsers there.")
-          : b.pinned
-          ? `On. Room is held for it on this host, and other browsers are stopped before it runs short.${b.peakThreads ? ` It has reached ${b.peakThreads} processes and threads.` : ""}`
-          : "Off. It shares the host's processes with every other browser, and may be stopped when idle to make room.",
-        switchButton("Pinned", b.pinned, {
-          onToggle: (on) => act(async () => {
-            if (on && !(await confirmDialog({ title: "Pin this browser?", action: "Pin browser",
-              body: "When this host runs short of processes, Tallylamp will stop other browsers to keep this one running, including browsers an agent is using. Their profiles and tabs are kept." }))) return;
-            await api(`/api/v1/browsers/${id}/pinned`, { method: "PUT", body: { pinned: on } });
-            flash(on ? `${b.name} is pinned.` : `${b.name} is no longer pinned.`, true);
-            await render();
-          }) })) : null,
+      settingRow("Browser data",
+        [b.persistent ? "Kept when stopped. Logins, cookies and history survive restarts." : "Temporary. It may be deleted when idle.",
+          b.worker ? " Saved profiles are made from browsers on the main instance."
+            : seed ? ` Saves go to the profile ${seed.name}.` : b.savedProfileId ? " Saves go to its linked profile." : ""].join(""),
+        b.worker ? null : h("div", { class: "row" },
+          b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new…") : null,
+          h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile",
+            onClick: () => saveProfileTemplate(b) }, b.savedProfileId ? "Update profile" : "Save as profile…"))),
       // What it is sized at decides whether its next start is admitted, and one heavy run can
       // leave it sized past what it needs. Only where a host has a ceiling to admit against.
-      b.kind !== "linked" && (state.status?.host?.pids || b.worker) ? settingRow("Processes and threads",
+      state.status?.host?.pids || b.worker ? settingRow("Processes and threads",
         threadsStatus(b),
         h("button", { class: "btn", "aria-label": "Reset thread counts",
           disabled: b.launchThreads == null && b.peakThreads == null,
@@ -1923,81 +2137,120 @@ function settingsSection(b) {
             await api(`/api/v1/browsers/${id}/threads/reset`, { method: "POST" });
             await render();
           }) }, "Reset")) : null,
-      settingRow("Lend when idle",
-        b.lendable ? "On. A waiting agent can borrow it after a couple of idle minutes, logins included." : "Off. It is lent only when you say so.",
-        switchButton("Lend when idle", b.lendable, {
-          onToggle: (on, el) => act(async () => {
-            el.setAttribute("aria-checked", String(on)); // answer the click now; the server follows
-            try {
-              await api(`/api/v1/browsers/${id}/lendable`, { method: "POST", body: { lendable: on } });
-              flash(on ? `${b.name} can now be lent out when idle.` : `${b.name} will only be lent if you say so.`, true);
-              await render();
-            } catch (err) {
-              el.setAttribute("aria-checked", String(!on)); // put the switch back; the server did not move
-              throw err;
-            }
-          }) })),
-      loans.length ? h("div", { class: "setting-extra lending" },
-        h("div", { class: "sub" }, "Agents with access"),
-        h("ul", { class: "loans" },
-          ...loans.map((g) => {
-            const agent = (state.agents || []).find((a) => a.id === g.granteeId);
-            const level = g.access === "read" ? "read" : "control";
-            return h("li", {},
-              h("div", { class: "loan-who" },
-                h("span", { class: "mono" }, agent ? agent.name : g.granteeId),
-                // The level and the clock are the two things that decide whether this line is
-                // fine or wants acting on, so neither hides behind a tooltip.
-                h("div", { class: "sub" }, [
-                  level === "read" ? "Read only \u2014 sees pages, cannot act" : "Full control \u2014 can click, type and navigate",
-                  g.expiresAt ? `until ${new Date(g.expiresAt).toLocaleString()}` : "until revoked",
-                ].join(" \u00b7 "))),
-              h("button", {
-                class: "btn tiny danger",
-                "aria-label": `Revoke ${level} access to ${b.name} from ${agent ? agent.name : g.granteeId}`,
-                onClick: () => act(async () => {
-                  await api(`/api/v1/browsers/${id}/grants/${g.granteeId}`, { method: "DELETE" });
-                  flash(`Took ${b.name} back from ${agent ? agent.name : g.granteeId}. Its next call fails.`, true);
-                  await render();
-                }),
-              }, "Revoke"));
-          }))) : null,
-      h("details", { class: "setting-more" },
-        h("summary", {}, "How lending works"),
-        h("p", {}, "Off by default. With it on, a waiting agent gets this browser once it has sat idle for a couple of minutes, without asking you. That is what lets a browser be recovered when its owning agent crashes. The borrower gets the live logins in this profile, so leave it off for anything you would not hand over.")),
-    ),
+    )),
+    pageSection("Danger zone", null, h("div", { class: "settings danger-zone" },
+      settingRow("Delete this browser",
+        "Removes its profile, downloads and saved logins from this server. Saved profiles made from it are kept.",
+        h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name) }, "Delete…")))),
   ];
+}
+
+/** Somebody's own browser: the only settings are who may use it, and the two ways to let it go. */
+function linkedSettingsSections(b) {
+  return [
+    pageSection("Who can use it", null, h("div", { class: "panel" }, h("div", { class: "panel-b" }, linkedAccessSection(b)))),
+    pageSection("Danger zone", null, h("div", { class: "settings danger-zone" },
+      b.link ? settingRow("Revoke the link",
+        "Disconnects its extension at once and hands every shared tab back. Using it again needs a new code.",
+        h("button", { class: "btn danger", onClick: () => revokeLink(b) }, "Revoke link…")) : null,
+      settingRow("Delete this browser",
+        "Removes it from Tallylamp. Its tabs, logins and history stay exactly as they are on its owner's computer.",
+        h("button", { class: "btn danger", onClick: () => destroyBrowser(b.id, b.name, true) }, "Delete…")))),
+  ];
+}
+
+/** Agents other than its owner that hold this browser right now, and the button that ends each loan. */
+function loansSection(b) {
+  const loans = b.lentTo || [];
+  if (!loans.length) {
+    return h("div", { class: "settings" }, h("div", { class: "setting" }, h("div", { class: "setting-text" },
+      h("div", { class: "sub" }, "Only its owner can use it. When another agent asks for it, the request shows up in Requests."))));
+  }
+  return h("div", { class: "settings" }, ...loans.map((g) => {
+    const agent = (state.agents || []).find((a) => a.id === g.granteeId);
+    const who = agent ? agent.name : g.granteeId;
+    const level = g.access === "read" ? "read" : "control";
+    // The level and the clock are the two things that decide whether this line is fine or wants
+    // acting on, so neither hides behind a tooltip.
+    return settingRow(who, [
+      level === "read" ? "Read only — sees pages, cannot act" : "Full control — can click, type and navigate",
+      g.expiresAt ? `until ${new Date(g.expiresAt).toLocaleString()}` : "until revoked",
+    ].join(" · "),
+    h("button", {
+      class: "btn danger",
+      "aria-label": `Revoke ${level} access to ${b.name} from ${who}`,
+      onClick: () => act(async () => {
+        await api(`/api/v1/browsers/${b.id}/grants/${g.granteeId}`, { method: "DELETE" });
+        flash(`Took ${b.name} back from ${who}. Its next call fails.`, true);
+        await render();
+      }),
+    }, "Revoke"));
+  }));
+}
+
+/** Tool calls and host events, newest first, with a filter once there is more than one kind. */
+function activitySection(items) {
+  if (!items.length) {
+    return h("div", { class: "panel" }, h("div", { class: "panel-b empty-panel" },
+      h("p", {}, "No activity yet."),
+      h("p", { class: "sub" }, "Every tool call an agent makes in this browser is listed here, newest first.")));
+  }
+  const SYSTEM = new Set(["host", "shed", "unhealthy"]);
+  const today = new Date().toDateString();
+  let show = "all";
+  // Older entries carry their date, which needs a wider time column than today's.
+  const dated = items.some((a) => new Date(a.at).toDateString() !== today);
+  const list = h("ol", { class: dated ? "timeline dated" : "timeline", "aria-label": "Activity, newest first" });
+  const paint = () => list.replaceChildren(...items
+    .filter((a) => show === "all" || (show === "system") === SYSTEM.has(a.kind))
+    .map((a) => {
+      const at = new Date(a.at);
+      const time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      return h("li", { class: SYSTEM.has(a.kind) ? "tl system" : "tl" },
+        h("time", { datetime: a.at, title: at.toLocaleString() },
+          at.toDateString() === today ? time : `${at.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`),
+        h("span", { class: "tl-node", "aria-hidden": "true" }),
+        h("span", { class: "tl-body" }, h("span", { class: "mono" }, a.kind),
+          a.summary && a.summary !== a.kind ? h("span", { class: "sub" }, a.summary) : null));
+    }));
+  paint();
+  const kinds = new Set(items.map((a) => SYSTEM.has(a.kind)));
+  return h("div", {},
+    kinds.size > 1 ? h("div", { class: "toolbar" }, segmented("Show", [["all", "All"], ["tools", "Tool calls"], ["system", "Host events"]], show,
+      (value) => { show = value; paint(); })) : null,
+    h("div", { class: "panel" }, h("div", { class: "panel-b" }, list)));
+}
+
+/** A row of mutually exclusive buttons. Pressed state, not a radio group: each one acts at once. */
+function segmented(label, options, selected, onSelect) {
+  const buttons = options.map(([value, text]) => h("button", { type: "button", "aria-pressed": String(value === selected),
+    onClick: (e) => {
+      for (const other of buttons) other.setAttribute("aria-pressed", String(other === e.currentTarget));
+      onSelect(value);
+    } }, text));
+  return h("div", { class: "seg", role: "group", "aria-label": label }, ...buttons);
 }
 
 function siteAccessSection(b) {
   const sites = b.signedInSites || [];
   return h("div", { class: "site-access" },
-    sites.length
-      ? h("ul", { class: "site-list" },
-          ...sites.map((site) => h("li", {},
-            h("div", { class: "site-main" },
-              h("strong", {}, site.name),
-              h("span", { class: "mono" }, site.origin),
-              h("span", { class: "sub" },
-                site.state === "confirmed"
-                  ? `${site.reportedBy?.type === "system" ? "Detected" : "Confirmed"} ${site.lastConfirmedAt ? ago(site.lastConfirmedAt) : "recently"}`
-                  : site.state === "needs_sign_in"
-                    ? "Sign-in needed"
-                    : `Copied from a saved profile · not yet checked${site.lastConfirmedAt ? ` · last confirmed ${ago(site.lastConfirmedAt)}` : ""}`,
-              ),
-            ),
+    h("div", { class: "settings" },
+      sites.length
+        ? sites.map((site) => settingRow(site.name,
+            [h("span", { class: "mono" }, site.origin), " · ",
+              site.state === "confirmed"
+                ? `${site.reportedBy?.type === "system" ? "Detected" : "Confirmed"} ${site.lastConfirmedAt ? ago(site.lastConfirmedAt) : "recently"}`
+                : site.state === "needs_sign_in"
+                  ? h("span", { class: "warn" }, "Sign-in needed")
+                  : `Copied from a saved profile, not yet checked${site.lastConfirmedAt ? `. Last confirmed ${ago(site.lastConfirmedAt)}` : ""}`],
             h("div", { class: "row site-actions" },
               site.state !== "confirmed"
-                ? h("button", { class: "btn tiny", onClick: () => setSiteState(b, site, "confirmed") }, "Confirm")
-                : h("button", { class: "btn tiny", onClick: () => setSiteState(b, site, "needs_sign_in") }, "Needs sign-in"),
-              h("button", { class: "btn tiny danger", onClick: () => removeSite(b, site) }, "Remove"),
-            ),
-          )),
-        )
-      : h("div", { class: "sub" },
-          "No sign-ins recorded yet. Your browser may still contain logins. If detection misses a site, record it below."),
-    h("button", { class: "btn site-add", onClick: () => addSite(b) }, "Record signed-in site"),
-    // Read once, then in the way on every visit after: same disclosure as the settings above.
+                ? h("button", { class: "btn", onClick: () => setSiteState(b, site, "confirmed") }, "Confirm")
+                : h("button", { class: "btn", onClick: () => setSiteState(b, site, "needs_sign_in") }, "Needs sign-in"),
+              h("button", { class: "btn danger", "aria-label": `Remove ${site.name}`, onClick: () => removeSite(b, site) }, "Remove"))))
+        : h("div", { class: "setting" }, h("div", { class: "setting-text" }, h("div", { class: "sub" },
+            "No sign-ins recorded yet. The browser may still hold logins. If detection misses a site, record it.")))),
+    // Read once, then in the way on every visit after.
     h("details", { class: "setting-more plain" },
       h("summary", {}, "How sign-in records work"),
       h("p", {}, "Recording a site adds an inventory note for agents. It does not sign you in or save a copy of your logins."),
@@ -2006,47 +2259,33 @@ function siteAccessSection(b) {
 }
 
 /**
- * Live loopback tunnels: what this browser is allowed to reach on somebody's private
- * network, and whether anything is on the other end.
- *
- * Read-and-revoke only, deliberately. Creating one mints a token that belongs on the machine
- * being reached, and putting that in a web page would be the one place it should never be --
- * so the create path is the CLI, run there. What the operator needs here is the opposite:
- * to see that a hole exists at all, and to close it.
- */
-/**
  * Guest links: let one more person watch this browser, and take control if allowed, without the
  * admin secret. The link works only for this browser and can be revoked at any time.
  */
 function guestSection(b, guests) {
   const live = guests.filter((g) => g.active);
   const when = (iso) => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  return h("div", { class: "guests" },
-    live.length
-      ? h("ul", { class: "loans" },
-          ...live.map((g) =>
-            h("li", {},
-              h("span", {}, g.label),
-              h("span", { class: g.controlling ? "warn" : "sub" },
-                g.controlling
-                  ? "in control"
-                  : `${g.modes.includes("control") ? "watch + control" : "watch"} · ${g.openedAt ? "opened" : "not opened yet"} · until ${when(g.expiresAt)}`),
-              h("button", {
-                class: "btn tiny danger",
-                onClick: () => act(async () => {
-                  await api(`/api/v1/browsers/${b.id}/guests/${g.id}`, { method: "DELETE" });
-                  flash(`Revoked ${g.label}'s link. Their view closed and control went back.`, true);
-                  await render();
-                }),
-              }, "Revoke"),
-            ),
-          ),
-        )
-      : h("div", { class: "sub" }, "No guest links. Share one to let someone else sign in or clear a 2FA prompt here."),
-    h("button", { class: "btn", disabled: b.savingProfile, onClick: () => shareWithGuest(b) }, "Share with a person…"),
-    h("div", { class: "sub" },
+  return [
+    h("div", { class: "settings" },
+      live.length
+        ? live.map((g) => settingRow(g.label,
+            g.controlling
+              ? h("span", { class: "warn" }, "In control now")
+              : `${g.modes.includes("control") ? "Can watch and take control" : "Can watch"} · ${g.openedAt ? "opened" : "not opened yet"} · until ${when(g.expiresAt)}`,
+            h("button", {
+              class: "btn danger",
+              "aria-label": `Revoke ${g.label}'s link`,
+              onClick: () => act(async () => {
+                await api(`/api/v1/browsers/${b.id}/guests/${g.id}`, { method: "DELETE" });
+                flash(`Revoked ${g.label}'s link. Their view closed and control went back.`, true);
+                await render();
+              }),
+            }, "Revoke")))
+        : h("div", { class: "setting" }, h("div", { class: "setting-text" }, h("div", { class: "sub" },
+            "No guest links. Share one to let someone else sign in or clear a 2FA prompt here.")))),
+    h("p", { class: "sub sec-foot" },
       "A guest can use every login saved in this browser, not just the site you send them to. Use a browser that holds only what they need."),
-  );
+  ];
 }
 
 async function shareWithGuest(b) {
@@ -2084,34 +2323,171 @@ async function shareWithGuest(b) {
   await render();
 }
 
+/**
+ * Live loopback tunnels: what this browser is allowed to reach on somebody's private
+ * network, and whether anything is on the other end.
+ *
+ * Read-and-revoke only, deliberately. Creating one mints a token that belongs on the machine
+ * being reached, and putting that in a web page would be the one place it should never be --
+ * so the create path is the CLI, run there. What the operator needs here is the opposite:
+ * to see that a hole exists at all, and to close it.
+ */
 function tunnelSection(tunnels) {
   const live = tunnels || [];
-  if (!live.length) {
-    return h("div", { class: "sub" },
-      "No tunnels. This browser can reach the public internet only \u2014 private and loopback addresses are refused.");
-  }
-  return h("div", { class: "tunnels" },
-    h("ul", { class: "loans" },
-      ...live.map((t) =>
-        h("li", {},
-          h("span", { class: "mono" }, t.authority),
-          h("span", { class: t.connected ? "ok" : "warn" }, t.connected ? "connected" : "not connected"),
-          h("button", {
-            class: "btn tiny danger",
-            onClick: () => act(async () => {
-              await api(`/api/v1/tunnels/${t.id}`, { method: "DELETE" });
-              flash(`Closed the tunnel to ${t.authority}.`, true);
-              await render();
-            }),
-          }, "Close"),
-        ),
-      ),
-    ),
-    h("div", { class: "sub" },
-      "While a tunnel is open, any page loaded in this browser can reach that address \u2014 that is what it is for. Close it when the job is done."),
-  );
+  return [
+    h("div", { class: "settings" },
+      live.length
+        ? live.map((t) => settingRow(h("span", { class: "mono" }, t.authority),
+            h("span", { class: t.connected ? "ok" : "warn" }, t.connected ? "Connected" : "Not connected"),
+            h("button", {
+              class: "btn danger",
+              "aria-label": `Close the tunnel to ${t.authority}`,
+              onClick: () => act(async () => {
+                await api(`/api/v1/tunnels/${t.id}`, { method: "DELETE" });
+                flash(`Closed the tunnel to ${t.authority}.`, true);
+                await render();
+              }),
+            }, "Close")))
+        : h("div", { class: "setting" }, h("div", { class: "setting-text" }, h("div", { class: "sub" },
+            "No tunnels. This browser can reach the public internet only — private and loopback addresses are refused.")))),
+    live.length ? h("p", { class: "sub sec-foot" },
+      "While a tunnel is open, any page loaded in this browser can reach that address — that is what it is for. Close it when the job is done.") : null,
+  ];
 }
 
+/** The state beside a browser's name: the facts of the card badge, in the page's own colours. */
+function statusPill(b) {
+  const mine = b.control?.controllerId && b.control.controllerId === state.me?.id;
+  const [tone, text, tip] = b.control?.controllerType === "human"
+    ? ["human", guestHolds(b) ? "Guest in control" : mine ? "You have control" : "A person has control"]
+    : b.kind === "linked" && b.status !== "running" ? ["idle", linkStatus(b)]
+    : b.status === "running" && b.gateway && !b.gateway.online ? ["warn", "Gateway offline", `Its gateway, ${b.gateway.name}, is not connected`]
+    : b.status === "running" ? ["live", "Live"]
+    : b.status === "unhealthy" ? ["warn", "Unhealthy", b.health?.reason]
+    : b.status === "crashed" ? ["danger", "Crashed"]
+    : ["idle", b.status || "stopped"];
+  return h("span", { class: `pill ${tone}`, title: tip || false },
+    h("span", { class: "pill-dot", "aria-hidden": "true" }), text.replace(/^./, (c) => c.toUpperCase()));
+}
+
+/**
+ * Rename where the name is. It is the page's heading, so editing it there keeps the eye where it
+ * already was; a dialog for one field was a detour. Enter or leaving the field saves, Escape puts
+ * the old name back, and a refusal keeps what was typed.
+ */
+function renameInPlace(button, b, onRenamed) {
+  const before = b.name;
+  const input = h("input", { class: "rename", value: before, maxlength: "80", "aria-label": "Browser name",
+    spellcheck: "false", autocomplete: "off" });
+  input.style.width = `${Math.round(Math.max(240, button.getBoundingClientRect().width + 40))}px`;
+  button.replaceWith(input);
+  input.focus();
+  input.select();
+  let finished = false;
+  let saving = false;
+  const close = () => {
+    finished = true;
+    if (input.isConnected) input.replaceWith(button);
+    button.focus();
+  };
+  const apply = (name) => {
+    b.name = name;
+    onRenamed(name);
+  };
+  const done = async (save) => {
+    // Enter saves and then removes the field, and removing a focused field fires blur: once only.
+    if (finished || saving) return;
+    const name = input.value.trim();
+    if (!save || !name || name === before) return close();
+    saving = true;
+    input.readOnly = true;
+    try {
+      await api(`/api/v1/browsers/${b.id}`, { method: "PATCH", body: { name } });
+    } catch (e) {
+      saving = false;
+      input.readOnly = false;
+      flash(e.message);
+      input.focus();
+      return;
+    }
+    apply(name);
+    close();
+    button.classList.remove("renamed");
+    void button.offsetWidth;
+    button.classList.add("renamed");
+    toast("Renamed", { detail: `${before} is now ${name}.`, undo: () => act(async () => {
+      await api(`/api/v1/browsers/${b.id}`, { method: "PATCH", body: { name: before } });
+      apply(before);
+    }) });
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); void done(true); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); void done(false); }
+  });
+  input.addEventListener("blur", () => void done(true));
+}
+
+/**
+ * Tabs with an underline that slides to the one chosen. Arrow keys move along them and choose as
+ * they go: every panel is already built, so there is nothing to wait for.
+ */
+function tabBar(label, items, selected, onSelect) {
+  const ink = h("span", { class: "tab-ink", "aria-hidden": "true" });
+  const buttons = items.map(([value, text, count]) => {
+    const button = h("button", { type: "button", role: "tab", id: `dtab-${value}`, "aria-controls": `dpanel-${value}`,
+      "aria-selected": String(value === selected), tabindex: value === selected ? "0" : "-1",
+      onClick: () => pick(value, false) },
+      text, h("span", { class: "tab-count", hidden: !count }, String(count || 0)));
+    button.dataset.value = value;
+    return button;
+  });
+  const bar = h("div", { class: "dtabs", role: "tablist", "aria-label": label }, ...buttons, ink);
+  const place = (animate) => {
+    const current = buttons.find((x) => x.getAttribute("aria-selected") === "true");
+    if (!current || !current.offsetWidth) return;
+    if (!animate) ink.style.transition = "none";
+    ink.style.width = `${current.offsetWidth}px`;
+    ink.style.transform = `translateX(${current.offsetLeft}px)`;
+    if (!animate) {
+      void ink.offsetWidth;
+      ink.style.transition = "";
+    }
+  };
+  const pick = (value, focus) => {
+    for (const x of buttons) {
+      const on = x.dataset.value === value;
+      x.setAttribute("aria-selected", String(on));
+      x.tabIndex = on ? 0 : -1;
+      if (on && focus) x.focus();
+    }
+    place(true);
+    onSelect(value);
+  };
+  bar.addEventListener("keydown", (e) => {
+    const i = buttons.indexOf(document.activeElement);
+    if (i < 0) return;
+    const n = e.key === "ArrowRight" ? (i + 1) % buttons.length
+      : e.key === "ArrowLeft" ? (i - 1 + buttons.length) % buttons.length
+      : e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : -1;
+    if (n < 0) return;
+    e.preventDefault();
+    pick(buttons[n].dataset.value, true);
+  });
+  requestAnimationFrame(() => place(false));
+  void document.fonts?.ready.then(() => place(false));
+  bar.select = (value) => pick(value, false);
+  bar.setCount = (value, count) => {
+    const badge = buttons.find((x) => x.dataset.value === value)?.querySelector(".tab-count");
+    if (!badge) return;
+    badge.hidden = !count;
+    badge.textContent = String(count);
+    place(false);
+  };
+  return bar;
+}
+
+/** Which tab each browser's page was left on, so an action that repaints the page stays there. */
+const detailTabs = new Map();
 const viewerSurfaces = new Map();
 async function browserView(id, seq) {
   let data;
@@ -2132,18 +2508,21 @@ async function browserView(id, seq) {
   const linked = b.kind === "linked";
   // The operator's own lease. A guest's is a person too, but driving with it would be refused.
   const human = b.control?.controllerType === "human" && !guestHolds(b);
+  const stoppedish = ["stopped", "crashed"].includes(b.status);
   let guests = [];
-  const guestHost = h("div", {});
+  let tabs = null;
+  const guestHost = h("div", { class: "guest-host" });
   const guestControllerLabel = h("span", {}, "A guest");
   const loadGuests = async () => {
     const retry = h("button", { class: "btn", onClick: () => void loadGuests() }, "Retry guest links");
-    guestHost.replaceChildren(h("div", { role: "status", class: "data-notice" }, "Loading guest links…"));
+    guestHost.replaceChildren(h("div", { role: "status", class: "data-notice sub" }, "Loading guest links…"));
     try {
       const result = await api(`/api/v1/browsers/${id}/guests`);
       if (!guestHost.isConnected) return;
       guests = result.guests || [];
-      guestHost.replaceChildren(guestSection(b, guests));
+      guestHost.replaceChildren(...guestSection(b, guests));
       guestControllerLabel.textContent = guests.find(g => g.controlling)?.label || "A guest";
+      tabs?.setCount("access", (b.lentTo || []).length + guests.filter((g) => g.active).length);
     } catch (e) {
       if (!guestHost.isConnected) return;
       guestHost.replaceChildren(h("div", { role: "alert", class: "data-notice" },
@@ -2167,11 +2546,6 @@ async function browserView(id, seq) {
   document.title = `${b.name} · Tallylamp`;
   const stage = h("div", { class: "stage" });
   const sitesPanel = h("div", { id: "profile-sites", "data-browser-id": id }, siteAccessSection(b));
-  sitesPanel.updateSites = (sites) => {
-    if (JSON.stringify(sites) === JSON.stringify(b.signedInSites)) return;
-    b.signedInSites = sites;
-    sitesPanel.replaceChildren(siteAccessSection(b));
-  };
   // A canvas, not an <img>. Swapping an <img>'s src decodes the JPEG on the main thread, which
   // is the same thread that has to forward this operator's mouse and key events; passing the
   // bytes to createImageBitmap instead moves the decode off it entirely. It also ends the
@@ -2291,66 +2665,166 @@ async function browserView(id, seq) {
     for (const el of [backBtn, fwdBtn, reloadBtn, urlInput]) el.hidden = true;
   }
   fsBtn.onclick = () => {
+    tabs?.select("live"); // F works from any tab, and full screen of a hidden panel is nothing
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else stagewrap.requestFullscreen().catch(() => {});
   };
-  const sideHost = h("aside", { class: "side" });
-  const renderSide = () => sideHost.replaceChildren(...[
-    ...["status", "agents", "seeds", "workers"].map(name => dataNotice(name, name === "status" ? "server settings" : name)).filter(Boolean),
 
-        h("div", { class: "sub" }, "Tallylamp records who created this browser. The rows marked “Reported” come from the client and are not verified."),
-        h("dl", { class: "kv" },
-          h("dt", {}, "Browser ID"), h("dd", { class: "browser-id" },
-            h("span", { class: "mono" }, b.id),
-            h("button", { class: "btn tiny", onClick: () => copyBrowserId(b) }, "Copy browser ID")),
-          h("dt", {}, "Status"), h("dd", {}, b.status),
-          h("dt", {}, "Controller"), h("dd", {}, controllerName(b)),
-          h("dt", {}, "Browser data"), h("dd", {}, linked ? "on its owner's computer" : b.persistent ? "kept when stopped" : "temporary · may be deleted when idle"),
-          linked ? null : [h("dt", {}, "Save target"), h("dd", {}, b.savedProfileId ? (state.seeds.find(s => s.id === b.savedProfileId)?.name || b.savedProfileId) : "New saved profile")],
-          h("dt", {}, "Project"), h("dd", {}, md.project || "—"),
-          h("dt", {}, "What it’s for"), h("dd", {}, md.purpose || "—"),
-          // Reported by the agent for the session it is in, so there is no row to fill in
-          // by hand and nothing to show until an agent says something.
-          md.task ? [h("dt", {}, "Agent’s task"), h("dd", {}, md.task)] : null,
-          h("dt", {}, "Reported source"), h("dd", {}, md.source || "—"),
-          h("dt", {}, "Reported client"), h("dd", {}, b.reportedClient ? `${b.reportedClient.name} ${b.reportedClient.version || ""}` : "—"),
-          h("dt", {}, "Chrome"), h("dd", { class: "mono" }, b.chromeVersion || "—"),
-          linked ? null : [h("dt", {}, "Sandbox"), h("dd", { class: b.sandboxStatus === "sandboxed" ? "" : "warn" }, b.sandboxStatus || "unknown"),
-            h("dt", {}, "GPU"), h("dd", {}, b.gpuStatus || "unknown")],
-          h("dt", {}, "MCP attached"), h("dd", {}, String(b.mcpAttached)),
-          h("dt", {}, "Watchers"), h("dd", {}, String(b.viewers ?? 0)),
-        ),
-        h("button", { class: "btn", onClick: () => editBrowser(b) }, "Edit browser details"),
-        linked ? [h("h2", {}, "Who can use it"), linkedAccessSection(b)] : [
-        h("h2", {}, "Settings"),
-        ...settingsSection(b),
-        ],
-        h("h2", {}, "Signed-in sites"),
-        sitesPanel,
-        // On the browser itself, not on a settings page: these two controls are only ever
-        // meaningful next to the thing they hand over.
-        linked ? null : [
-          h("h2", {}, "Guest links"),
-          guestHost,
-          h("h2", {}, "Loopback tunnels"),
-          tunnelSection(data.tunnels),
-        ],
-        // h2, not h3: the page went h1 straight to h3, so this section was unreachable by
-        // heading navigation.
-        h("h2", {}, "Agent tool calls"),
-        (data.activity || []).length
-          ? h("ul", { class: "timeline" },
-              ...data.activity.map((a) => h("li", {}, `${a.at.slice(11, 19)}  ${a.kind}`)),
-            )
-          : h("div", { class: "sub" }, "No tool calls recorded for this browser yet."),
-  ].flat().filter(node => node != null && node !== false));
-  renderSide();
+  // The facts beside the live view. The settings that used to fill this column have their own
+  // tab now, so what stays is what an operator glances at while watching.
+  const rail = h("aside", { class: "rail", "aria-label": "About this browser" });
+  const renderRail = () => rail.replaceChildren(...[
+    ...["status", "agents", "seeds", "workers"].map(name => dataNotice(name, name === "status" ? "server settings" : name)),
+    railPanel("Details", null, h("dl", { class: "kv" },
+      h("dt", {}, "Browser ID"), h("dd", { class: "browser-id" },
+        h("span", { class: "mono" }, b.id),
+        h("button", { class: "btn icon-only xs", "aria-label": "Copy browser ID", title: "Copy browser ID", onClick: () => copyBrowserId(b) }, icon(ICON_COPY))),
+      h("dt", {}, "In control"), h("dd", { "data-controller-label": "" }, controllerName(b)),
+      h("dt", {}, "MCP attached"), h("dd", {}, typeof b.mcpAttached === "boolean" ? (b.mcpAttached ? "Yes" : "No") : String(b.mcpAttached ?? 0)),
+      h("dt", {}, "Watching"), h("dd", {}, String(b.viewers ?? 0)),
+      h("dt", {}, "Browser data"), h("dd", {}, linked ? "On its owner's computer" : b.persistent ? "Kept when stopped" : "Temporary · may be deleted when idle"),
+      h("dt", {}, "Chrome"), h("dd", { class: "mono" }, b.chromeVersion || "—"),
+      linked ? null : [h("dt", {}, "Sandbox"), h("dd", { class: b.sandboxStatus === "sandboxed" ? "" : "warn" }, b.sandboxStatus || "unknown"),
+        h("dt", {}, "GPU"), h("dd", {}, b.gpuStatus || "unknown")],
+    )),
+    railPanel("About", h("button", { class: "btn sm", onClick: () => editBrowser(b) }, "Edit"),
+      h("dl", { class: "kv" },
+        h("dt", {}, "Project"), h("dd", {}, md.project || "—"),
+        h("dt", {}, "What it’s for"), h("dd", {}, md.purpose || "—"),
+        h("dt", {}, "Created by"), h("dd", {}, `${principal(b.provenance.createdByType, b.owner.id)} via ${b.provenance.createdVia}`),
+        h("dt", {}, "Reported source"), h("dd", {}, md.source || "—"),
+        h("dt", {}, "Reported client"), h("dd", {}, b.reportedClient ? `${b.reportedClient.name} ${b.reportedClient.version || ""}` : "—"),
+      ),
+      h("p", { class: "sub caption" }, "Tallylamp records who created it. The rows marked Reported come from the client and are not verified.")),
+    // Reported by the agent for the session it is in, so there is no row to fill in by hand and
+    // nothing to show until an agent says something.
+    md.task ? railPanel("Agent’s task", h("span", { class: "tag", title: "Reported by the agent, not verified" }, "Reported"),
+      h("p", { class: "task" }, md.task)) : null,
+    railPanel("Signed-in sites", h("button", { class: "btn sm", onClick: () => tabs?.select("access") }, "Manage"),
+      sitePills(b, 8) || h("p", { class: "sub" }, "None recorded yet.")),
+  ].filter(Boolean));
+  sitesPanel.updateSites = (sites) => {
+    if (JSON.stringify(sites) === JSON.stringify(b.signedInSites)) return;
+    b.signedInSites = sites;
+    sitesPanel.replaceChildren(siteAccessSection(b));
+    renderRail();
+  };
+
+  // Three short lines, not one dense block. The old banner was a 74-word paragraph that said
+  // everything at once and so got read as nothing: what you can do, what the agent can do,
+  // what happens to your logins, and how long you have, with no gap between them.
+  const controlBanner = b.status === "running" ? h("div", { class: human ? "banner control" : "banner watch" },
+    ...(human
+      ? [
+          "You have control. Agents with read access can still see this page, but their changes are blocked until you return control.",
+          `This browser belongs to ${principal(b.provenance.createdByType, b.owner.id)}. Taking control preserves its current sign-ins; actions on websites can change them.`,
+          // The lease was the fact nobody had: it is 90 seconds by default and this tab is
+          // what renews it, so closing the tab hands the keyboard back on a timer the
+          // operator had no way to know about.
+          `Your turn lasts ${leaseSeconds} seconds, and this tab keeps renewing it. Closing the tab lets that control turn expire.`,
+        ]
+      : [
+          "Watching only. Nothing you click or type reaches this browser.",
+          // `human` was the only thing computed, so a browser with no controller at all fell
+          // into this branch and was told an agent had it.
+          guestHolds(b)
+            ? [guestControllerLabel, " has control through a guest link. Take control to cut them off, or revoke the link under Access."]
+            : agentHolds
+            ? [h("span", { "data-controller-label": "" }, controllerName(b)), " has control. Press Take control when you need the keyboard."]
+            : "Nothing has control right now. Press Take control when you need the keyboard.",
+        ]
+    ).map((line) => h("p", {}, line)),
+  ) : null;
+
+  const settingsRest = h("div", { class: "dsections" });
+  const connection = linked ? null : connectionSection(b);
+  const paintSettings = () => {
+    if (linked || settingsRest.contains(document.activeElement)) return;
+    settingsRest.replaceChildren(...settingsSections(b));
+    connection.refresh();
+  };
+  const loans = b.lentTo || [];
+  const panels = {
+    // Full browser streams a whole 2560-wide desktop into this box and letterboxes it to fit,
+    // so Chrome's own toolbar and tab strip are drawn at whatever fraction of their real size
+    // the stage leaves them. Give that view the rail's width and let the facts sit below it.
+    live: h("div", {}, controlBanner, h("div", { class: surface === "desktop" ? "detail desktop" : "detail" }, stagewrap, rail)),
+    settings: h("div", { class: "dsections" }, linked
+      ? linkedSettingsSections(b)
+      : [pageSection("Connection", "A browser has one route to the web", connection), settingsRest]),
+    // On the browser itself, not on a settings page: these controls are only ever meaningful
+    // next to the thing they hand over.
+    access: h("div", { class: "dsections" },
+      linked ? null : pageSection("Agents with access", "Besides its owner", loansSection(b)),
+      linked ? null : pageSection("Guest links",
+        h("button", { class: "btn sm", disabled: b.savingProfile, onClick: () => shareWithGuest(b) }, "Share with a person…"), guestHost),
+      pageSection("Signed-in sites", h("button", { class: "btn sm", onClick: () => addSite(b) }, "Record a site…"), sitesPanel),
+      linked ? null : pageSection("Loopback tunnels", null, tunnelSection(data.tunnels))),
+    activity: h("div", { class: "dsections" }, activitySection(data.activity || [])),
+  };
+  const tab = panels[detailTabs.get(id)] ? detailTabs.get(id) : "live";
+  for (const [key, el] of Object.entries(panels)) {
+    el.id = `dpanel-${key}`;
+    el.classList.add("dpanel");
+    el.setAttribute("role", "tabpanel");
+    el.setAttribute("aria-labelledby", `dtab-${key}`);
+    el.hidden = key !== tab;
+  }
+  tabs = tabBar("Browser sections", [
+    ["live", "Live"],
+    ["settings", "Settings"],
+    ["access", "Access", linked ? 0 : loans.length],
+    ["activity", "Activity", (data.activity || []).length],
+  ], tab, (value) => {
+    detailTabs.set(id, value);
+    for (const [key, el] of Object.entries(panels)) el.hidden = key !== value;
+  });
+
+  // One filled button, and it is the thing to do next: start it, take the keyboard, or give it
+  // back. Everything else is either Stop, which is common enough to sit beside it, or in the menu.
+  const primary = b.status === "moving"
+    ? h("button", { class: "btn", disabled: true }, "Moving…")
+    : linked && b.status !== "running" ? null
+    : stoppedish
+    ? h("button", { class: "btn primary", onClick: (e) => call(`/api/v1/browsers/${id}/start`, e.currentTarget) }, "Start")
+    : human
+    ? h("button", { class: "btn ok", "data-shortcut": "t", "aria-keyshortcuts": "T", onClick: () => returnControl(id) }, "Return to agent")
+    : b.status === "queued" ? null
+    : h("button", { class: "btn human", "data-shortcut": "t", "aria-keyshortcuts": "T",
+        onClick: () => { tabs.select("live"); void takeControl(id); } }, "Take control");
+  const stop = linked || stoppedish || b.status === "moving" ? null
+    : h("button", { class: "btn", title: b.persistent ? "Stop Chrome. Its logins and data are kept." : false,
+        onClick: (e) => stopBrowser(b, e.currentTarget) }, "Stop");
+  const inHeader = new Set(["Watch", "Open", "Start", "Stop browser", "Take control", human && !stoppedish ? "Return to agent" : null]);
+  const more = h("button", {
+    class: "btn icon-only", "aria-label": `More actions for ${b.name}`, title: "More actions", "aria-haspopup": "menu",
+    onClick: (e) => {
+      const items = browserMenu(b).filter((it) => it && (it === "-" || !inHeader.has(it.label)));
+      const tidy = items.filter((it, i) => it !== "-" || (i > 0 && i < items.length - 1 && items[i - 1] !== "-"));
+      const r = e.currentTarget.getBoundingClientRect();
+      showMenu(Math.round(r.right), Math.round(r.bottom + 4), tidy, `Actions for ${b.name}`, { align: "end" });
+    },
+  }, icon(ICON_MORE));
+  const crumbName = h("span", { "aria-current": "page" }, b.name);
+  const nameButton = h("button", { type: "button", class: "dname", title: "Rename",
+    onClick: () => renameInPlace(nameButton, b, (name) => {
+      nameButton.textContent = name;
+      crumbName.textContent = name;
+      document.title = `${name} · Tallylamp`;
+    }) }, b.name);
+  const meta = [
+    md.project ? h("span", { class: "chip" }, icon(ICON_LAYERS), md.project) : null,
+    h("span", { title: b.provenance.createdAt ? new Date(b.provenance.createdAt).toLocaleString() : false },
+      `Created by ${principal(b.provenance.createdByType, b.owner.id)}${b.provenance.createdAt ? ` ${ago(b.provenance.createdAt)}` : ""}`),
+    state.workers.length || b.worker ? h("span", {}, b.worker ? `On ${b.worker.name}` : "On this instance") : null,
+    b.gateway ? h("span", {}, `Through ${b.gateway.name}`) : b.proxy ? h("span", {}, `Via ${b.proxy.server}`) : null,
+  ].filter(Boolean);
+
   detailMetadataRefresh = () => {
-    if (!sideHost.isConnected) return;
-    renderSide();
+    if (!rail.isConnected) return;
+    renderRail();
+    paintSettings();
     for (const el of document.querySelectorAll("[data-controller-label]")) el.textContent = controllerName(b);
-    const move = document.querySelector("[data-move-action]");
-    if (move) move.hidden = !canMove(b);
     const fullButton = document.querySelector("[data-full-browser]");
     if (fullButton) {
       fullButton.disabled = !Boolean(b.worker ? b.worker.fullBrowser : state.status?.fullBrowser);
@@ -2358,73 +2832,21 @@ async function browserView(id, seq) {
     }
   };
   layout([
-    h("div", { class: "top" },
-      h("div", {},
-        h("h1", {}, b.name),
-        // The "not self-reported" caveat was an abstract trust claim stranded in the header. It
-        // belongs next to the rows it is actually about, which is where it now sits.
-        h("div", { class: "sub" }, `created by ${principal(b.provenance.createdByType, b.owner.id)} via ${b.provenance.createdVia}`),
-      ),
-      h("div", { class: "row" },
-        // Stopped, Start is the one thing to do and takes the filled style; Take control has
-        // nothing to take. A lease can outlive a stop, so Return to agent stays when it applies.
-        human
-          ? h("button", { class: "btn ok", "data-shortcut": "t", "aria-keyshortcuts": "T", onClick: () => returnControl(id) }, "Return to agent")
-          : ["stopped", "crashed", "queued", "moving"].includes(b.status)
-            ? null
-            : h("button", { class: "btn human", "data-shortcut": "t", "aria-keyshortcuts": "T", onClick: () => takeControl(id) }, "Take control"),
-        // One of Start and Stop, never both with one greyed out, and only one button filled:
-        // Save profile used to be filled white beside the takeover button and the two fought
-        // for the eye.
-        b.status === "moving"
-          ? h("button", { class: "btn", disabled: true }, "Moving…")
-          : ["stopped", "crashed"].includes(b.status)
-          ? h("button", { class: human ? "btn" : "btn human", onClick: (e) => call(`/api/v1/browsers/${id}/start`, e.currentTarget) }, "Start")
-          : h("button", { class: "btn", onClick: (e) => stopBrowser(b, e.currentTarget) }, "Stop browser"),
-        h("button", { class: "btn", "data-move-action": "", hidden: !canMove(b), disabled: b.status === "moving" || b.savingProfile, onClick: () => moveBrowser(b) }, "Move to…"),
-        b.worker ? null : h("button", { class: "btn", title: "Copy this browser's logins and storage into a reusable saved profile", onClick: () => saveProfileTemplate(b) }, "Save profile"),
-        !b.worker && b.savedProfileId ? h("button", { class: "btn", onClick: () => saveProfileTemplate(b, null, true) }, "Save as new profile") : null,
-        // Restarting a stopped browser is starting it, and Start is already here.
-        ["running", "unhealthy"].includes(b.status) ? h("button", { class: "btn", onClick: (e) => call(`/api/v1/browsers/${id}/restart`, e.currentTarget) }, "Restart") : null,
-        h("button", { class: "btn danger", onClick: () => destroyBrowser(id, b.name, b.kind === "linked") }, "Delete"),
-      ),
-    ),
-    // Three short lines, not one dense block. The old banner was a 74-word paragraph that said
-    // everything at once and so got read as nothing: what you can do, what the agent can do,
-    // what happens to your logins, and how long you have, with no gap between them.
-    b.status === "running" ? h("div", { class: human ? "banner control" : "banner watch" },
-      ...(human
-        ? [
-            "You have control. Agents with read access can still see this page, but their changes are blocked until you return control.",
-            `This browser belongs to ${principal(b.provenance.createdByType, b.owner.id)}. Taking control preserves its current sign-ins; actions on websites can change them.`,
-            // The lease was the fact nobody had: it is 90 seconds by default and this tab is
-            // what renews it, so closing the tab hands the keyboard back on a timer the
-            // operator had no way to know about.
-            `Your turn lasts ${leaseSeconds} seconds, and this tab keeps renewing it. Closing the tab lets that control turn expire.`,
-          ]
-        : [
-            "Watching only. Nothing you click or type reaches this browser.",
-            // `human` was the only thing computed, so a browser with no controller at all fell
-            // into this branch and was told an agent had it.
-            guestHolds(b)
-              ? [guestControllerLabel, " has control through a guest link. Take control to cut them off, or revoke the link under Guest links."]
-              : agentHolds
-              ? [h("span", { "data-controller-label": "" }, controllerName(b)), " has control. Press Take control when you need the keyboard."]
-              : "Nothing has control right now. Press Take control when you need the keyboard.",
-          ]
-      ).map((line) => h("p", {}, line)),
-    ) : null,
+    h("header", { class: "dhead" },
+      h("nav", { class: "crumbs", "aria-label": "Breadcrumb" },
+        h("a", { href: "/", onClick: (e) => { e.preventDefault(); go("/"); } }, "Browsers"),
+        icon(ICON_CHEVRON), crumbName),
+      h("div", { class: "dhead-row" },
+        h("div", { class: "dhead-main" },
+          h("div", { class: "dtitle" }, h("h1", {}, nameButton), statusPill(b)),
+          h("div", { class: "dmeta" }, ...meta)),
+        h("div", { class: "dactions" }, stop, more, primary))),
     b.status === "running" && b.gateway && !b.gateway.online ? h("div", { class: "banner gateway", role: "status" },
       h("p", {}, `Pages will not load: this browser reaches the web through ${b.gateway.name}, which is not connected.`),
       h("p", {}, "Start the gateway on that computer and reload the page. It never falls back to this host's connection. ",
         h("a", { href: "/gateways", onClick: (e) => { e.preventDefault(); go("/gateways"); } }, "Open Gateways"))) : null,
-    // Full browser streams a whole 2560-wide desktop into this box and letterboxes it to fit,
-    // so Chrome's own toolbar and tab strip are drawn at whatever fraction of their real size
-    // the stage leaves them. Give that view the sidebar's 320px and let the facts sit below it.
-    h("div", { class: surface === "desktop" ? "detail desktop" : "detail" },
-      stagewrap,
-      sideHost,
-    ),
+    tabs,
+    ...Object.values(panels),
   ]);
   detailMetadataRefresh();
   if (!linked) void loadGuests();
@@ -2432,15 +2854,17 @@ async function browserView(id, seq) {
     // It said "stopped" over a browser that was starting. No Start button of its own: the
     // filled one in the header sits directly above this at every width, and a second copy of
     // the same choice split the eye between them.
-    stagewrap.replaceChildren(h("div", { class: "banner", role: "status" },
-      b.status === "starting" ? "Chrome is starting…"
+    stagewrap.replaceChildren(h("div", { class: "stage-empty", role: "status" },
+      lamp("idle"),
+      h("p", {}, b.status === "starting" ? "Chrome is starting…"
         : b.status === "stopping" ? "Chrome is stopping…"
         : b.status === "moving" ? h("span", { "data-move-progress": b.id }, movingText(b))
         : b.status === "crashed" ? "Chrome crashed. Its logins and data are kept."
         : b.status === "queued" ? "Waiting for room on the host to start. It starts on its own when another browser stops."
         : b.status === "unhealthy" ? `Chrome is up but broken: ${b.health?.reason || "it cannot load pages"}. It has been restarted too often to try again by itself; Restart it once something else has stopped.`
+        : linked ? "Nothing to show. Its owner has not shared a tab, or the browser is offline."
         : b.persistent ? "Browser stopped. Its logins and data are kept."
-        : "Browser stopped. This temporary profile may be deleted when idle. Save profile to make a reusable copy."));
+        : "Browser stopped. This temporary profile may be deleted when idle. Save it as a profile to keep a reusable copy.")));
     return;
   }
   void connectViewer(id, human ? "control" : "watch", img, b.control?.leaseToken, status, {

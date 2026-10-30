@@ -63,7 +63,7 @@ browser to use them again; no separate save step is needed.
 | Dashboard action | What it does |
 | --- | --- |
 | **Edit browser details** | Changes this browser's name, project, purpose, and task. No saved profile needs to be loaded. |
-| **Record signed-in site** | Adds an observation for agents to find. It does not sign you in or copy cookies. |
+| **Record a site…** | On the browser's **Access** tab. Adds an observation for agents to find. It does not sign you in or copy cookies. |
 | **Save profile** | Copies all saved logins and storage into a reusable snapshot, or updates the linked snapshot. It is not limited to recorded sites. |
 | **Copy browser ID** | Copies the stable ID used by API and MCP tools. Find it beside Browser ID on the browser page, or in the browser-list menu. |
 
@@ -96,7 +96,7 @@ Railway also limits a container to 1,000 processes and threads, shared by every
 browser: a quiet Chrome uses about 200, and a busy one 600 or more. Tallylamp counts
 each browser's share, queues a start until it fits, stops idle browsers to make room,
 and restarts a browser the limit has broken. If one heavy run leaves a browser sized
-past what it needs, reset its thread counts on its page. The template pins each Chrome to four
+past what it needs, reset its thread counts on its **Settings** tab. The template pins each Chrome to four
 CPUs, which cuts its threads by about 40%. Pin a browser that must stay up, or add a
 [worker](docs/workers.md): a second service that runs browsers for this one, within
 its own 1,000.
@@ -179,7 +179,7 @@ Your agent's MCP connection stays open during the handoff.
 ### Let someone else sign in
 
 When the 2FA code goes to a colleague's phone, send them a guest link instead of
-the admin secret. On the browser's page, choose **Share with a person…**. The
+the admin secret. On the browser's **Access** tab, choose **Share with a person…**. The
 link opens that one browser and nothing else. It works once, expires within 24
 hours, and you can revoke it at any time. The guest can watch and, if you allow
 it, take control from the agent, but never from you. Everything they do is
@@ -194,14 +194,15 @@ the agent's name and its reason. A badge on **Requests** and a line at the top o
 **Browsers** show how many are waiting. You can approve it at **control**, which
 lets the agent act in the browser, or at **read**, which lets it see pages and
 nothing more. You can also approve a control request as read only. Pick how long the
-grant lasts, from 30 minutes up to until you revoke it. The browser's page lists
+grant lasts, from 30 minutes up to until you revoke it. The browser's **Access** tab lists
 everyone with access, with a **Revoke** button for each. See
 [lending and granting access](docs/architecture.md#lending-and-granting-access-to-a-browser).
 
 ### Per-browser proxies
 
-Set a proxy in **New browser**, or stop an existing browser and choose
-**Configure** beside **Proxy**. Start it again to use the new route. The same settings
+Set a proxy in **New browser**, or open an existing browser's **Settings** tab and
+choose **A proxy** under **Connection**. Saving restarts a running browser on the new
+route. The same settings
 work through `tallylamp_create_browser`, `tallylamp_update_browser`, and the
 browser create/update API:
 

@@ -65,7 +65,7 @@ export function authorizeAgentDesktop(browsers: BrowserManager, p: Principal, id
     requireScope(live, "browser:read:own");
     requireScope(live, "browser:control:own");
   }
-  if (!row.agent_desktop_enabled) throw Err.unauthorized("User permission required. Ask the user or administrator to open this browser in the dashboard, go to Extensions, and turn on Allow agent control. Explain that this grants full Chrome UI access, including settings and host-file dialogs. Wait for approval; do not retry or try to enable it yourself.");
+  if (!row.agent_desktop_enabled) throw Err.unauthorized("User permission required. Ask the user or administrator to open this browser in the dashboard, go to Settings > Extensions, and turn on Allow agent control. Explain that this grants full Chrome UI access, including settings and host-file dialogs. Wait for approval; do not retry or try to enable it yourself.");
   if (browsers.isHumanControlled(id)) throw Err.humanControlling();
   const control = browsers.controlState(id);
   if (control.controllerType === "agent" && control.controllerId !== p.id) throw Err.alreadyControlled();

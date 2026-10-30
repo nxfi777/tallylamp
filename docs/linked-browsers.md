@@ -65,7 +65,7 @@ Tallylamp did not launch a linked browser and does not hold its profile, so anyt
 
 ## Change who can use it
 
-The administrator owns every linked browser. The agents you ticked are on a list beside it, so they can use its shared tabs but cannot delete it, lend it or change who else gets in. To change the list, open the browser in the dashboard and edit **Who can use it**. An agent you untick loses the browser at its next tool call, even mid-task.
+The administrator owns every linked browser. The agents you ticked are on a list beside it, so they can use its shared tabs but cannot delete it, lend it or change who else gets in. To change the list, open the browser in the dashboard and, on its **Settings** tab, edit **Who can use it**. An agent you untick loses the browser at its next tool call, even mid-task.
 
 Each client that connects over OAuth gets its own agent, so one app can appear several times, such as three **OpenCode (connector)** entries. The list shows when each was last used, most recent first.
 

@@ -337,7 +337,9 @@ button { cursor: pointer; }
 .lamp.idle { color: var(--line-strong); filter: none; }
 .lamp.ok { color: var(--ok); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ok) 55%, transparent)); }
 .lamp.human { color: var(--human); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--human) 55%, transparent)); }
-.main { padding: 28px 32px 64px; overflow: auto; }
+/* The gutter is kept even when nothing scrolls, so switching to a short tab does not slide the
+   page header sideways. */
+.main { padding: 28px 32px 64px; overflow: auto; scrollbar-gutter: stable; }
 .top {
   display: flex; justify-content: space-between; align-items: flex-end;
   gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
@@ -737,20 +739,27 @@ input::placeholder { color: var(--muted); }
 /* Settings as rows: what it is and what it is set to on the left, the one control on the
    right. Each used to be a heading, a sentence, a bordered button and a paragraph or two of
    caveats, so the column was half prose and every button weighed the same. */
-.settings { border: 1px solid var(--line); border-radius: var(--radius); margin-top: 8px; }
-.settings-note { margin: 6px 0 0; }
-.setting { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
-.setting + .setting, .setting + .setting-more, .setting-more + .setting, .setting-extra + .setting { border-top: 1px solid var(--line); }
-.setting.nested { padding-left: 24px; }
-.setting-text { flex: 1; min-width: 0; }
-.setting-name { font-size: 14px; font-weight: 500; }
-.setting-text .sub { margin-top: 2px; font-size: 13px; overflow-wrap: anywhere; }
-.setting .btn { flex: none; min-height: 0; padding: 4px 12px; font-size: 13px; }
-.setting-extra { padding: 0 12px 10px; }
-.setting-more { padding: 8px 12px; font-size: 13px; color: var(--muted); }
-.setting-more.plain { padding: 4px 0 0; }
-.setting-more summary { cursor: pointer; }
+.settings {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.setting { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 14px 16px; }
+.setting + .setting, .setting + .setting-more, .setting-more + .setting { border-top: 1px solid var(--line); }
+/* Allow agent control belongs to Extensions: it only means anything once they are on. */
+.setting.nested { padding-left: 32px; }
+/* Grows first and gives way last, so a switch stays beside its sentence on a phone and only a
+   pair of labelled buttons drops below it. */
+.setting-text { flex: 1 1 220px; min-width: 0; }
+.setting-name { font-size: 14px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; }
+.setting-text .sub { margin-top: 2px; font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.setting .btn { flex: none; min-height: 28px; padding: 0 12px; font-size: 13px; }
+.setting > .row { flex: none; }
+.setting-more { padding: 10px 16px; font-size: 13px; line-height: 20px; color: var(--muted); }
+.setting-more.plain { padding: 8px 0 0; }
+.setting-more summary { cursor: pointer; width: fit-content; border-radius: 4px; }
+.setting-more summary:hover { color: var(--text); }
 .setting-more p { margin: 6px 0 0; max-width: 60ch; }
+.settings.danger-zone { border-color: color-mix(in srgb, var(--tally) 35%, var(--line)); }
 .switch {
   position: relative; flex: none; width: 40px; height: 24px; padding: 0;
   border-radius: 999px; border: 1px solid var(--line-strong); background: transparent;
@@ -773,12 +782,11 @@ input::placeholder { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
 /* The project picker grows a text field when "New project" is chosen. */
 .project-new { margin-top: 6px; }
-.side { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-.side h2 { font-size: 16px; margin: 16px 0 0; }
-.kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px 10px; font-size: 13px; }
+.kv { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px 12px; margin: 0; font-size: 13px; line-height: 20px; }
 .kv dt { color: var(--muted); }
-.browser-id { min-width: 0; overflow-wrap: anywhere; }
-.browser-id .btn { display: block; margin-top: 6px; }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.browser-id { display: flex; align-items: flex-start; gap: 4px; }
+.browser-id .mono { min-width: 0; line-height: 20px; }
 /* Prose stops being readable somewhere past 75 characters a line. On the security page these
    ran the full width of the window — a 150-character measure. */
 .main > p, .main > .kv { max-width: 60ch; }
@@ -788,8 +796,6 @@ input::placeholder { color: var(--muted); }
 .warn { color: var(--warn); }
 .ok { color: var(--ok-text); }
 .err { color: var(--tally-text); }
-.timeline { list-style: none; padding: 0; margin: 10px 0 0; font-size: 12px; color: var(--muted); }
-.timeline li { padding: 4px 0; border-bottom: 1px solid var(--line); }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .group-h { margin: 20px 0 8px; color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
 code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 2px 4px; border-radius: 4px; }
@@ -846,16 +852,6 @@ pre { background: var(--surface-2); padding: 12px; border-radius: 8px; overflow:
 .ask-actions { gap: 8px; align-items: center; flex-wrap: wrap; }
 .ask-actions select { font-size: 13px; padding: 4px 6px; min-height: 32px; }
 
-/* A grant is two facts -- who, and how much for how long. Stacked, because reading them as one
-   run-on line is how "read only" gets skimmed as "access". */
-.lending .loans .loan-who { display: grid; gap: 2px; min-width: 0; }
-.lending .loans .loan-who .sub { font-size: 12px; }
-
-.lending .loans, .tunnels .loans { list-style: none; margin: 6px 0 12px; padding: 0; font-size: 13px; }
-.lending .loans li, .tunnels .loans li {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 4px 0; border-bottom: 1px solid var(--line);
-}
 .site-list { list-style: none; margin: 6px 0 12px; padding: 0; }
 .site-list li {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -866,7 +862,6 @@ pre { background: var(--surface-2); padding: 12px; border-radius: 8px; overflow:
 .site-main .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-main .sub { font-size: 12px; }
 .site-actions { flex: none; }
-.site-add { margin: 8px 0; }
 /* Saved-profile rows: pills and their Edit button read as one cell, and the pills' card margin
    is wrong inside a table row. */
 .seed-sites { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
@@ -1166,3 +1161,203 @@ body.busy::before {
 .shortcuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 32px; margin-top: 12px; }
 .shortcuts h3 { margin: 12px 0 4px; font-size: 12px; font-weight: 500; color: var(--faint); }
 .shortcut { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--line); }
+
+/* ---- One browser's page ------------------------------------------------------------------
+   Breadcrumb, a name you can click to rename, the state beside it, and one filled button for
+   the thing to do next. Below that, four tabs, so the settings stop crowding the live view. */
+.dhead { margin-bottom: 16px; }
+.crumbs { display: flex; align-items: center; gap: 4px; min-width: 0; margin-bottom: 8px; font-size: 13px; line-height: 20px; color: var(--muted); }
+.crumbs a { color: var(--muted); text-decoration: none; border-radius: 4px; }
+.crumbs a:hover { color: var(--text); }
+.crumbs .icon { width: 12px; height: 12px; flex: none; color: var(--faint); }
+.crumbs [aria-current] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+/* Top-aligned: the buttons sit level with the name, and the meta line runs under the name only. */
+.dhead-row { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; }
+.dhead-main { flex: 1 1 320px; min-width: 0; }
+.dtitle { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dtitle h1 { min-width: 0; }
+/* The heading is the rename control. It looks like the heading until the pointer is on it. */
+.dname {
+  font: inherit; letter-spacing: inherit; color: inherit; text-align: left; overflow-wrap: anywhere;
+  background: none; border: 0; padding: 0 4px; margin: 0 -4px; border-radius: var(--radius-sm);
+  cursor: text; transition: background-color var(--d-fast);
+}
+.dname:hover { background: var(--hover); }
+.dname.renamed { animation: renamed 900ms var(--ease-out); }
+@keyframes renamed { from { background-color: color-mix(in srgb, var(--ok) 24%, transparent); } }
+.dtitle input.rename {
+  font: 600 24px/32px var(--sans); letter-spacing: -0.02em;
+  height: 40px; max-width: calc(100vw - 48px); margin: -4px -9px; padding: 0 8px;
+}
+.dactions { display: flex; align-items: center; gap: 8px; }
+.btn.icon-only { width: 32px; padding: 0; }
+.btn.icon-only .icon { width: 16px; height: 16px; }
+.btn.icon-only.xs { width: 24px; min-height: 24px; height: 24px; flex: none; border-color: transparent; background: none; box-shadow: none; color: var(--muted); }
+.btn.icon-only.xs:hover { color: var(--text); background: var(--hover); }
+.btn.icon-only.xs .icon { width: 14px; height: 14px; }
+.dmeta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; margin-top: 8px; font-size: 13px; line-height: 20px; color: var(--muted); }
+.dmeta > :not(:first-child)::before { content: "·"; margin: 0 8px; color: var(--faint); }
+.dmeta > .chip + *::before { margin-left: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2);
+  font-size: 12px; line-height: 16px; color: var(--muted); white-space: nowrap;
+}
+.chip .icon { width: 12px; height: 12px; }
+
+/* A state pill: the dot carries the colour, the word carries the meaning. */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; flex: none; height: 24px; padding: 0 10px;
+  border-radius: 999px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2);
+  font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; color: var(--muted);
+}
+.pill-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+/* Text pulled 15% toward the body colour: the bare tones measured 4.3 on their own tint. */
+.pill.live { color: color-mix(in srgb, var(--tally-text) 85%, var(--text)); background: color-mix(in srgb, var(--tally) 8%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tally) 30%, transparent); }
+/* Breathes while it is live, which is the one thing it is saying. */
+.pill.live .pill-dot { animation: pill-live 2s ease-in-out infinite; }
+@keyframes pill-live { 50% { opacity: 0.3; } }
+.pill.human { color: var(--text); background: color-mix(in srgb, var(--human) 14%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--human) 45%, transparent); }
+.pill.human .pill-dot { background: var(--human); }
+.pill.warn { color: color-mix(in srgb, var(--warn) 85%, var(--text)); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent); }
+.pill.danger { color: color-mix(in srgb, var(--tally-text) 85%, var(--text)); background: color-mix(in srgb, var(--tally) 8%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tally) 30%, transparent); }
+.tag {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px;
+  background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2);
+  font-size: 11px; line-height: 16px; font-weight: 500; color: var(--muted);
+}
+
+/* Tabs. The line under them is a shadow, not a border, so the sliding ink can sit on it. */
+.dtabs {
+  position: relative; display: flex; gap: 4px; margin-bottom: 20px;
+  box-shadow: inset 0 -1px 0 var(--line); overflow-x: auto; scrollbar-width: none;
+}
+.dtabs::-webkit-scrollbar { display: none; }
+.dtabs [role="tab"] {
+  display: inline-flex; align-items: center; gap: 8px; flex: none; height: 40px; padding: 0 10px;
+  border: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: none;
+  font-size: 14px; line-height: 20px; font-weight: 500; color: var(--muted); white-space: nowrap;
+  cursor: pointer; transition: color var(--d-fast);
+}
+.dtabs [role="tab"]:hover, .dtabs [aria-selected="true"] { color: var(--text); }
+.dtabs [role="tab"]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; box-shadow: none; }
+.tab-count {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--surface-3);
+  font-size: 12px; line-height: 20px; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.tab-count[hidden] { display: none; }
+.tab-ink {
+  position: absolute; left: 0; bottom: 0; width: 0; height: 2px; border-radius: 2px 2px 0 0;
+  background: var(--text); pointer-events: none;
+  transition: transform var(--d-slow) var(--ease-out), width var(--d-slow) var(--ease-out);
+}
+.dpanel[hidden] { display: none; }
+.dsections { display: grid; gap: 32px; max-width: 840px; min-width: 0; }
+.dsec { min-width: 0; }
+.sec-h { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; min-height: 28px; margin-bottom: 8px; }
+.sec-h h2 { margin: 0; font-size: 14px; line-height: 20px; }
+.sec-h .sub { margin: 0; font-size: 13px; line-height: 20px; }
+.sec-foot { margin: 8px 0 0; font-size: 13px; line-height: 20px; }
+
+/* Boxes with a heading bar, for the facts beside the live view and the connection choice. */
+.panel { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.panel-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--line); }
+.panel-h h2 { margin: 0; font-size: 14px; line-height: 20px; }
+.panel-b { padding: 12px 16px 16px; }
+.panel-b > p { margin: 0; }
+.panel .caption { margin-top: 12px; font-size: 12px; line-height: 16px; color: var(--faint); }
+.panel .task { font-size: 13px; line-height: 20px; }
+.rail { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.rail .site-pills { margin-top: 0; }
+.rail .data-notice { margin: 0; }
+.empty-panel { padding: 32px 16px; text-align: center; }
+.empty-panel .sub { max-width: none; }
+
+/* Nothing to stream: the same footprint the live view will take, so starting it does not shove
+   the page about. */
+.stage-empty {
+  display: grid; place-items: center; align-content: center; gap: 12px; min-height: 360px; padding: 24px;
+  border: 1px dashed var(--line-2); border-radius: var(--radius-lg); background: var(--surface-2);
+  text-align: center; font-size: 14px; line-height: 20px; color: var(--muted);
+}
+.stage-empty p { margin: 0; max-width: 52ch; }
+.stage-empty .lamp { width: 24px; height: 24px; }
+
+/* How it reaches the web: three cards, one chosen, and the fields for that choice under them. */
+.panel.conn { overflow: hidden; }
+.conn-note { margin: 0 0 12px; font-size: 13px; }
+.rcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rcard {
+  position: relative; display: grid; justify-items: start; align-content: start; gap: 2px; padding: 12px 36px 12px 12px;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface);
+  font: inherit; color: var(--text); text-align: left; cursor: pointer;
+  transition: border-color var(--d-fast), box-shadow var(--d) var(--ease-out);
+}
+.rcard:hover:not([aria-disabled="true"]) { border-color: var(--line-strong); }
+.rcard[aria-checked="true"] { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+.rcard[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.rcard .icon { width: 20px; height: 20px; margin-bottom: 8px; color: var(--muted); }
+.rcard[aria-checked="true"] .icon { color: var(--text); }
+.rcard-t { font-size: 13px; line-height: 20px; font-weight: 600; }
+.rcard-d { font-size: 12px; line-height: 16px; color: var(--muted); }
+.rdot {
+  position: absolute; top: 12px; right: 12px; width: 16px; height: 16px; border-radius: 999px;
+  border: 1px solid var(--line-strong); display: grid; place-items: center;
+}
+.rcard[aria-checked="true"] .rdot { border-color: var(--text); }
+.rcard[aria-checked="true"] .rdot::after { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--text); animation: dot-in var(--d) var(--ease-spring); }
+@keyframes dot-in { from { transform: scale(0); } }
+.reveal { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows var(--d-slow) var(--ease-out), opacity var(--d); }
+.reveal > div { min-height: 0; overflow: hidden; }
+.reveal.on { grid-template-rows: 1fr; opacity: 1; }
+.conn-fields { display: grid; gap: 8px; padding-top: 16px; }
+.conn-fields > .sub { margin: 0; font-size: 13px; line-height: 20px; }
+.conn-fields > div > .btn { margin-top: 4px; }
+.cfield { display: grid; gap: 4px; min-width: 0; font-size: 13px; line-height: 20px; font-weight: 500; }
+.cfield input, .cfield select { width: 100%; font-weight: 400; }
+.conn-fields > .cfield { max-width: 320px; }
+.proxy-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.savebar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface-2); }
+.savebar-note { flex: 1 1 240px; font-size: 13px; line-height: 20px; color: var(--muted); }
+.savebar-note.err { color: var(--tally-text); }
+
+/* Activity: a time column, a rail of nodes, then what happened. */
+.toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.seg button {
+  height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: none;
+  font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); cursor: pointer;
+  transition: color var(--d-fast), background-color var(--d-fast);
+}
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line-2), var(--shadow); }
+.timeline { --tl-time: 88px; position: relative; list-style: none; margin: 0; padding: 0; }
+.timeline.dated { --tl-time: 136px; }
+.timeline::before { content: ""; position: absolute; top: 16px; bottom: 16px; left: calc(var(--tl-time) + 19px); width: 2px; border-radius: 1px; background: var(--line); }
+.tl { position: relative; display: grid; grid-template-columns: var(--tl-time) 16px minmax(0, 1fr); gap: 12px; align-items: start; padding: 6px 0; font-size: 13px; line-height: 20px; }
+.tl time { font: 12px/20px var(--mono); color: var(--faint); text-align: right; white-space: nowrap; }
+.tl-node { width: 10px; height: 10px; margin: 5px 3px; border: 2px solid var(--line-strong); border-radius: 999px; background: var(--surface); }
+.tl.system .tl-node { border-color: var(--warn); }
+.tl-body { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; }
+.tl-body .mono { color: var(--text); }
+.tl-body .sub { margin: 0; font-size: 13px; }
+
+@media (max-width: 900px) {
+  .dactions { flex: 1 1 100%; }
+  .dactions > :last-child { margin-left: auto; }
+}
+@media (max-width: 640px) {
+  .rcards, .proxy-grid { grid-template-columns: minmax(0, 1fr); }
+  /* Dated entries break between the date and the time rather than widen the column. */
+  .timeline.dated { --tl-time: 88px; }
+  .timeline.dated .tl time { white-space: normal; }
+}
+@media (pointer: coarse) {
+  .dtabs [role="tab"], .seg button { min-height: 44px; }
+  .btn.icon-only { width: 44px; }
+  .btn.icon-only.xs { width: 32px; height: 32px; min-height: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dname.renamed, .pill.live .pill-dot, .rcard[aria-checked="true"] .rdot::after { animation: none; }
+  .tab-ink, .reveal, .rcard, .dname, .seg button { transition: none; }
+}

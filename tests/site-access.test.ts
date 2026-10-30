@@ -69,7 +69,7 @@ describe("profile site inventory", () => {
     let submitForm = true;
     const recorded: Array<{ origin: string; name: string }> = [];
     const sandbox = {
-      browser, URL, document: {}, state: { status: {} },
+      browser, URL, document: {}, state: { status: {}, workers: [] },
       api: async (url: string, options?: { body: { origin: string; name: string } }) => {
         if (url.endsWith("/sites") && options) {
           recorded.push(options.body);
@@ -78,9 +78,12 @@ describe("profile site inventory", () => {
         return { browser };
       },
       h: (_tag: string, attrs: object, ...children: unknown[]) => ({ attrs, children, append() {}, replaceChildren() {}, setAttribute() {}, classList: { add() {} } }),
-      principal: () => "Test", layout() {}, icon() {}, settingsSection: () => [], tunnelSection() {}, guestSection() {}, guestHolds: () => false, canMove: () => false,
+      principal: () => "Test", layout() {}, icon() {}, tunnelSection() {}, guestSection() {}, guestHolds: () => false, canMove: () => false,
       dataNotice: () => null,
-      ICON_BACK: [], ICON_FORWARD: [], ICON_RELOAD: [], ICON_FULLSCREEN: [], ICON_PLUS: [],
+      // The page's own sections: rendering them is not what this test is about.
+      connectionSection: () => ({ refresh() {} }), pageSection() {}, loansSection() {}, activitySection() {}, statusPill() {},
+      tabBar: () => ({ select() {}, setCount() {} }), detailTabs: new Map(),
+      ICON_BACK: [], ICON_FORWARD: [], ICON_RELOAD: [], ICON_FULLSCREEN: [], ICON_PLUS: [], ICON_CHEVRON: [], ICON_MORE: [], ICON_LAYERS: [],
       connectViewer: (...args: unknown[]) => { active = args[5] as typeof active; },
       askFor: async (_title: string, shown: typeof fields, _label: string, submit: (values: unknown) => Promise<void>) => {
         fields = shown;
@@ -148,7 +151,7 @@ describe("profile site inventory", () => {
     let accept = false;
     let prompt = "";
     const sandbox = { profile: { id: "test-profile", name: "Main" },
-      confirm: (text: string) => { prompt = text; return accept; },
+      confirmDialog: async ({ title, body }: { title: string; body: string | string[] }) => { prompt = [title, body].flat().join(" "); return accept; },
       api: async (url: string, options: { method: string; body: { confirmName: string } }) => { calls.push({ url, ...options }); return { cleanupPending: false }; },
       act: (fn: () => Promise<void>) => fn(), render: async () => {}, flash: () => {},
     };
