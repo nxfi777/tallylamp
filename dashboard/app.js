@@ -257,7 +257,8 @@ function scopesWith(current, ticked) {
  * to share one textarea, so Copy returned the credential with a sentence of English stapled to
  * it — which is not a credential any more once it is pasted into a header.
  */
-function revealToken(title, token, { note, command, commandLabel = "To point Claude Code at this deployment:" } = {}) {
+// commandOnly: the token is used nowhere but inside the command, so the command is all there is to copy.
+function revealToken(title, token, { note, command, commandLabel = "To point Claude Code at this deployment:", commandOnly = false, wait } = {}) {
   const status = h("span", { class: "sub", role: "status" }, "");
 
   const copyButton = (label, getText, primary) => h("button", {
@@ -273,25 +274,46 @@ function revealToken(title, token, { note, command, commandLabel = "To point Cla
     },
   }, `Copy ${label.toLowerCase()}`);
 
-  const tokenField = h("textarea", { class: "token", readonly: "readonly", rows: "2", spellcheck: "false", "aria-label": `${title} — the token` }, token);
+  const tokenField = command && commandOnly ? null
+    : h("textarea", { class: "token", readonly: "readonly", rows: "2", spellcheck: "false", "aria-label": `${title} — the token` }, token);
   const commandField = command
-    ? h("textarea", { class: "token", readonly: "readonly", rows: "3", spellcheck: "false", "aria-label": commandLabel.replace(/:$/, "") }, command)
+    ? h("textarea", { class: "token", readonly: "readonly", rows: commandOnly ? "4" : "3", spellcheck: "false", "aria-label": commandLabel.replace(/:$/, "") }, command)
     : null;
+  const waiting = wait ? h("div", { class: "waiting", role: "status" },
+    h("span", { class: "spinner", "aria-hidden": "true" }), h("span", {}, wait.pending)) : null;
+  let done;
 
   openModal(title, (close) => [
     h("h2", {}, title),
     h("p", { class: "sub" }, "Tallylamp keeps only a hash of this, so it cannot show it to you again. Copy it now."),
     tokenField,
-    h("div", { class: "row" }, copyButton("Token", () => token, true)),
+    tokenField ? h("div", { class: "row" }, copyButton("Token", () => token, true)) : null,
     command ? h("p", { class: "sub cmd-label" }, commandLabel) : null,
     commandField,
-    command ? h("div", { class: "row" }, copyButton("Command", () => command, false)) : null,
+    command ? h("div", { class: "row" }, copyButton("Command", () => command, !tokenField)) : null,
     note ? h("p", { class: "sub" }, note) : null,
-    h("div", { class: "row modal-foot" }, h("button", { class: "btn", onClick: () => close() }, "Done"), status),
-  ], undefined, { dismissible: false });
+    waiting,
+    h("div", { class: "row modal-foot" }, done = h("button", { class: "btn", onClick: () => close() }, "Done"), status),
+  ], wait?.onClose, { dismissible: false });
 
-  tokenField.focus();
-  tokenField.select();
+  (tokenField || commandField).focus();
+  (tokenField || commandField).select();
+  if (!wait) return;
+  // Watch for what the token lets in (a worker joining, a gateway connecting), so the dialog
+  // ends on it arriving rather than on a promise that it will. It stops when the dialog closes.
+  const tick = async () => {
+    if (!waiting.isConnected) return;
+    let arrived = null;
+    try { arrived = await wait.check(); } catch { /* still waiting; the next look may answer */ }
+    if (!waiting.isConnected) return;
+    if (!arrived) { setTimeout(tick, 3000); return; }
+    const [headline, detail] = wait.done(arrived);
+    waiting.classList.add("arrived");
+    waiting.replaceChildren(h("span", { class: "waiting-ic", "aria-hidden": "true" }, icon(ICON_CHECK)),
+      h("span", {}, h("strong", {}, headline), h("span", { class: "sub" }, detail)));
+    done.classList.add("primary");
+  };
+  setTimeout(tick, 3000);
 }
 
 /**
@@ -529,6 +551,7 @@ function accountMenu(anchor) {
     { group: "Address bar search" },
     ...SEARCHES.map((e) => ({ label: e.id === "off" ? "Off" : e.label, checked: search.id === e.id, onSelect: () => setSearch(e.id) })),
     "-",
+    { label: "Settings", kbd: "G S", onSelect: () => go("/settings") },
     { label: "Keyboard shortcuts", kbd: "?", onSelect: shortcutsDialog },
     { label: "Log out", onSelect: logout },
   ], "Account");
@@ -843,6 +866,11 @@ const ICON_GLOBE = '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0
 const ICON_COPY = '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>';
 const ICON_MORE = '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>';
 const ICON_CHEVRON = '<path d="m9 18 6-6-6-6"/>';
+const ICON_GEAR = '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>';
+const ICON_SLIDERS = '<path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/>';
+const ICON_USER = '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
+const ICON_ALERT = '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>';
+const ICON_INFO = '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>';
 
 /** Keys as keycaps. "G then B" is a sequence, not a chord, and says so. */
 function kbds(keys) {
@@ -870,7 +898,8 @@ function route() {
   if (p.startsWith("/seeds")) return { name: "seeds" };
   if (p.startsWith("/workers")) return { name: "workers" };
   if (p.startsWith("/gateways")) return { name: "gateways" };
-  if (p.startsWith("/security")) return { name: "security" };
+  if (p.startsWith("/settings")) return { name: "settings", section: p.split("/")[2] || "" };
+  if (p.startsWith("/security")) return { name: "settings", section: "security" };
   if (p.startsWith("/login")) return { name: "login" };
   // Where the extension sends the operator. The code rides in the query so a logged-out visit
   // survives the sign-in screen with it intact.
@@ -993,8 +1022,8 @@ const NAV_PAGES = [
 const NAV_INFRA = [
   ["/workers", "workers", "Workers", ICON_SERVER, "G W"],
   ["/gateways", "gateways", "Gateways", ICON_ROUTER],
-  ["/security", "security", "Security", ICON_SHIELD],
 ];
+const NAV_SETTINGS = ["/settings", "settings", "Settings", ICON_GEAR, "G S"];
 
 function navItem([href, name, label, paths]) {
   const r = route().name;
@@ -1014,7 +1043,7 @@ function navItem([href, name, label, paths]) {
 
 function layout(main) {
   const r = route().name;
-  const current = [...NAV_PAGES, ...NAV_INFRA].find(([, name]) => name === r || (name === "home" && r === "browser"));
+  const current = [...NAV_PAGES, ...NAV_INFRA, NAV_SETTINGS].find(([, name]) => name === r || (name === "home" && r === "browser"));
   app.replaceChildren(
     h("div", { class: "app" },
       // Several nav links stand between a keyboard operator and the fleet, on every navigation.
@@ -1034,6 +1063,7 @@ function layout(main) {
             h("div", { class: "nav-section", role: "presentation" }, "Infrastructure"),
             ...NAV_INFRA.map(navItem),
             h("div", { class: "nav-foot" },
+              navItem(NAV_SETTINGS),
               h("button", { class: "nav-item", type: "button", onClick: shortcutsDialog },
                 icon(ICON_KEYBOARD), h("span", { class: "nav-label" }, "Shortcuts"), kbds("?")),
               h("button", { class: "user-row", type: "button", "aria-haspopup": "menu", onClick: (e) => accountMenu(e.currentTarget) },
@@ -1067,7 +1097,8 @@ function paletteItems() {
     ...state.browsers.map((b) => ({ group: "Browsers", label: b.name, hint: b.kind === "linked" ? linkStatus(b) : b.status || "stopped",
       keys: [b.metadata?.project, b.metadata?.purpose, b.url, ...(b.signedInSites || []).map((site) => site.name)].filter(Boolean).join(" "),
       run: to(`/browsers/${b.id}`) })),
-    ...[...NAV_PAGES, ...NAV_INFRA].map(([path, , label, , kbd]) => ({ group: "Go to", label, kbd, keys: "page open", run: to(path) })),
+    ...[...NAV_PAGES, ...NAV_INFRA, NAV_SETTINGS].map(([path, , label, , kbd]) => ({ group: "Go to", label, kbd, keys: "page open", run: to(path) })),
+    ...SETTINGS_SECTIONS.slice(1).map(([id, label]) => ({ group: "Go to", label: `Settings: ${label}`, keys: "settings", run: to(`/settings/${id}`) })),
     here && here.kind !== "linked" && (human || here.status === "running")
       ? { group: "This browser", label: human ? "Return control to the agent" : `Take control of ${here.name}`, kbd: "T",
         run: () => human ? returnControl(here.id) : takeControl(here.id) } : null,
@@ -1166,7 +1197,7 @@ function shortcutsDialog() {
       h("div", {}, h("h3", {}, "Anywhere"),
         row(`${MOD_KEY} K`, "Search and run commands"), row("?", "Show this list"), row("N", "New browser"),
         row("G then B", "Go to Browsers"), row("G then R", "Go to Requests"), row("G then A", "Go to Agents"),
-        row("G then P", "Go to Saved profiles"), row("G then W", "Go to Workers")),
+        row("G then P", "Go to Saved profiles"), row("G then W", "Go to Workers"), row("G then S", "Go to Settings")),
       h("div", {}, h("h3", {}, "On a browser"),
         row("T", "Take or return control"), row("F", "Fill the screen"), row("Esc", "Leave full screen"),
         h("h3", {}, "On Browsers"), row("/", "Filter the browsers"))),
@@ -1192,7 +1223,7 @@ document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (chordAt && Date.now() - chordAt < 1200) {
     chordAt = 0;
-    const path = { b: "/", r: "/requests", a: "/agents", p: "/seeds", w: "/workers" }[k];
+    const path = { b: "/", r: "/requests", a: "/agents", p: "/seeds", w: "/workers", s: "/settings" }[k];
     if (path) { e.preventDefault(); go(path); }
     return;
   }
@@ -3563,6 +3594,40 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
  * until you scanned a Status column to find out otherwise. Live agents are the table now;
  * revoked ones fold away behind their own count, reachable but not counted as inventory.
  */
+/** A ⋯ button that opens a row's actions, hung from its right edge. */
+function moreButton(label, items) {
+  return h("button", {
+    class: "btn icon-only xs row-more", type: "button", "aria-label": label, "aria-haspopup": "menu", title: label,
+    onClick: (e) => {
+      e.stopPropagation();
+      const r = e.currentTarget.getBoundingClientRect();
+      showMenu(r.right, r.bottom + 4, items(), label, { align: "end" });
+    },
+  }, icon(ICON_MORE));
+}
+
+async function copyValue(text, what) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(`${what} copied`, { detail: text });
+  } catch {
+    flash(`Could not copy. Select it and copy it by hand: ${text}`);
+  }
+}
+
+/** The empty state for a whole page: what the page is for, and the one action that starts it. */
+function emptyState(title, text, action, glyph) {
+  return h("div", { class: "empty boxed" },
+    glyph ? h("span", { class: "tile" }, icon(glyph)) : null,
+    h("h2", {}, title),
+    ...[text].flat().map((line) => h("p", { class: "sub" }, line)),
+    action ? h("div", { class: "empty-actions" }, action) : null);
+}
+
+function initial(name) {
+  return (name.trim()[0] || "?").toUpperCase();
+}
+
 async function agentsView() {
   // created_at DESC is the server's order and it is not the order anyone triages in. Five
   // connectors called "OpenCode" on 127.0.0.1 are one list item repeated five times until
@@ -3576,110 +3641,159 @@ async function agentsView() {
   // landed twice in every row. The kind belongs under the name, next to the host it came from.
   const isConnector = (a) => a.labels?.kind === "connector";
   const displayName = (a) => (isConnector(a) ? a.name.replace(/\s*\(connector\)$/, "") : a.name);
-  const origin = (a) =>
-    isConnector(a) ? `connector · ${a.labels.client_host || "unknown host"}` : "agent";
-  // Max was a column of identical 2s -- the server default, printed twelve times. The default
-  // is now no cap, so a number only appears when somebody has set one for this agent.
-  const limit = (a) =>
-    a.maxBrowsers > 0
-      ? ` · ${a.maxBrowsers} browser${a.maxBrowsers === 1 ? "" : "s"} max`
-      : "";
+  const origin = (a) => (isConnector(a) ? `OAuth connector · ${a.labels.client_host || "unknown host"}` : "Token agent");
+  const owned = (a) => state.browsers.filter((b) => b.owner?.type === "agent" && b.owner.id === a.id).length;
 
-  const head = h("thead", {}, h("tr", {},
-    h("th", { scope: "col" }, "Name"),
-    h("th", { scope: "col" }, "Id"),
-    h("th", { scope: "col" }, "Last seen"),
-    // An unlabelled column reads as nothing at all in a screen reader's table summary.
-    h("th", { scope: "col" }, "Actions"),
-  ));
+  // What it may do beyond its own browsers, by name. A count of scopes answered nothing: the
+  // question on this page is whether an agent can copy logins or open tunnels, not how many
+  // strings its token carries.
+  const extras = (a) => {
+    const held = state.permissions.filter((p) => a.scopes.includes(p.scope)).map((p) => p.label);
+    if (!held.length) return h("span", { class: "sub" }, "Its own browsers only");
+    const shown = held.slice(0, 2);
+    return h("div", { class: "chips" },
+      ...shown.map((label) => h("span", { class: "chip" }, label)),
+      held.length > shown.length ? h("span", { class: "chip", title: held.slice(2).join(", ") }, `+${held.length - shown.length}`) : null);
+  };
 
-  const row = (a) => h("tr", {},
-    h("td", {}, displayName(a), h("div", { class: "sub" }, origin(a) + limit(a))),
-    h("td", { class: "mono" }, a.id),
-    // A raw ISO timestamp to the millisecond made the reader subtract dates to answer "is this
-    // one still in use?". The exact value stays on the title for when it is actually wanted --
-    // the same treatment saved profiles already use.
-    h("td", { title: a.lastSeenAt || false },
-      a.lastSeenAt ? ago(a.lastSeenAt) : h("span", { class: "sub" }, "Never used")),
-    h("td", {},
-      h("button", { class: "btn", onClick: () => editPermissions(a) }, "Permissions"), " ",
-      // A connector has no dashboard token to rotate; its credentials come from the grant.
-      isConnector(a) ? null : h("button", { class: "btn", onClick: () => rotate(a.id) }, "Replace token…"),
-      " ",
-      // Revoke cuts a live agent off. It sat next to Rotate in the same grey, and the two
-      // words even start alike.
-      // "Enable" read as an undo for Revoke. It is not: the token is gone for good.
-      h("button", { class: a.enabled ? "btn danger" : "btn", onClick: () => toggleAgent(a) },
-        a.enabled ? "Revoke" : "Re-enable"),
-    ),
-  );
+  const row = (a) => {
+    const name = displayName(a);
+    // Active within the last five minutes: a session that is plainly in use right now.
+    const live = a.enabled && a.lastSeenAt && Date.now() - Date.parse(a.lastSeenAt) < 5 * 60e3;
+    const cap = a.maxBrowsers > 0 ? h("span", { class: "sub" }, ` of ${a.maxBrowsers}`) : null;
+    return h("tr", {
+      class: a.enabled ? "click-row" : "revoked-row",
+      // The name is the keyboard's way in; the row is a bigger target for the pointer.
+      onClick: (e) => { if (a.enabled && !e.target.closest("button, a")) void editPermissions(a); },
+    },
+      h("td", {}, h("div", { class: "cell-main" },
+        h("span", { class: "avatar sq", "aria-hidden": "true" }, initial(name)),
+        h("div", { class: "cell-text" },
+          a.enabled
+            ? h("button", { class: "cell-t linklike", type: "button", onClick: () => editPermissions(a) }, name)
+            : h("span", { class: "cell-t" }, name),
+          h("div", { class: "cell-d" }, origin(a))))),
+      h("td", {}, extras(a)),
+      h("td", { class: "num" }, String(owned(a)), cap),
+      // A raw ISO timestamp made the reader subtract dates to answer "is this one still in
+      // use?". The exact value stays on the title for when it is actually wanted.
+      h("td", { title: a.lastSeenAt || false },
+        h("span", { class: "seen" }, h("span", { class: `seen-dot${live ? " live" : ""}`, "aria-hidden": "true" }),
+          a.lastSeenAt ? ago(a.lastSeenAt) : "Never used")),
+      h("td", { class: "r" }, a.enabled
+        ? moreButton(`More actions for ${name}`, () => [
+            { label: "Permissions…", onSelect: () => editPermissions(a) },
+            // A connector has no dashboard token to rotate; its credentials come from the grant.
+            isConnector(a) ? null : { label: "Replace token…", onSelect: () => rotate(a.id) },
+            { label: "Copy agent ID", onSelect: () => copyValue(a.id, "Agent ID") },
+            "-",
+            { label: "Revoke…", danger: true, onSelect: () => toggleAgent(a) },
+          ])
+        // "Enable" read as an undo for Revoke. It is not: the token is gone for good.
+        : h("button", { class: "btn sm", type: "button", onClick: () => toggleAgent(a) }, "Re-enable")),
+    );
+  };
 
   const table = (list, label) =>
-    h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": label },
-      h("table", { class: "table" }, head.cloneNode(true), h("tbody", {}, ...list.map(row))));
+    h("div", { class: "table-wrap panel", tabindex: "0", role: "region", "aria-label": label },
+      h("table", { class: "table rows" },
+        h("thead", {}, h("tr", {},
+          h("th", { scope: "col" }, "Agent"),
+          h("th", { scope: "col" }, "Also allowed"),
+          h("th", { scope: "col", class: "num" }, "Browsers"),
+          h("th", { scope: "col" }, "Last seen"),
+          // An unlabelled column reads as nothing at all in a screen reader's table summary.
+          h("th", { scope: "col" }, h("span", { class: "visually-hidden" }, "Actions")))),
+        h("tbody", {}, ...list.map(row))));
 
+  const loaded = Boolean(state.data.agents.loadedAt);
   layout([
     h("div", { class: "top" },
       h("div", {},
         h("h1", {}, "Agents"),
-        h("div", { class: "sub" }, "Agents and OAuth connectors that can drive browsers here."),
-      ),
-      h("button", { class: "btn primary", disabled: !state.data.agents.loadedAt, onClick: createAgent }, "New agent"),
-    ),
-    // Five lines of token policy sat above the table and answered nothing anyone arrives with.
-    // It is still one click away, which is where a rule you read once belongs.
-    h("details", { class: "setting-more plain" },
-      h("summary", {}, "How agent tokens work"),
-      h("p", {}, "You see a token once, when you create or rotate it, because the server keeps only its SHA-256 hash. Revoking stops the agent at its next request and kills its token for good."),
-    ),
+        h("div", { class: "sub" }, "MCP clients and OAuth connectors that can drive browsers here.")),
+      loaded && state.agents.length === 0 ? null
+        : h("button", { class: "btn primary", disabled: !loaded, onClick: createAgent }, "New agent")),
     dataNotice("agents", "agents"),
     active.length
       ? table(active, "Active agents")
-      : !state.data.agents.loadedAt ? null : h("p", { class: "sub" },
-          state.agents.length === 0
-            ? "No agents yet. Create one to give an MCP client a token."
-            : "Nothing can reach your browsers. Every agent here has been revoked."),
+      : !loaded ? null
+        : state.agents.length === 0
+          ? emptyState("No agents yet", [
+              "Create an agent to give an MCP client such as Claude Code or Codex a token.",
+              "OAuth connectors such as claude.ai appear here by themselves once you approve them."],
+              h("button", { class: "btn primary", type: "button", onClick: createAgent }, "New agent"), ICON_BOT)
+          : emptyState("Nothing can reach your browsers", "Every agent here has been revoked. Re-enable one below, or create a new one.", null, ICON_BOT),
     // Closed by default: these are history. The count is on the summary so the page never hides
     // the fact that they exist.
     revoked.length
       ? h("details", { class: "setting-more plain revoked" },
           h("summary", {}, `Revoked · ${revoked.length}`),
-          h("p", {}, "These stop at their next request. Re-enabling brings the row back but not the token: a plain agent then needs a rotate, and a connector has to authorize again."),
+          h("p", {}, "These stop at their next request. Re-enabling brings the row back but not the token: a plain agent then needs a new token, and a connector has to authorize again."),
           table(revoked, "Revoked agents"))
       : null,
+    // Five lines of token policy sat above the table and answered nothing anyone arrives with.
+    // A rule you read once belongs at the foot of the page.
+    active.length ? h("p", { class: "sub sec-foot" },
+      "A token is shown once, when you create or replace it, because the server keeps only its hash. Revoking stops the agent at its next request.") : null,
   ]);
 }
 
 async function seedsView() {
+  const canUpdate = eligibleProfileBrowsers().length > 0 && !state.data.browsers.error;
+  const siteTag = (site) => site.state === "needs_sign_in"
+    ? h("span", { class: "tag warn" }, "Sign-in needed")
+    : site.lastConfirmedAt
+      ? h("span", { class: "tag ok", title: `Last confirmed ${ago(site.lastConfirmedAt)}, before the profile was saved` }, "Confirmed")
+      : h("span", { class: "tag", title: site.state === "expected" ? "Copied from another profile and never confirmed" : "Recorded by hand and never observed" }, "Not checked");
+
+  const card = (s) => {
+    const sites = s.signedInSites || [];
+    const shown = sites.slice(0, 4);
+    const meta = [s.metadata?.project, s.metadata?.purpose].filter(Boolean).join(" · ");
+    const saved = s.updated_at || s.created_at;
+    return h("article", { class: "ocard" },
+      h("div", { class: "ocard-h" },
+        h("div", { class: "ocard-title" }, h("h2", {}, s.name), meta ? h("div", { class: "sub" }, meta) : null),
+        moreButton(`More actions for ${s.name}`, () => [
+          { label: "Edit recorded sites…", onSelect: () => editSeedSites(s) },
+          canUpdate ? { label: "Update from a browser…", onSelect: () => saveProfileTemplate(null, s) } : null,
+          "-",
+          { label: "Delete…", danger: true, onSelect: () => deleteSavedProfile(s) },
+        ])),
+      sites.length
+        ? h("ul", { class: "ocard-rows", "aria-label": `Sites recorded in ${s.name}` },
+            ...shown.map((site) => h("li", {},
+              h("span", { class: "ocard-row-t" }, site.name, h("span", { class: "mono sub" }, site.origin.replace(/^https?:\/\//, ""))),
+              siteTag(site))),
+            sites.length > shown.length ? h("li", { class: "sub" },
+              h("button", { class: "linklike", type: "button", onClick: () => editSeedSites(s) }, `and ${sites.length - shown.length} more`)) : null)
+        : h("div", { class: "ocard-none sub" }, "No sites recorded. It may still hold logins. ",
+            h("button", { class: "linklike", type: "button", onClick: () => editSeedSites(s) }, "Record one")),
+      h("div", { class: "ocard-foot" },
+        saved ? h("span", { title: saved }, `Saved ${ago(saved)}`) : h("span", {}),
+        h("button", { class: "btn sm", type: "button", "aria-label": `Create browser from ${s.name}`, onClick: () => createFromTemplate(s) },
+          icon(ICON_PLUS), "Create browser")));
+  };
+
+  const loaded = Boolean(state.data.seeds.loadedAt);
   layout([
     h("div", { class: "top" },
-      h("div", {}, h("h1", {}, "Saved profiles"), h("div", { class: "sub" }, "Start independent browsers with saved logins and metadata. Changes in one browser do not affect another. Update a saved profile explicitly to change future copies.")),
-    ),
-    h("p", { class: "sub" }, "Badges show detected or reported sign-ins, not every saved login. A missing badge does not mean a login was lost."),
+      h("div", {},
+        h("h1", {}, "Saved profiles"),
+        h("div", { class: "sub" }, "Logins you can start new browsers from. Each new browser gets its own copy; nothing flows back unless you update the profile."))),
     dataNotice("seeds", "saved profiles"),
     dataNotice("browsers", "profile sources"),
-    !eligibleProfileBrowsers().length && state.data.browsers.loadedAt ? h("p", { class: "sub" }, "Updating a saved profile needs a browser on this instance. Linked browsers and worker browsers cannot be profile sources.") : null,
-    h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": "Saved profiles" }, h("table", { class: "table" },
-      h("thead", {}, h("tr", {}, h("th", {}, "Profile"), h("th", {}, "Recorded sites"), h("th", {}, "Saved"), h("th", {}, "Actions"))),
-      h("tbody", {},
-        state.seeds.length === 0 && state.data.seeds.loadedAt
-          ? h("tr", {}, h("td", { colspan: "4", class: "sub" }, "No saved profiles yet. Open a browser, sign in to the sites you need, then choose Save profile. You do not need to stop it first."))
-          : null,
-        ...state.seeds.map((s) => h("tr", {},
-          h("td", {}, s.name, h("div", { class: "sub" }, [s.metadata?.project, s.metadata?.purpose].filter(Boolean).join(" · "))),
-          h("td", {}, h("div", { class: "seed-sites" },
-            sitePills(s) || h("span", { class: "sub" }, "None recorded"),
-            h("button", { class: "btn tiny", "aria-label": `Edit recorded sites for ${s.name}`, onClick: () => editSeedSites(s) }, "Edit"))),
-          h("td", { title: s.updated_at || s.created_at }, ago(s.updated_at || s.created_at)),
-          h("td", {}, h("div", { class: "row" }, h("button", {
-            class: "btn",
-            "aria-label": `Create browser from ${s.name}`,
-            onClick: () => createFromTemplate(s),
-          }, "Create browser"), " ", h("button", { class: "btn", disabled: !eligibleProfileBrowsers().length || Boolean(state.data.browsers.error), title: "Copy logins from a browser on this instance", onClick: () => saveProfileTemplate(null, s) }, "Update saved profile"), " ",
-            h("button", { class: "btn danger", "aria-label": `Delete saved profile ${s.name}`, onClick: () => deleteSavedProfile(s) }, "Delete"))),
-        )),
-      ),
-    )),
+    state.seeds.length
+      ? h("div", { class: "ogrid" }, ...state.seeds.map(card))
+      : !loaded ? null
+        : emptyState("No saved profiles yet", [
+            "Open a browser and sign in to the sites you need. Then, on its Settings tab, choose Save as profile. You do not need to stop it first."],
+            h("button", { class: "btn", type: "button", onClick: () => go("/") }, "Go to browsers"), ICON_LAYERS),
+    state.seeds.length ? h("p", { class: "sub sec-foot" },
+      "Recorded sites are sign-ins that were detected or reported, not every saved login. A missing site does not mean a login was lost.") : null,
+    state.seeds.length && !canUpdate && state.data.browsers.loadedAt ? h("p", { class: "sub sec-foot" },
+      "Updating a saved profile needs a browser on this instance. Linked browsers and worker browsers cannot be profile sources.") : null,
   ]);
 }
 
@@ -3806,49 +3920,6 @@ async function createFromTemplate(template) {
   return createBrowser(template.id);
 }
 
-async function securityView() {
-  // refresh() uses allSettled, so a failed /status leaves state.status null while every other
-  // view still renders. Falling through to the falsy branches printed "Private network:
-  // blocked" and "OAuth connectors: turned off" as fact, from no data at all. On the one page
-  // an operator opens to check a containment property before trusting it with a bank login,
-  // an unknown must never render as the safe answer.
-  if (!state.status) {
-    layout([
-      h("h1", {}, "Security state"),
-      dataNotice("status", "security state"),
-    ]);
-    return;
-  }
-  const s = state.status;
-  // Three states, not two: on, off, and we do not know.
-  const tri = (v, on, off) => (v === undefined || v === null
-    ? h("dd", { class: "warn" }, "unknown")
-    : h("dd", { class: v ? "warn" : "" }, v ? on : off));
-  layout([
-    h("h1", {}, "Security state"),
-    dataNotice("status", "security state"),
-    h("dl", { class: "kv" },
-      h("dt", {}, "Sandbox policy"), h("dd", {}, s.sandbox ?? "unknown"),
-      h("dt", {}, "GPU"), h("dd", {}, s.gpu ?? "unknown"),
-      // "ALLOWED"/"blocked" were not a matched pair; the warn class already carries the alarm.
-      h("dt", {}, "Private network"), tri(s.allowPrivateNetwork, "allowed", "blocked"),
-      h("dt", {}, "Display"),
-      s.xvfb === undefined ? h("dd", { class: "warn" }, "unknown") : h("dd", {}, s.xvfb ? "virtual (Xvfb)" : "host display"),
-      h("dt", {}, "OAuth connectors"),
-      s.oauth === undefined ? h("dd", { class: "warn" }, "unknown") : h("dd", {}, s.oauth ? "accepted" : "refused"),
-      h("dt", {}, "Fleet"), h("dd", {}, s.running === undefined ? "unknown" : s.maxBrowsers ? `${s.running}/${s.maxBrowsers}` : `${s.running} running, no cap`),
-    ),
-    // The old text here said the viewer "listens on loopback only". It does not: viewer.ts
-    // attaches its upgrade handler to the same http server that index.ts binds to config.host,
-    // which defaults to 0.0.0.0. Only Chrome's debugging port is pinned to 127.0.0.1
-    // (chrome.ts, --remote-debugging-address). What actually guards the viewer is the ticket.
-    h("h2", {}, "What holds this together"),
-    h("p", {}, "Chrome's debugging port listens on 127.0.0.1, so nothing outside this container can drive it directly. The viewer socket is different. It is served on the same public origin as this page. What guards it is the ticket, and each ticket works once, for one browser, for sixty seconds."),
-    h("p", {}, "Chrome starts from an allowlisted environment, so ADMIN_SECRET and agent tokens are not in the process it runs as. Outbound traffic goes through a proxy that resolves DNS first, then refuses private, link-local and metadata addresses. Every takeover is written to the audit log, and a forced one records who was displaced."),
-    h("p", {}, "None of this limits what an agent does once it is already inside a session you logged in."),
-  ]);
-}
-
 /**
  * Workers: other services running this image, which run browsers for this instance.
  *
@@ -3859,49 +3930,74 @@ async function securityView() {
 async function workersView() {
   const workers = state.workers || [];
   const status = (w) => w.problem
-    ? h("td", {}, h("span", { class: "warn" }, w.online ? "Wrong release" : "Not answering"), h("div", { class: "sub" }, w.problem))
-    : h("td", {}, "Online");
+    ? [h("span", { class: "pill warn" }, h("span", { class: "pill-dot" }), w.online ? "Wrong release" : "Not answering"),
+        h("div", { class: "cell-d" }, w.problem)]
+    : h("span", { class: "pill ok" }, h("span", { class: "pill-dot" }), "Online");
+  const processes = (w) => w.pids
+    ? h("div", { class: "meterline-wrap" },
+        h("span", { class: `meterline${w.pids.current / w.pids.max > 0.85 ? " warn" : ""}`, "aria-hidden": "true" },
+          h("i", { style: `width:${Math.min(100, (w.pids.current / w.pids.max) * 100).toFixed(1)}%` })),
+        h("span", { class: "num sub" }, `${w.pids.current.toLocaleString()} of ${w.pids.max.toLocaleString()}`))
+    : h("span", { class: "sub" }, "No limit");
   const row = (w) => h("tr", {},
-    h("td", {}, w.name, h("div", { class: "sub" }, `release ${w.version || "unknown"} · ${w.url}`)),
-    status(w),
-    h("td", {}, w.pids ? `${w.pids.current} of ${w.pids.max}` : h("span", { class: "sub" }, "No limit")),
-    h("td", {}, String(w.browsers), h("div", { class: "sub" }, `${w.running} running`)),
-    h("td", {},
-      h("button", { class: "btn danger", disabled: w.browsers > 0,
-        title: w.browsers > 0 ? "Move or delete its browsers first." : false,
+    h("td", {}, h("div", { class: "cell-main" },
+      h("span", { class: "tile", "aria-hidden": "true" }, icon(ICON_SERVER)),
+      h("div", { class: "cell-text" },
+        h("span", { class: "cell-t" }, w.name),
+        h("div", { class: "cell-d mono" }, `${w.version || "unknown release"} · ${w.url}`)))),
+    h("td", {}, status(w)),
+    h("td", {}, processes(w)),
+    h("td", { class: "num" }, String(w.browsers), h("div", { class: "cell-d" }, `${w.running} running`)),
+    h("td", { class: "r" },
+      h("button", { class: "btn sm", type: "button", disabled: w.browsers > 0,
+        title: w.browsers > 0 ? "Move or delete its browsers first" : false,
         onClick: () => act(() => removeWorker(w)) }, "Remove")),
   );
+  const loaded = Boolean(state.data.workers.loadedAt);
   layout([
     h("div", { class: "top" },
       h("div", {},
         h("h1", {}, "Workers"),
-        h("div", { class: "sub" }, "Each worker is another service that runs browsers for this instance, within its own process limit."),
-      ),
-      h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => act(addWorker) }, "Add worker")),
-    ),
+        h("div", { class: "sub" }, "Other services that run browsers for this instance, each within its own process limit.")),
+      loaded && !workers.length ? null
+        : h("button", { class: "btn primary", type: "button", disabled: !loaded, onClick: () => act(addWorker) }, "Add worker")),
     dataNotice("workers", "workers"),
     workers.length
-      ? h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": "Workers" },
-          h("table", { class: "table" },
+      ? h("div", { class: "table-wrap panel", tabindex: "0", role: "region", "aria-label": "Workers" },
+          h("table", { class: "table rows" },
             h("thead", {}, h("tr", {},
-              h("th", { scope: "col" }, "Name"),
+              h("th", { scope: "col" }, "Worker"),
               h("th", { scope: "col" }, "Status"),
               h("th", { scope: "col" }, "Processes"),
-              h("th", { scope: "col" }, "Browsers"),
-              h("th", { scope: "col" }, "Actions"),
-            )),
+              h("th", { scope: "col", class: "num" }, "Browsers"),
+              h("th", { scope: "col" }, h("span", { class: "visually-hidden" }, "Actions")))),
             h("tbody", {}, ...workers.map(row))))
-      : !state.data.workers.loadedAt ? null : h("p", {}, "No workers yet. This instance runs every browser itself, within its host’s process limit. Add a worker when that limit is what stops another browser from starting."),
-    h("h2", {}, "How a worker fits in"),
-    h("p", {}, "A worker runs this same image with one setting, TALLYLAMP_JOIN. It has no dashboard and no agents of its own. This instance starts, drives and stops its browsers over your project’s private network, so both must be in the same Railway project and on the same release."),
-    h("p", {}, "A new browser stays on this instance while it has room, and goes to a worker when it has not. To move one, choose Move to… from its ⋯ menu. A running browser stops for the copy and starts again on the new host. Everything works there as it does here, apart from saving a browser as a saved profile."),
+      : !loaded ? null
+        : emptyState("This instance runs every browser itself", [
+            "Add a worker when the host’s process limit is what stops another browser from starting.",
+            ["A worker is this same image with ", h("code", {}, "TALLYLAMP_JOIN"), " set, in the same Railway project."]],
+            h("button", { class: "btn primary", type: "button", onClick: () => act(addWorker) }, "Add worker"), ICON_SERVER),
+    h("details", { class: "setting-more plain" },
+      h("summary", {}, "How a worker fits in"),
+      h("p", {}, "A worker runs this same image with one setting, TALLYLAMP_JOIN. It has no dashboard and no agents of its own. This instance starts, drives and stops its browsers over your project’s private network, so both must be in the same Railway project and on the same release."),
+      h("p", {}, "A new browser stays on this instance while it has room, and goes to a worker when it has not. To move one, open its Settings tab and choose Move… beside Runs on. A running browser stops for the copy and starts again on the new host. Everything works there as it does here, apart from saving it as a saved profile.")),
   ]);
 }
 
 async function addWorker() {
   const made = await api("/api/v1/workers/join-tokens", { method: "POST" });
+  const before = new Set((state.workers || []).map((w) => w.id));
   revealToken("Add a worker", made.token, {
-    note: "In this same Railway project, choose New, then Template, and pick Tallylamp Worker. Paste this token as TALLYLAMP_JOIN. The worker shows here once it has joined. The token adds one worker and expires in an hour.",
+    note: "In this same Railway project, choose New, then Template, and pick Tallylamp Worker. Paste this token as TALLYLAMP_JOIN. The token adds one worker and expires in an hour.",
+    wait: {
+      pending: "Listening for the new worker. This updates by itself.",
+      check: async () => {
+        await loadDataset("workers");
+        return (state.workers || []).find((w) => !before.has(w.id)) || null;
+      },
+      done: (w) => [`${w.name} joined`, "New browsers go to it once this instance is full."],
+      onClose: () => { if (route().name === "workers") void workersView(); },
+    },
   });
 }
 
@@ -3919,52 +4015,227 @@ async function removeWorker(w) {
  *
  * Some sites refuse a datacenter address before anyone touches the page, and accept the same
  * browser arriving from a home connection. Adding a gateway is rare and deliberate, so this is a
- * list and one button. Which browser uses which gateway is set on the browser, where it matters.
+ * set of cards and one button. Which browser uses which gateway is set on the browser.
  */
 async function gatewaysView() {
   const gateways = state.gateways || [];
-  const where = (g) => [g.client?.hostname, g.remoteAddress ? `from ${g.remoteAddress}` : ""].filter(Boolean).join(" · ");
-  const status = (g) => g.online
-    ? h("td", {}, "Connected", h("div", { class: "sub" }, where(g)))
-    : h("td", {}, h("span", { class: "warn" }, "Not connected"),
-      h("div", { class: "sub" }, g.lastSeenAt ? `Last seen ${new Date(g.lastSeenAt).toLocaleString()}` : "Never connected yet. Run its command on that computer."));
-  const row = (g) => h("tr", {},
-    h("td", {}, g.name),
-    status(g),
-    h("td", {}, g.browsers.length ? g.browsers.map((b) => b.name).join(", ") : h("span", { class: "sub" }, "None")),
-    h("td", {}, megabytes(g.bytesDown), h("div", { class: "sub" }, `${megabytes(g.bytesUp)} sent`)),
-    h("td", {},
-      h("button", { class: "btn danger", disabled: g.browsers.length > 0,
-        title: g.browsers.length > 0 ? "Switch its browsers to another connection first." : false,
-        onClick: () => act(() => removeGatewayUi(g)) }, "Remove")),
-  );
+  const where = (g) => [g.remoteAddress ? `Connected from ${g.remoteAddress}` : "Connected", g.client?.hostname].filter(Boolean).join(" · ");
+  const card = (g) => h("article", { class: "ocard" },
+    h("div", { class: "ocard-h" },
+      h("span", { class: `tile${g.online ? " ok" : ""}`, "aria-hidden": "true" }, icon(ICON_ROUTER)),
+      h("div", { class: "ocard-title" },
+        h("h2", {}, g.name),
+        h("div", { class: "sub" }, g.online ? where(g)
+          : g.lastSeenAt ? `Last seen ${ago(g.lastSeenAt)}` : "Never connected. Run its command on that computer.")),
+      g.online
+        ? h("span", { class: "pill ok" }, h("span", { class: "pill-dot live" }), "Connected")
+        : h("span", { class: "pill warn" }, h("span", { class: "pill-dot" }), "Not connected")),
+    // Traffic means nothing until the computer has connected once.
+    g.online || g.lastSeenAt ? h("div", { class: "ocard-stat" },
+      h("div", { class: "sub" }, "Received"),
+      h("div", { class: "stat num" }, megabytes(g.bytesDown)),
+      h("div", { class: "sub" }, `${megabytes(g.bytesUp)} sent`)) : null,
+    h("div", { class: "ocard-foot" },
+      h("span", {}, g.browsers.length ? `Used by ${g.browsers.map((b) => b.name).join(", ")}` : "No browser uses it yet"),
+      h("button", { class: "btn sm", type: "button", disabled: g.browsers.length > 0,
+        title: g.browsers.length > 0 ? "Switch its browsers to another connection first" : false,
+        onClick: () => act(() => removeGatewayUi(g)) }, "Remove")));
+  const loaded = Boolean(state.data.gateways.loadedAt);
   layout([
     h("div", { class: "top" },
       h("div", {},
         h("h1", {}, "Gateways"),
-        h("div", { class: "sub" }, "A gateway is a computer of yours that browsers reach the web from, so sites see your connection instead of this host's."),
-      ),
-      h("div", { class: "row" }, h("button", { class: "btn primary", onClick: () => act(addGatewayUi) }, "Add gateway")),
-    ),
+        h("div", { class: "sub" }, "Computers of yours that browsers can reach the web from, so sites see your connection instead of this host’s.")),
+      loaded && !gateways.length ? null
+        : h("button", { class: "btn primary", type: "button", disabled: !loaded, onClick: () => act(addGatewayUi) }, "Add gateway")),
     dataNotice("gateways", "gateways"),
     gateways.length
-      ? h("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": "Gateways" },
-          h("table", { class: "table" },
-            h("thead", {}, h("tr", {},
-              h("th", { scope: "col" }, "Name"),
-              h("th", { scope: "col" }, "Status"),
-              h("th", { scope: "col" }, "Browsers"),
-              h("th", { scope: "col" }, "Received"),
-              h("th", { scope: "col" }, "Actions"),
-            )),
-            h("tbody", {}, ...gateways.map(row))))
-      : !state.data.gateways.loadedAt ? null : h("p", {}, "No gateways yet. Every browser reaches the web from this host."),
-    h("h2", {}, "When to use one"),
-    h("p", {}, "Some sites judge the address a browser comes from before anyone touches the page. From a datacenter, Cloudflare can show a check that a person at the viewer cannot pass, and a signed-in ChatGPT can refuse to load. Through a gateway, the same browser arrives from your own connection."),
-    h("h2", {}, "What a gateway can reach"),
-    h("p", {}, "Tallylamp checks every address first and hands the gateway only public ones. The gateway refuses its own network on top: your router, your other devices, and anything on a VPN or Tailscale. HTTPS stays encrypted from the browser to the site, so the gateway passes on bytes it cannot read. It does see which sites are visited, and when."),
-    h("p", {}, "A browser on a gateway works only while that computer is awake and running the command. It never falls back to this host's connection, so its pages fail until the gateway is back. Pages load at your connection's upload speed. Gateways work for browsers on the main instance, not on workers."),
+      ? h("div", { class: "ogrid" }, ...gateways.map(card))
+      : !loaded ? null
+        : emptyState("No gateways yet", [
+            "Some sites judge the address a browser comes from before anyone touches the page. From a datacenter, Cloudflare can show a check that a person at the viewer cannot pass, and a signed-in ChatGPT can refuse to load. Through a gateway, the same browser arrives from your own connection."],
+            h("button", { class: "btn primary", type: "button", onClick: () => act(addGatewayUi) }, "Add gateway"), ICON_ROUTER),
+    h("div", { class: "callout" }, icon(ICON_SHIELD),
+      h("div", {},
+        h("p", {}, h("strong", {}, "What a gateway can reach. "),
+          "Tallylamp checks every address first and hands the gateway only public ones. The gateway refuses its own network on top: your router, your other devices, and anything on a VPN or Tailscale. HTTPS stays encrypted from the browser to the site, so the gateway passes on bytes it cannot read. It does see which sites are visited, and when."),
+        h("p", {}, "A browser on a gateway works only while that computer is awake and running the command. It never falls back to this host’s connection. Pages load at your connection’s upload speed. Gateways work for browsers on the main instance, not on workers."))),
   ]);
+}
+
+/**
+ * Settings: this dashboard's preferences, and how this instance is set up. Theme and search used
+ * to live only in the account menu, and Security was a page of its own that could change
+ * nothing. They sit together here, where every admin tool keeps them.
+ */
+const SETTINGS_SECTIONS = [
+  ["preferences", "Preferences", ICON_SLIDERS],
+  ["security", "Security", ICON_SHIELD],
+  ["instance", "Instance", ICON_SERVER],
+  ["account", "Account", ICON_USER],
+];
+
+function settingsSection() {
+  const wanted = route().section;
+  return SETTINGS_SECTIONS.some(([id]) => id === wanted) ? wanted : "preferences";
+}
+
+async function settingsView() {
+  // The old address keeps working, and lands on the section that replaced it.
+  if (location.pathname.startsWith("/security")) history.replaceState({}, "", "/settings/security");
+  const section = settingsSection();
+  // A section that does not exist shows Preferences, so the address should say that too.
+  const shown = section === "preferences" ? "/settings" : `/settings/${section}`;
+  if (location.pathname !== shown && location.pathname !== "/settings/preferences") history.replaceState({}, "", shown);
+  const label = SETTINGS_SECTIONS.find(([id]) => id === section)[1];
+  document.title = `${label} · Settings · Tallylamp`;
+  const body = { preferences: preferencesSection, security: securitySection, instance: instanceSection, account: accountSection }[section]();
+  layout([
+    h("div", { class: "top" },
+      h("div", {},
+        h("h1", {}, "Settings"),
+        h("div", { class: "sub" }, "Preferences for this dashboard, and how this instance is set up."))),
+    h("div", { class: "settings-page" },
+      h("nav", { class: "subnav", "aria-label": "Settings" },
+        ...SETTINGS_SECTIONS.map(([id, name, paths]) => h("a", {
+          href: `/settings/${id}`, class: "subnav-item", "aria-current": id === section ? "page" : false,
+          // A section switch needs no fresh data, so it skips the full reload a route change does.
+          onClick: (e) => {
+            e.preventDefault();
+            if (id === section) return;
+            history.pushState({}, "", `/settings/${id}`);
+            void settingsView();
+            // The whole page was rebuilt; keep the keyboard on the item it just chose.
+            document.querySelector('.subnav-item[aria-current="page"]')?.focus();
+          },
+        }, icon(paths), h("span", {}, name)))),
+      h("div", { class: "settings-body" }, ...[body].flat().filter(Boolean))),
+  ]);
+}
+
+function preferencesSection() {
+  const theme = currentTheme();
+  const options = [["system", "Match the system"], ["light", "Light"], ["dark", "Dark"]];
+  // Radio cards with a roving tab stop: one Tab reaches the group, arrows choose, as in the
+  // browser page's Connection choice.
+  const cards = options.map(([id, name]) => h("button", {
+    type: "button", class: "theme-card", role: "radio", "aria-checked": String(theme === id),
+    tabindex: theme === id ? "0" : "-1", "data-theme-id": id,
+    onClick: () => choose(id),
+  }, h("span", { class: `theme-prev ${id}`, "aria-hidden": "true" }, h("i"), h("b")), h("span", { class: "theme-name" }, name)));
+  const group = h("div", { class: "theme-cards", role: "radiogroup", "aria-label": "Theme",
+    onKeydown: (e) => {
+      const i = cards.indexOf(document.activeElement);
+      if (i < 0) return;
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      const next = cards[(i + step + cards.length) % cards.length];
+      next.focus();
+      choose(next.dataset.themeId);
+    } }, ...cards);
+  function choose(id) {
+    applyTheme(id);
+    for (const c of cards) {
+      const on = c.dataset.themeId === id;
+      c.setAttribute("aria-checked", String(on));
+      c.tabIndex = on ? 0 : -1;
+    }
+  }
+
+  const search = currentSearch();
+  const engines = h("div", { class: "settings", role: "radiogroup", "aria-label": "Address bar search" },
+    ...SEARCHES.map((engine) => {
+      const input = h("input", { type: "radio", name: "search-engine", value: engine.id, checked: engine.id === search.id ? "checked" : false,
+        onChange: () => {
+          setSearch(engine.id);
+          toast("Address bar search changed", { detail: engine.id === "off" ? "Typing a phrase will no longer search." : `Phrases you type go to ${engine.label}.` });
+        } });
+      return h("label", { class: "setting radio-row" }, input,
+        h("span", { class: "setting-name" }, engine.id === "off" ? "Off" : engine.label),
+        engine.id === "off" ? h("span", { class: "sub" }, "The address bar takes only addresses") : null);
+    }));
+
+  return [
+    pageSection("Appearance", null, group),
+    pageSection("Address bar search", "When you have control and type a phrase", engines),
+    pageSection("Keyboard", null, h("div", { class: "settings" },
+      settingRow("Shortcuts", `Press ? anywhere for the list. G then a letter goes to a page; ${MOD_KEY} K searches.`,
+        h("button", { class: "btn", type: "button", onClick: shortcutsDialog }, "Show shortcuts")))),
+  ];
+}
+
+function securitySection() {
+  // refresh() uses allSettled, so a failed /status leaves state.status null while every other
+  // view still renders. Falling through to the falsy branches printed "Private network:
+  // blocked" and "OAuth connectors: turned off" as fact, from no data at all. On the one page
+  // an operator opens to check a containment property before trusting it with a bank login,
+  // an unknown must never render as the safe answer.
+  if (!state.status) return dataNotice("status", "security state") || h("p", { class: "sub" }, "Loading…");
+  const s = state.status;
+  const unknown = ["warn", "Unknown"];
+  const item = ([tone, value], title, text) => h("div", { class: "setting status-row" },
+    h("span", { class: `status-ic ${tone}`, "aria-hidden": "true" }, icon(tone === "ok" ? ICON_SHIELD : tone === "warn" ? ICON_ALERT : ICON_INFO)),
+    h("div", { class: "setting-text" },
+      h("div", { class: "setting-name" }, title, h("span", { class: `pill ${tone}` }, value)),
+      h("div", { class: "sub" }, text)));
+  return [
+    pageSection("Containment", "Read-only. Set by environment variables.", h("div", { class: "settings" },
+      // auto falls back to no sandbox on a host without user namespaces, so it is not the safe answer.
+      item(s.sandbox === undefined ? unknown : { on: ["ok", "Required"], off: ["warn", "Off"] }[s.sandbox] || ["idle", "Automatic"], "Chrome sandbox",
+        s.sandbox === "off" ? "Chrome's renderer sandbox is turned off on this host."
+          : s.sandbox === "on" ? "Chrome runs its renderers in its own sandbox, and a browser will not start without one."
+            : "Chrome runs its renderers in its own sandbox where the host allows it. A browser's Details panel shows whether it got one."),
+      item(s.allowPrivateNetwork === undefined ? unknown : s.allowPrivateNetwork ? ["warn", "Allowed"] : ["ok", "Blocked"], "Private network",
+        "Outbound traffic goes through a proxy that resolves DNS first, then refuses private, link-local and metadata addresses."),
+      item(["ok", "Loopback only"], "DevTools port",
+        "Chrome's debugging port listens on 127.0.0.1, so nothing outside this container can drive it directly."),
+      item(["ok", "Single use · 60 s"], "Viewer tickets",
+        "The live view is served on this same public origin. What guards it is the ticket, and each one works once, for one browser, for sixty seconds."),
+      item(["ok", "Kept out"], "Secrets in Chrome",
+        "Chrome starts from an allowlisted environment, so ADMIN_SECRET and agent tokens are not in the process it runs as."),
+      item(s.oauth === undefined ? unknown : s.oauth ? ["idle", "Accepted"] : ["ok", "Refused"], "OAuth connectors",
+        s.oauth ? "Anyone who can reach this address can ask to connect. You approve each one on a consent page." : "Clients such as claude.ai cannot connect. Agents use tokens you create."),
+      item(["ok", "Recorded"], "Takeovers",
+        "Every takeover is written to the audit log, and a forced one records who was displaced."))),
+    h("div", { class: "callout" }, icon(ICON_INFO),
+      h("p", {}, h("strong", {}, "What this does not cover. "),
+        "None of this limits what an agent does once it is inside a session you signed in to. Give control to agents you trust with those accounts.")),
+  ];
+}
+
+function instanceSection() {
+  if (!state.status) return dataNotice("status", "instance details") || h("p", { class: "sub" }, "Loading…");
+  const s = state.status;
+  const pids = s.host?.pids;
+  const kv = (...pairs) => h("dl", { class: "kv" }, ...pairs.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]));
+  return [
+    pageSection("This instance", null, h("div", { class: "panel panel-b" }, kv(
+      ["Version", h("span", { class: "inline" }, h("span", { class: "mono" }, s.version ? `v${s.version}` : "Unknown"))],
+      ["Address", h("span", { class: "inline" }, h("span", { class: "mono" }, location.origin),
+        h("button", { class: "btn icon-only xs", type: "button", "aria-label": "Copy address", title: "Copy address", onClick: () => copyValue(location.origin, "Address") }, icon(ICON_COPY)))],
+      ["Browsers", s.running === undefined ? "Unknown"
+        : s.maxBrowsers ? `${s.running} running · ${s.occupiedSlots ?? s.running} of ${s.maxBrowsers} slots in use` : `${s.running} running · no cap`],
+      ["Processes", pids
+        ? h("span", { class: "meterline-wrap" },
+            h("span", { class: `meterline${pids.current / pids.max > 0.85 ? " warn" : ""}`, "aria-hidden": "true" },
+              h("i", { style: `width:${Math.min(100, (pids.current / pids.max) * 100).toFixed(1)}%` })),
+            h("span", { class: "num" }, `${pids.current.toLocaleString()} of ${pids.max.toLocaleString()}`))
+        : "No limit set by the host"],
+      ["Display", s.xvfb === undefined ? "Unknown" : s.xvfb ? "Virtual display (Xvfb)" : "Host display"],
+      ["GPU", s.gpu === undefined ? "Unknown" : { auto: "Automatic", software: "Software rendering", hardware: "Hardware" }[s.gpu] || s.gpu],
+      ["Full browser view", s.fullBrowser ? "Available" : "Not on this host"],
+      ["Human control", s.humanLeaseTtlSec ? `${s.humanLeaseTtlSec} s at a time, renewed while you watch` : "Unknown"],
+    ))),
+    h("p", { class: "sub sec-foot" }, "These come from the service's environment variables. Change them there and redeploy."),
+  ];
+}
+
+function accountSection() {
+  return pageSection("Account", null, h("div", { class: "settings" },
+    settingRow("Signed in as Administrator", "With the administrator secret. Signing out ends this dashboard session only.",
+      h("button", { class: "btn", type: "button", onClick: logout }, "Log out")),
+    settingRow("Administrator secret", "Set by ADMIN_SECRET on the service. Changing it signs out every dashboard session and disconnects OAuth connectors and linked browsers. Agent tokens keep working.", null)));
 }
 
 async function addGatewayUi() {
@@ -3972,16 +4243,29 @@ async function addGatewayUi() {
   const answers = await askFor("Add a gateway", [
     { name: "name", label: "Computer name", placeholder: "Studio Mac", required: true, maxLength: 60,
       hint: "Name it after the computer it will run on. Browsers show this name as their connection." },
-  ], "Create gateway", async (values) => {
+  ], "Continue", async (values) => {
     made = await api("/api/v1/gateways", { method: "POST", body: { name: values.name } });
   });
   if (!answers || !made) return;
   await loadDataset("gateways");
   void gatewaysView();
+  const id = made.gateway.id;
   revealToken(`Run ${made.gateway.name}`, made.token, {
     command: made.command,
+    commandOnly: true,
     commandLabel: "Run this in a terminal on that computer. It needs Node 22 or newer:",
-    note: "It keeps running, reconnects on its own and, on a Mac, keeps the computer from idling to sleep. Ctrl-C stops it. Then open a browser, stop it, and choose this gateway under Settings.",
+    note: "It keeps running, reconnects on its own and, on a Mac, keeps the computer from idling to sleep. Ctrl-C stops it.",
+    // The dialog ends on the computer arriving, not on a promise that it will.
+    wait: {
+      pending: `Waiting for ${made.gateway.name} to connect. This updates by itself.`,
+      check: async () => {
+        await loadDataset("gateways");
+        return (state.gateways || []).find((g) => g.id === id && g.online) || null;
+      },
+      done: (g) => [`${g.name} is connected`,
+        `${g.remoteAddress ? `From ${g.remoteAddress}. ` : ""}Choose it in a browser’s Settings tab, under Connection.`],
+      onClose: () => { if (route().name === "gateways") void gatewaysView(); },
+    },
   });
 }
 
@@ -4496,7 +4780,7 @@ async function retryDataset(name) {
   else if (current === "seeds") void seedsView();
   else if (current === "workers") void workersView();
   else if (current === "gateways") void gatewaysView();
-  else if (current === "security") void securityView();
+  else if (current === "settings") void settingsView();
   else if (current === "browser") detailMetadataRefresh?.();
 }
 
@@ -4709,7 +4993,7 @@ async function pairView(code) {
   );
 }
 
-const TITLES = { pair: "Link a browser", home: "Browsers", requests: "Requests", agents: "Agents", seeds: "Saved profiles", workers: "Workers", gateways: "Gateways", security: "Security state", login: "Sign in" };
+const TITLES = { pair: "Link a browser", home: "Browsers", requests: "Requests", agents: "Agents", seeds: "Saved profiles", workers: "Workers", gateways: "Gateways", settings: "Settings", login: "Sign in" };
 
 let renderSeq = 0;
 
@@ -4756,7 +5040,8 @@ async function render() {
     else if (r.name === "seeds" && (!name || ["seeds", "browsers"].includes(name))) void seedsView();
     else if (r.name === "workers" && (!name || name === "workers")) void workersView();
     else if (r.name === "gateways" && (!name || name === "gateways")) void gatewaysView();
-    else if (r.name === "security" && (!name || name === "status")) void securityView();
+    // Only Security and Instance read /status; repainting Preferences on it would drop focus.
+    else if (r.name === "settings" && (!name || (name === "status" && ["security", "instance"].includes(settingsSection())))) void settingsView();
   };
   try {
     ok = await refresh({ onAuthenticated: () => { startEvents(); showRoute(); }, onData: showRoute });

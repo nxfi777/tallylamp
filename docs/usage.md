@@ -39,7 +39,7 @@ have control, you can use the same strip to switch, open, and close tabs.
 
 The address bar accepts HTTP and HTTPS addresses. Other schemes are refused
 because they can bypass the egress proxy. Text that is not an address goes to
-the search engine you selected in the sidebar. A blank tab shows the browser
+the search engine you chose in Settings, under Preferences. A blank tab shows the browser
 name and instructions for using it.
 
 Pasting sends text from your clipboard into the remote page's focused field.

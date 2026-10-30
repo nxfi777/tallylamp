@@ -144,7 +144,7 @@ export function createApp(browsers: BrowserManager, mcp: McpHandler): express.Ex
     res.sendFile(cliPath);
   });
   app.use(express.static(dashboardDir));
-  app.get(["/", "/login", "/browsers", "/browsers/:id", "/requests", "/agents", "/seeds", "/workers", "/gateways", "/security", "/pair"], (_req, res) => {
+  app.get(["/", "/login", "/browsers", "/browsers/:id", "/requests", "/agents", "/seeds", "/workers", "/gateways", "/settings", "/settings/:section", "/security", "/pair"], (_req, res) => {
     res.sendFile(path.join(dashboardDir, "index.html"));
   });
 

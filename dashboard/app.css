@@ -1361,3 +1361,184 @@ body.busy::before {
   .dname.renamed, .pill.live .pill-dot, .rcard[aria-checked="true"] .rdot::after { animation: none; }
   .tab-ink, .reveal, .rcard, .dname, .seg button { transition: none; }
 }
+
+/* ---- Agents, Saved profiles, Workers, Gateways, Settings ---- */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.linklike {
+  padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.linklike:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sub .linklike { color: var(--text); font-weight: 500; }
+
+/* A table inside a panel: hairline rows, roomy cells, the last row without a rule. */
+/* Positioned, so an absolutely placed descendant (a visually hidden header) scrolls with the
+   table instead of escaping it and widening the whole page on a phone. */
+.table-wrap { position: relative; }
+.table.rows th, .table.rows td { padding: 12px 16px; vertical-align: middle; }
+.table.rows th { padding-top: 10px; padding-bottom: 10px; background: var(--surface-2); }
+.table.rows tbody tr:last-child td { border-bottom: 0; }
+.table .num { font-variant-numeric: tabular-nums; }
+.table td.r { width: 1%; text-align: right; white-space: nowrap; }
+.table .click-row { cursor: pointer; transition: background-color var(--d-fast); }
+.table .click-row:hover { background: var(--hover); }
+.table .revoked-row td { color: var(--muted); }
+.cell-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cell-text { display: grid; gap: 2px; min-width: 0; }
+.table.rows td:first-child { min-width: 180px; }
+.cell-t { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text); overflow-wrap: break-word; }
+.cell-d { font-size: 12px; line-height: 16px; color: var(--muted); overflow-wrap: break-word; }
+.avatar.sq { width: 32px; height: 32px; border-radius: var(--radius); background: var(--surface-3); color: var(--text); font-size: 13px; box-shadow: inset 0 0 0 1px var(--line-2); }
+.tile {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius);
+  background: var(--surface-3); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.tile .icon { width: 16px; height: 16px; }
+.tile.ok { color: var(--ok-text); background: color-mix(in srgb, var(--ok) 10%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 30%, transparent); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.seen { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.seen-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--line-strong); }
+.seen-dot.live { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+.row-more { color: var(--muted); }
+.main > .sec-foot { margin-top: 16px; }
+.main > .setting-more.plain { margin-top: 24px; }
+.empty-actions { display: flex; gap: 8px; margin-top: 16px; }
+/* An empty list on its own page: a dashed outline where the rows would be, so it reads as a state. */
+.empty.boxed { max-width: none; padding: 32px; border: 1px dashed var(--line-2); border-radius: var(--radius-lg); }
+.empty.boxed .tile { margin-bottom: 16px; }
+.empty.boxed h2 { font-size: 15px; line-height: 22px; }
+.empty.boxed .sub { max-width: 64ch; }
+.empty.boxed + .setting-more.plain { margin-top: 16px; }
+
+.pill.ok { color: color-mix(in srgb, var(--ok-text) 85%, var(--text)); background: color-mix(in srgb, var(--ok) 9%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 30%, transparent); }
+.pill-dot.live { animation: pill-live 2s ease-in-out infinite; }
+.tag.ok { color: color-mix(in srgb, var(--ok-text) 85%, var(--text)); background: color-mix(in srgb, var(--ok) 9%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 26%, transparent); }
+.tag.warn { color: color-mix(in srgb, var(--warn) 85%, var(--text)); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 32%, transparent); }
+
+/* A thin usage bar: the share of a limit in use, amber past 85%. */
+.meterline-wrap { display: inline-flex; align-items: center; gap: 10px; }
+.meterline { position: relative; width: 96px; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.meterline i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--text); transition: width var(--d-slow) var(--ease-out); }
+.meterline.warn i { background: var(--warn); }
+
+/* Object cards: a saved profile or a gateway, with its actions in the footer. */
+.ogrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.ocard { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.ocard-h { display: flex; align-items: flex-start; gap: 12px; padding: 16px 12px 12px 16px; }
+.ocard-title { flex: 1; min-width: 0; }
+.ocard-title h2 { margin: 0; font-size: 15px; line-height: 22px; overflow-wrap: anywhere; }
+.ocard-title .sub { margin-top: 2px; font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.ocard-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.ocard-rows li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 8px 16px; font-size: 13px; line-height: 20px; }
+.ocard-rows li + li { border-top: 1px solid var(--line); }
+.ocard-rows li.sub { min-height: 36px; color: var(--muted); }
+.ocard-row-t { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-weight: 500; }
+.ocard-row-t .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; }
+.ocard-none { padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13px; line-height: 20px; }
+.ocard-stat { padding: 4px 16px 16px; }
+.ocard-stat .sub { font-size: 12px; line-height: 16px; }
+.stat { margin: 2px 0; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.02em; }
+.ocard-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto;
+  padding: 10px 12px 10px 16px; border-top: 1px solid var(--line); background: var(--surface-2);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg); font-size: 12px; line-height: 16px; color: var(--muted);
+}
+.ocard-foot > span { min-width: 0; overflow-wrap: anywhere; }
+.ocard-foot .btn .icon { width: 14px; height: 14px; }
+
+.callout {
+  display: flex; gap: 12px; max-width: 760px; margin-top: 24px; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-2);
+  font-size: 13px; line-height: 20px; color: var(--muted);
+}
+.callout > .icon { flex: none; width: 16px; height: 16px; margin-top: 2px; color: var(--text); }
+.callout p { margin: 0; }
+.callout p + p { margin-top: 8px; }
+.callout strong { color: var(--text); font-weight: 600; }
+.dsec + .callout { margin-top: 16px; }
+
+/* Waiting for something a token lets in. The ring turns until it arrives, then becomes a tick. */
+.waiting { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); font-size: 13px; line-height: 20px; color: var(--muted); }
+.waiting > span:last-child { display: grid; gap: 2px; }
+.waiting strong { color: var(--text); font-weight: 600; }
+.spinner { flex: none; width: 16px; height: 16px; border-radius: 999px; border: 2px solid var(--line-2); border-top-color: var(--text); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.waiting.arrived { background: color-mix(in srgb, var(--ok) 8%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 28%, transparent); }
+.waiting-ic { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--ok); color: var(--ok-fg); animation: arrive var(--d-slow) var(--ease-spring); }
+.waiting-ic .icon { width: 14px; height: 14px; }
+@keyframes arrive { from { transform: scale(0.4); opacity: 0; } }
+
+/* Settings: sections down the side, the chosen one beside them. */
+.settings-page { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: start; }
+.subnav { position: sticky; top: 0; display: grid; gap: 2px; }
+.subnav-item {
+  display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 10px; border-radius: var(--radius-sm);
+  font-size: 13px; line-height: 20px; font-weight: 500; color: var(--muted); text-decoration: none;
+  transition: background-color var(--d-fast), color var(--d-fast);
+}
+.subnav-item .icon { width: 16px; height: 16px; }
+.subnav-item:hover { background: var(--hover); color: var(--text); }
+.subnav-item[aria-current="page"] { background: var(--surface-3); color: var(--text); }
+.settings-body { display: grid; gap: 32px; max-width: 720px; min-width: 0; }
+.settings-body > .callout, .settings-body > .sec-foot { margin-top: -16px; }
+
+.theme-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.theme-card {
+  display: grid; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface); text-align: left; cursor: pointer; color: var(--text);
+  transition: border-color var(--d-fast), box-shadow var(--d-fast);
+}
+.theme-card:hover { border-color: var(--line-2); }
+.theme-card[aria-checked="true"] { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+.theme-name { padding: 0 4px 2px; font-size: 13px; line-height: 20px; font-weight: 500; }
+/* A small picture of the dashboard in that theme: a sidebar and one card. */
+.theme-prev { position: relative; display: block; height: 72px; border-radius: var(--radius); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.theme-prev i { position: absolute; inset: 0 auto 0 0; width: 30%; }
+.theme-prev b { position: absolute; left: 38%; right: 10%; top: 22%; height: 40%; border-radius: 4px; }
+.theme-prev.light { background: #ffffff; }
+.theme-prev.light i { background: #fafafa; box-shadow: inset -1px 0 0 #ececef; }
+.theme-prev.light b { background: #ffffff; box-shadow: 0 0 0 1px #e0e0e4; }
+.theme-prev.dark { background: #0a0a0b; }
+.theme-prev.dark i { background: #151517; box-shadow: inset -1px 0 0 #2e2e33; }
+.theme-prev.dark b { background: #1d1d21; box-shadow: 0 0 0 1px #34343a; }
+.theme-prev.system { background: linear-gradient(90deg, #ffffff 50%, #0a0a0b 50%); }
+.theme-prev.system i { background: #fafafa; box-shadow: inset -1px 0 0 #ececef; }
+/* The card starts at 38% and is 52% wide, so the preview's midline falls 23% of the way into it. */
+.theme-prev.system b { background: linear-gradient(90deg, #ffffff 0 23.08%, #18181b 0); box-shadow: 0 0 0 1px #8e8e96; }
+.radio-row { cursor: pointer; padding-top: 12px; padding-bottom: 12px; }
+.radio-row input { width: 16px; height: 16px; margin: 0; accent-color: var(--text); }
+.radio-row .setting-name { flex: 1; }
+.status-row { align-items: flex-start; }
+.status-row .setting-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.status-ic { flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 0; color: var(--ok-text); }
+.status-ic.warn { color: var(--warn); }
+.status-ic.idle { color: var(--muted); }
+.status-ic .icon { width: 16px; height: 16px; }
+.kv .inline { display: inline-flex; align-items: center; gap: 6px; }
+
+@media (max-width: 900px) {
+  .settings-page { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .subnav { position: static; display: flex; overflow-x: auto; scrollbar-width: none; box-shadow: inset 0 -1px 0 var(--line); gap: 4px; }
+  .subnav::-webkit-scrollbar { display: none; }
+  .subnav-item { flex: none; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .subnav-item[aria-current="page"] { background: none; box-shadow: inset 0 -2px 0 var(--text); }
+}
+@media (max-width: 640px) {
+  /* Four words fit across a phone; four words and four icons do not. */
+  .subnav-item { padding: 0 8px; }
+  .subnav-item .icon { display: none; }
+  .theme-cards { grid-template-columns: minmax(0, 1fr); }
+  .theme-card { grid-template-columns: 96px minmax(0, 1fr); align-items: center; }
+  .theme-prev { height: 56px; }
+  .ogrid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (pointer: coarse) {
+  .subnav-item { min-height: 44px; }
+  .ocard-foot .btn.sm { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pill-dot.live, .spinner, .waiting-ic { animation: none; }
+  .meterline i, .theme-card, .subnav-item, .table .click-row { transition: none; }
+}

@@ -15,7 +15,8 @@ internet provider.
 1. In the dashboard, open **Gateways** and choose **Add gateway**. Name it after
    the computer it will run on.
 2. Copy the command it shows and run it in a terminal on that computer. It needs
-   Node 22 or newer. The token in it is shown once.
+   Node 22 or newer. The token in it is shown once. Leave the dialog open and it
+   tells you when the computer connects.
 3. Open the browser that should use it. On its **Settings** tab, under
    **Connection**, choose **A gateway**, pick the gateway and save. A running
    browser is stopped, switched and started again; its logins are kept.

@@ -27,7 +27,8 @@ production browser on a host no test browser can touch.
    **New**, then **Template**, and pick
    [Tallylamp Worker](https://railway.com/deploy/tallylamp-worker).
 3. Paste the token into `TALLYLAMP_JOIN` and deploy.
-4. The worker shows under **Workers** within a minute.
+4. The worker shows under **Workers** within a minute. If the Add worker dialog
+   is still open, it tells you when the worker joins.
 
 To set it up by hand instead, create a service from the same image digest as the
 main instance, attach a volume at `/data`, set `TALLYLAMP_JOIN`, and give it no
