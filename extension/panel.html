@@ -4,10 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tallylamp Link</title>
+<link rel="preload" href="fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="panel.css">
 </head>
 <body>
 <main id="app"></main>
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+<dialog id="confirm" class="dialog" aria-labelledby="confirm-title"></dialog>
 <script type="module" src="panel.js"></script>
 </body>
 </html>

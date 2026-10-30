@@ -35,5 +35,11 @@
   },
   "side_panel": {
     "default_path": "panel.html"
+  },
+  "commands": {
+    "toggle-share": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Share the tab in front with your agent, or stop sharing it"
+    }
   }
 }

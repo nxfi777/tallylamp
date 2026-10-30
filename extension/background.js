@@ -20,6 +20,13 @@ const PONG_TIMEOUT_MS = 10_000;
 const OFFLINE_GRACE_MS = 60_000;
 const BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 const GROUP_TITLE = "Tallylamp";
+// The toolbar badge: the shared-tab count on the same red as the panel's on-air card, and "!" on
+// amber while those tabs are about to be handed back. White text reads on both.
+const BADGE_LIVE = "#dc2626";
+const BADGE_OFFLINE = "#b45309";
+const ACTIVITY_KEEP = 6; // Lines of "what was just done" kept per shared tab.
+const ACTIVITY_MERGE_MS = 4_000; // Keystrokes and clicks this close together read as one line.
+const ACTIVITY_PUBLISH_MS = 500; // Typing would otherwise repaint the panel on every key.
 
 /** "unpaired" | "pairing" | "connecting" | "online" | "offline" */
 let link = "unpaired";
@@ -29,10 +36,13 @@ let ws = null;
 let attempts = 0;
 let error = null; // Something the person has to act on.
 let notice = null; // Something that happened that they should know about.
-let fixIn = null; // { id } when the fix is in another extension's settings. `id` if Chrome gave it away.
+let noticeAbout = null; // { kind, tabId }: which kind of thing, so the panel can title it and offer the way back.
+let fixIn = null; // { id, site, kind } when the fix is in another extension's settings. `id` if Chrome gave it away.
+let lastServer = null; // The address last connected to, so a person connecting again types nothing.
+let sharedOnce = false; // The panel walks a first share through its steps, and stops once there has been one.
 let releaseAt = null; // When shared tabs are handed back if the server stays unreachable.
 let pingTimer, retryTimer, graceTimer, pollTimer;
-/** tabId -> { tabId, info: {targetId,url,title}, sites: string[] | null, byAgent: boolean } */
+/** tabId -> { tabId, info: {targetId,url,title}, sites: string[] | null, byAgent: boolean, since: number, activity: [] } */
 const shared = new Map();
 
 const hostOf = (server) => {
@@ -51,18 +61,29 @@ function snapshot() {
   return {
     link,
     host: conn ? hostOf(conn.server) : pairing ? hostOf(pairing.server) : null,
+    server: conn?.server ?? pairing?.server ?? null,
+    lastServer,
     browserName: conn?.browserName ?? null,
     pairing: pairing ? { userCode: pairing.userCode, expiresAt: pairing.expiresAt, approveUrl: approveUrl(pairing) } : null,
-    shared: [...shared.values()].map((t) => ({ tabId: t.tabId, url: t.info.url, title: t.info.title, sites: t.sites, byAgent: t.byAgent })),
+    shared: [...shared.values()].map((t) => ({ tabId: t.tabId, url: t.info.url, title: t.info.title, sites: t.sites, byAgent: t.byAgent, since: t.since, activity: t.activity })),
     error,
     notice,
+    noticeKind: noticeAbout?.kind ?? null,
+    noticeTabId: noticeAbout?.tabId ?? null,
     extensions: fixIn,
     releaseAt,
+    sharedOnce,
   };
 }
 
+/** Something that happened that the person should know about. `kind` is for the panel, the words are for the person. */
+function tell(kind, text = null, tabId = null) {
+  notice = text;
+  noticeAbout = text ? { kind, tabId } : null;
+}
+
 let publicationPending = false;
-let badgeCount = null;
+let badgeState = null;
 let storedState = null;
 let broadcastState = null;
 
@@ -73,15 +94,22 @@ function changed() {
   publicationPending = true;
   Promise.resolve().then(() => {
     publicationPending = false;
-    if (badgeCount !== shared.size) {
-      chrome.action.setBadgeText({ text: shared.size ? String(shared.size) : "" });
-      if (badgeCount === null) chrome.action.setBadgeBackgroundColor({ color: "#b8770c" });
+    const away = shared.size > 0 && link === "offline";
+    const badge = `${shared.size}:${away}`;
+    if (badgeState !== badge) {
+      const tabs = `${shared.size} tab${shared.size === 1 ? "" : "s"}`;
+      chrome.action.setBadgeText({ text: away ? "!" : shared.size ? String(shared.size) : "" });
+      if (shared.size) {
+        chrome.action.setBadgeBackgroundColor({ color: away ? BADGE_OFFLINE : BADGE_LIVE });
+        chrome.action.setBadgeTextColor?.({ color: "#ffffff" });
+      }
       chrome.action.setTitle({
-        title: shared.size ? `Tallylamp Link: sharing ${shared.size} tab${shared.size === 1 ? "" : "s"} with your agent` : "Tallylamp Link",
+        title: away ? `Tallylamp Link: can't reach ${serverHost()}. Your ${tabs} will be handed back if it stays unreachable`
+          : shared.size ? `Tallylamp Link: sharing ${tabs} with your agent` : "Tallylamp Link",
       });
-      badgeCount = shared.size;
+      badgeState = badge;
     }
-    const persisted = { shared: [...shared.values()].map(({ tabId, sites, byAgent }) => ({ tabId, sites, byAgent })), releaseAt };
+    const persisted = { shared: [...shared.values()].map(({ tabId, sites, byAgent, since }) => ({ tabId, sites, byAgent, since })), releaseAt };
     const key = JSON.stringify(persisted);
     if (storedState !== key) {
       storedState = key;
@@ -136,7 +164,8 @@ async function startPairing(rawServer) {
   const body = await res.json();
   pairing = { server: parsed.server, deviceCode: body.deviceCode, userCode: body.userCode, expiresAt: Date.now() + body.expiresInSec * 1000 };
   link = "pairing";
-  await chrome.storage.local.set({ pairing });
+  lastServer = parsed.server;
+  await chrome.storage.local.set({ pairing, lastServer });
   chrome.tabs.create({ url: approveUrl(pairing) });
   poll();
   changed();
@@ -206,7 +235,7 @@ async function unpair(message = null) {
   releaseAt = null;
   link = "unpaired";
   error = null;
-  notice = message;
+  tell("disconnected", message);
   fixIn = null;
   await chrome.storage.local.remove("conn");
   changed();
@@ -226,7 +255,7 @@ function offlineGrace() {
   clearTimeout(graceTimer);
   const release = () => {
     if (link === "online") return;
-    notice = "The server was unreachable for a minute, so your tabs were handed back.";
+    tell("unreachable", "The server was unreachable for a minute, so your tabs were handed back.");
     return unshareAll("server unreachable");
   };
   if (releaseAt <= Date.now()) return release();
@@ -330,6 +359,7 @@ async function handle(method, params) {
       }
     }
     const target = sessionId ? { tabId: tab.tabId, sessionId } : { tabId: tab.tabId };
+    noteActivity(tab, String(params.method), verdict.params ?? {});
     return chrome.debugger.sendCommand(target, String(params.method), verdict.params);
   }
   if (method === "tabs.create") {
@@ -344,7 +374,10 @@ async function handle(method, params) {
     // about:blank commits at once, and the debugger can only attach to a committed page.
     const created = await chrome.tabs.create({ url: "about:blank", active: false });
     const tab = await share(created.id, { sites, byAgent: true });
-    if (url !== "about:blank") await chrome.debugger.sendCommand({ tabId: tab.tabId }, "Page.navigate", { url });
+    if (url !== "about:blank") {
+      noteActivity(tab, "Page.navigate", { url });
+      await chrome.debugger.sendCommand({ tabId: tab.tabId }, "Page.navigate", { url });
+    }
     return { tabId: tab.tabId };
   }
   if (method === "tabs.close") {
@@ -368,11 +401,72 @@ async function handle(method, params) {
     return { windowId: w.id, bounds: { left: w.left, top: w.top, width: w.width, height: w.height, windowState: w.state } };
   }
   if (method === "unshare.all") {
-    notice = "Sharing was stopped from the Tallylamp dashboard.";
+    tell("dashboard-stop", "Sharing was stopped from the Tallylamp dashboard.");
     await unshareAll(String(params.reason ?? "stopped from Tallylamp"));
     return {};
   }
   throw new Error(`unknown method ${method}`);
+}
+
+// ---------------------------------------------------------------- what the panel says was done
+
+let activitySeq = 0;
+let activityTimer = null;
+
+const where = (url) => {
+  try {
+    const u = new URL(url);
+    return u.host + (u.pathname === "/" ? "" : u.pathname);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The few commands a person would recognise as doing something: opening a page, clicking,
+ * scrolling, typing, pressing a key, attaching a file. Only the kind and a count are kept, never
+ * what was typed, and none of it leaves the browser. Screenshots, scripts and the many reads an
+ * agent's tooling makes are left out: they say nothing a person could check, and the dashboard's
+ * own viewer takes screenshots too. Input from someone taking over in the dashboard arrives the
+ * same way as the agent's, which is why the panel says "through Tallylamp", not "by your agent".
+ */
+function activityOf(method, params) {
+  switch (method) {
+    case "Page.navigate": return { kind: "open", where: where(params.url) };
+    case "Page.reload": return { kind: "reload" };
+    case "Page.navigateToHistoryEntry": return { kind: "history" };
+    case "Input.insertText": return params.text ? { kind: "type", n: [...String(params.text)].length } : null;
+    case "Input.dispatchMouseEvent":
+      if (params.type === "mouseWheel") return { kind: "scroll" };
+      return params.type === "mousePressed" && (params.clickCount ?? 1) <= 1 ? { kind: "click" } : null;
+    case "Input.dispatchTouchEvent": return params.type === "touchStart" ? { kind: "tap" } : null;
+    case "Input.dispatchKeyEvent": {
+      if (params.type !== "keyDown" && params.type !== "rawKeyDown") return null;
+      // Enter arrives with text "\r"; that is a key press, not a character typed.
+      if (params.text && !/[\u0000-\u001f\u007f]/.test(params.text)) return { kind: "type", n: [...String(params.text)].length };
+      return params.key ? { kind: "key", key: String(params.key).slice(0, 16) } : null;
+    }
+    case "DOM.setFileInputFiles": return { kind: "file" };
+    default: return null;
+  }
+}
+
+function noteActivity(tab, method, params) {
+  const act = activityOf(method, params);
+  if (!act) return;
+  const now = Date.now();
+  const last = tab.activity[0];
+  if (act.kind !== "open" && last?.kind === act.kind && last.key === act.key && now - last.at < ACTIVITY_MERGE_MS) {
+    last.n += act.n ?? 1;
+    last.at = now;
+  } else {
+    tab.activity = [{ id: ++activitySeq, ...act, n: act.n ?? 1, at: now }, ...tab.activity].slice(0, ACTIVITY_KEEP);
+  }
+  if (activityTimer) return;
+  activityTimer = setTimeout(() => {
+    activityTimer = null;
+    changed();
+  }, ACTIVITY_PUBLISH_MS);
 }
 
 // ---------------------------------------------------------------- sharing
@@ -415,7 +509,7 @@ async function otherExtensionFrames() {
 
 async function blockedByExtension(site) {
   const ids = await otherExtensionFrames();
-  fixIn = { id: ids.length === 1 ? ids[0] : null };
+  fixIn = { id: ids.length === 1 ? ids[0] : null, site: site ?? null, kind: "blocked" };
   return OTHER_EXTENSION(site ?? "this site");
 }
 
@@ -455,11 +549,19 @@ async function share(tabId, { sites = null, byAgent = false } = {}) {
     await chrome.debugger.detach({ tabId }).catch(() => {});
     throw new Error(`Chrome wouldn't share this tab: ${e?.message ?? e}`);
   }
-  const tab = { tabId, info: { targetId: info.targetId, url: info.url, title: info.title, browserContextId: info.browserContextId }, sites, byAgent };
+  const since = Date.now();
+  const tab = {
+    tabId, info: { targetId: info.targetId, url: info.url, title: info.title, browserContextId: info.browserContextId }, sites, byAgent,
+    since, activity: byAgent ? [{ id: ++activitySeq, kind: "newtab", n: 1, at: since }] : [],
+  };
   shared.set(tabId, tab);
-  notice = null;
+  tell(null);
   error = null;
   fixIn = null;
+  if (!sharedOnce) {
+    sharedOnce = true;
+    chrome.storage.local.set({ sharedOnce }).catch(() => {});
+  }
   group(tabId);
   send({ event: "tab.shared", tab: wire(tab) });
   changed();
@@ -520,8 +622,9 @@ async function wallOff(tabId, sessionId, parent, url, told) {
   walled.set(sessionId, { tabId, told });
   children.delete(sessionId);
   await chrome.debugger.sendCommand(parent ? { tabId, sessionId: parent } : { tabId }, "Target.detachFromTarget", { sessionId }).catch(() => {});
-  notice = FLAGGED(siteOf(shared.get(tabId)?.info.url ?? "") ?? "this site");
-  fixIn = { id: /^chrome-extension:\/\/([a-p]{32})/.exec(url)?.[1] ?? null };
+  const site = siteOf(shared.get(tabId)?.info.url ?? "");
+  tell("flagged", FLAGGED(site ?? "this site"), tabId);
+  fixIn = { id: /^chrome-extension:\/\/([a-p]{32})/.exec(url)?.[1] ?? null, site, kind: "flagged" };
   changed();
 }
 
@@ -545,7 +648,7 @@ chrome.debugger.onDetach.addListener((source, reason) => {
   if (!source.tabId || !shared.has(source.tabId)) return;
   // Cancel on Chrome's debugging bar is the one stop control this extension cannot remove or
   // intercept, so it is treated as exactly what it looks like. Nothing is re-attached.
-  if (reason === "canceled_by_user") notice = "You pressed Cancel on Chrome's debugging bar, so sharing stopped.";
+  if (reason === "canceled_by_user") tell("cancel", "You pressed Cancel on Chrome's debugging bar, so sharing stopped.", source.tabId);
   else explainDetach(source.tabId);
   unshare(source.tabId, reason, { detach: false });
 });
@@ -563,11 +666,11 @@ async function explainDetach(tabId) {
   const url = tab.pendingUrl || tab.url || "";
   const site = siteOf(url);
   if (!site || site === "chromewebstore.google.com" || url.startsWith("https://chrome.google.com/webstore")) {
-    notice = "A shared tab opened a page that can't be shared, so it was handed back.";
+    tell("left-web", "A shared tab opened a page that can't be shared, so it was handed back.", tabId);
   } else if ((await otherExtensionFrames()).length) {
-    notice = `Sharing stopped. ${await blockedByExtension(site)}`;
+    tell("blocked", `Sharing stopped. ${await blockedByExtension(site)}`, tabId);
   } else {
-    notice = `Chrome stopped this extension controlling the tab on ${site}, so it was handed back.`;
+    tell("detached", `Chrome stopped this extension controlling the tab on ${site}, so it was handed back.`, tabId);
   }
   changed();
 }
@@ -580,19 +683,19 @@ chrome.tabs.onUpdated.addListener((tabId, change, tabNow) => {
   if (change.url && !shareable(change.url, true)) {
     // However it got there, a shared tab now showing a browser or extension page is one the
     // debugger must not stay attached to.
-    notice = "A shared tab opened a page that can't be shared, so it was handed back.";
+    tell("left-web", "A shared tab opened a page that can't be shared, so it was handed back.", tabId);
     return void unshare(tabId, "left the web");
   }
   if (change.url && onServer(change.url, serverHost())) {
     // The guard refuses Page.navigate to it, but a link, a redirect or a script still gets
     // there. This fires as the page commits, before the dashboard has rendered anything to press.
-    notice = "A shared tab opened your Tallylamp dashboard, so it was handed back. Agents can't use the page where their requests are approved.";
+    tell("opened-dashboard", "A shared tab opened your Tallylamp dashboard, so it was handed back. Agents can't use the page where their requests are approved.", tabId);
     return void unshare(tabId, "opened the Tallylamp dashboard");
   }
   if (change.url && tab.sites && change.url !== "about:blank" && !tab.sites.some((s) => withinSite(change.url, s))) {
     // The guard stops the agent navigating away. A link, a redirect or the person themselves
     // still can, and the promise was about the site, so the share ends with it.
-    notice = `A shared tab left ${tab.sites.join(", ")} for ${siteOf(change.url) ?? "another page"}, so it was handed back.`;
+    tell("left-site", `A shared tab left ${tab.sites.join(", ")} for ${siteOf(change.url) ?? "another page"}, so it was handed back.`, tabId);
     return void unshare(tabId, "left the shared site");
   }
   tab.info.url = tabNow.url ?? tab.info.url;
@@ -619,7 +722,7 @@ const actions = {
     connect();
   },
   dismiss: async () => {
-    notice = null;
+    tell(null);
     error = null;
     fixIn = null;
     changed();
@@ -630,6 +733,26 @@ const actions = {
   openFrameHelp: async () => chrome.tabs.create({ url: FRAME_HELP }),
   unpair: () => unpair(),
 };
+
+// The keyboard shortcut (Alt+Shift+S unless the person changed it in chrome://extensions/shortcuts)
+// shares the tab in front, kept to its site, or stops sharing it. It works with the panel shut, so
+// when sharing can't happen the panel opens to say why. A key press counts as a user gesture, but
+// only until this listener returns, so the panel is opened before anything is awaited.
+chrome.commands?.onCommand.addListener((command, tab) => {
+  if (command !== "toggle-share" || !tab?.id) return;
+  const explain = () => chrome.sidePanel?.open?.({ tabId: tab.id })?.catch(() => {});
+  if (shared.has(tab.id)) return void unshare(tab.id, "stopped by the person");
+  const site = siteOf(tab.url ?? "");
+  if (link !== "online" || !site || onServer(tab.url, serverHost())) {
+    if (conn && link !== "online") fail("Not connected to your server yet, so there is nobody to share with.");
+    return void explain();
+  }
+  ready.then(() => share(tab.id, { sites: [site] })).catch((e) => {
+    error = String(e?.message ?? e);
+    changed();
+    explain();
+  });
+});
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   const action = actions[msg?.type];
@@ -645,9 +768,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
 // The worker is torn down whenever Chrome likes. Debugger attachments outlive it, so what was
 // shared has to be read back and checked against reality before anything is claimed.
 async function boot() {
-  const stored = await chrome.storage.local.get(["conn", "pairing"]);
+  const stored = await chrome.storage.local.get(["conn", "pairing", "lastServer", "sharedOnce"]);
   conn = stored.conn ?? null;
   pairing = stored.pairing ?? null;
+  lastServer = stored.lastServer ?? conn?.server ?? null;
+  sharedOnce = Boolean(stored.sharedOnce);
   const { shared: was = [], releaseAt: deadline } = await chrome.storage.session.get(["shared", "releaseAt"]);
   releaseAt = Number.isFinite(deadline) ? deadline : null;
   // Check independent attachments four at a time. Keep the persisted tab order, and publish
@@ -664,7 +789,10 @@ async function boot() {
           await chrome.debugger.detach({ tabId: entry.tabId }).catch(() => {});
           continue;
         }
-        const tab = { tabId: entry.tabId, info: { targetId: info.targetId, url: info.url, title: info.title, browserContextId: info.browserContextId }, sites: entry.sites ?? null, byAgent: Boolean(entry.byAgent) };
+        const tab = {
+          tabId: entry.tabId, info: { targetId: info.targetId, url: info.url, title: info.title, browserContextId: info.browserContextId },
+          sites: entry.sites ?? null, byAgent: Boolean(entry.byAgent), since: Number.isFinite(entry.since) ? entry.since : Date.now(), activity: [],
+        };
         restored[index] = tab;
         // Register immediately so Chrome's detach/navigation events can revoke this tab
         // while the other attachment checks are still pending.

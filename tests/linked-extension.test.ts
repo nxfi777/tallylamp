@@ -8,7 +8,11 @@ import { extensionFrameIn, extensionUrl, guard, onServer, siteOf, withinSite } f
 import { normalizeServer } from "../extension/address.js";
 
 type Frame = Record<string, unknown>;
-type State = { link: string; releaseAt: number | null; shared: Array<{ tabId: number }> };
+type Activity = { kind: string; n: number; key?: string; where?: string };
+type State = {
+  link: string; releaseAt: number | null; error: string | null; notice: string | null; noticeKind: string | null; noticeTabId: number | null;
+  shared: Array<{ tabId: number; since: number; activity: Activity[] }>;
+};
 const workerSource = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8").replace(/^import .*;\n/gm, "");
 const tabIds = [11, 22, 33];
 
@@ -26,7 +30,11 @@ async function worker(session: { releaseAt?: number } = {}) {
   const detached: number[] = [];
   const debuggerCalls: Array<{ tabId: number; method: string }> = [];
   const publications = { storage: 0, badge: 0, panel: 0 };
+  const badge = { text: "", color: "", title: "" };
+  const panelOpened: number[] = [];
   let command: ((method: string) => Promise<unknown>) | undefined;
+  let shortcut: (command: string, tab: Frame) => void = () => {};
+  let detachedByChrome: (source: { tabId: number }, reason: string) => void = () => {};
   let detach: (() => Promise<void>) | undefined;
   let updated: (tabId: number, change: Frame, tab: Frame) => void;
   let receive: (msg: Frame, sender: unknown, reply: (value: unknown) => void) => unknown;
@@ -67,7 +75,13 @@ async function worker(session: { releaseAt?: number } = {}) {
     dnsFailure() { this.onerror?.(); this.close(); }
   }
   const chrome = {
-    action: { setBadgeText() { publications.badge++; }, setBadgeBackgroundColor() { publications.badge++; }, setTitle() { publications.badge++; }, setPopup: async () => {} },
+    action: {
+      setBadgeText({ text }: { text: string }) { publications.badge++; badge.text = text; },
+      setBadgeBackgroundColor({ color }: { color: string }) { publications.badge++; badge.color = color; },
+      setTitle({ title }: { title: string }) { publications.badge++; badge.title = title; },
+      setPopup: async () => {},
+    },
+    commands: { onCommand: { addListener: (fn: typeof shortcut) => { shortcut = fn; } } },
     storage: {
       local: {
         get: async () => ({ conn: { server: "https://tallylamp.example", token: "test-token", browserId: "browser", browserName: "Test browser" } }),
@@ -86,11 +100,11 @@ async function worker(session: { releaseAt?: number } = {}) {
         return command ? command(method) : {};
       },
       detach: async ({ tabId }: { tabId: number }) => { detached.push(tabId); await detach?.(); },
-      onEvent: noopEvent, onDetach: noopEvent,
+      onEvent: noopEvent, onDetach: { addListener: (fn: typeof detachedByChrome) => { detachedByChrome = fn; } },
     },
     tabs: { onRemoved: noopEvent, onUpdated: { addListener: (fn: typeof updated) => { updated = fn; } }, ungroup: async () => {} },
     alarms: { create() {}, onAlarm: noopEvent },
-    sidePanel: { setPanelBehavior: async () => {} },
+    sidePanel: { setPanelBehavior: async () => {}, open: async ({ tabId }: { tabId: number }) => { panelOpened.push(tabId); } },
   };
   vm.runInNewContext(workerSource, {
     chrome, navigator: { userAgent: "Chrome/140.0.0.0" }, WebSocket: Socket, URL,
@@ -105,7 +119,9 @@ async function worker(session: { releaseAt?: number } = {}) {
   });
   await state();
   return {
-    sockets: Socket.instances, detached, debuggerCalls, state, storedSession, flush, publications,
+    sockets: Socket.instances, detached, debuggerCalls, state, storedSession, flush, publications, badge, panelOpened,
+    shortcut: (name: string, tab: Frame) => shortcut(name, tab),
+    detachByChrome: (tabId: number, reason: string) => detachedByChrome({ tabId }, reason),
     update: (tabId: number, change: Frame, tab: Frame) => updated(tabId, change, tab),
     action: (type: string) => new Promise<unknown>(resolve => receive({ type }, {}, resolve)),
     setDetach: (callback: typeof detach) => { detach = callback; },
@@ -278,25 +294,89 @@ describe("Tallylamp Link worker connection recovery", () => {
   });
 });
 
+describe("Tallylamp Link worker, what the panel is told", () => {
+  it("keeps what was done in a shared tab as kinds and counts, never the words typed", async () => {
+    const ext = await worker();
+    ext.sockets[0].welcome();
+    await ext.flush();
+    const cdp = (id: number, method: string, params: Frame) => ext.sockets[0].message({ id, method: "cdp", params: { tabId: 11, method, params } });
+    cdp(1, "Page.navigate", { url: "https://mail.example.test/inbox?secret=1" });
+    cdp(2, "Input.dispatchMouseEvent", { type: "mouseMoved", x: 1, y: 1 });
+    cdp(3, "Input.dispatchMouseEvent", { type: "mousePressed", x: 1, y: 1, clickCount: 1 });
+    cdp(4, "Input.insertText", { text: "hunter2" });
+    cdp(5, "Input.dispatchKeyEvent", { type: "keyDown", key: "a", text: "a" });
+    cdp(6, "Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", text: "\r" });
+    cdp(7, "Page.captureScreenshot", {});
+    cdp(8, "Runtime.evaluate", { expression: "1" });
+    await ext.flush();
+    const before = ext.publications.panel;
+    await ext.advance(500);
+    assert.equal(ext.publications.panel, before + 1, "a burst of input repaints the panel once");
+    const state = await ext.state();
+    const activity = state.shared.find((t) => t.tabId === 11)!.activity;
+    assert.deepEqual(activity.map((a) => [a.kind, a.n]), [["key", 1], ["type", 8], ["click", 1], ["open", 1]]);
+    assert.equal(activity[0].key, "Enter");
+    assert.equal(activity[3].where, "mail.example.test/inbox", "no query string");
+    assert.doesNotMatch(JSON.stringify(state), /hunter2|secret/);
+  });
+
+  it("shows the shared count in red, and ! in amber while those tabs are about to be handed back", async () => {
+    const ext = await worker();
+    ext.sockets[0].welcome();
+    await ext.flush();
+    assert.deepEqual([ext.badge.text, ext.badge.color], ["3", "#dc2626"]);
+    ext.sockets[0].dnsFailure();
+    await ext.flush();
+    assert.deepEqual([ext.badge.text, ext.badge.color], ["!", "#b45309"]);
+    assert.match(ext.badge.title, /can't reach tallylamp\.example/);
+    await ext.advance(60_000);
+    assert.equal(ext.badge.text, "");
+    assert.equal((await ext.state()).noticeKind, "unreachable");
+  });
+
+  it("toggles sharing from the keyboard and opens the panel when it cannot share", async () => {
+    const ext = await worker();
+    ext.sockets[0].welcome();
+    await ext.flush();
+    ext.shortcut("toggle-share", { id: 22, url: "https://example.test/22" });
+    await ext.flush();
+    assert.deepEqual((await ext.state()).shared.map((t) => t.tabId), [11, 33]);
+    ext.shortcut("toggle-share", { id: 44, url: "chrome://settings" });
+    await ext.flush();
+    assert.deepEqual(ext.panelOpened, [44], "a page Chrome keeps to itself opens the panel, which says why");
+  });
+
+  it("says which tab a handback was about, so the panel can offer the way back", async () => {
+    const ext = await worker();
+    ext.sockets[0].welcome();
+    ext.detachByChrome(22, "canceled_by_user");
+    await ext.flush();
+    const state = await ext.state();
+    assert.equal(state.noticeKind, "cancel");
+    assert.equal(state.noticeTabId, 22);
+    assert.ok(state.shared.every((t) => Number.isFinite(t.since)));
+  });
+});
+
 describe("Tallylamp Link panel connection status", () => {
-  it("updates only the countdown text and suspends its timer while hidden", () => {
+  it("updates only the clock text and suspends its timer while hidden", () => {
     const source = readFileSync(new URL("../extension/panel.js", import.meta.url), "utf8");
-    const code = source.slice(source.indexOf("function updateCountdown()"), source.indexOf('document.addEventListener("visibilitychange"'));
+    const code = source.slice(source.indexOf("let timed = [];"), source.indexOf('document.addEventListener("visibilitychange"'));
     let now = 1000;
-    const countdown = { textContent: "" };
     const timers = new Map<number, () => void>();
-    const document = { visibilityState: "visible", getElementById: () => countdown };
-    const update = vm.runInNewContext(`let tick; ${code}; updateCountdown`, {
-      document, state: { releaseAt: 4000 }, Date: { now: () => now },
+    const document = { visibilityState: "visible" };
+    const api = vm.runInNewContext(`${code}; ({ clock, updateTimers })`, {
+      document, Date: { now: () => now }, h: () => ({ textContent: "" }),
       setInterval: (fn: () => void) => { timers.set(1, fn); return 1; }, clearInterval: (id: number) => timers.delete(id),
-    }) as () => void;
-    update();
+    }) as { clock: (show: (now: number) => [string, boolean]) => { textContent: string }; updateTimers: () => void };
+    const countdown = api.clock((t) => [`${Math.max(0, Math.ceil((4000 - t) / 1000))}s`, t < 4000]);
+    api.updateTimers();
     assert.equal(countdown.textContent, "3s");
     now = 2000; timers.get(1)!();
     assert.equal(countdown.textContent, "2s");
-    document.visibilityState = "hidden"; update();
+    document.visibilityState = "hidden"; api.updateTimers();
     assert.equal(timers.size, 0);
-    now = 4000; document.visibilityState = "visible"; update();
+    now = 4000; document.visibilityState = "visible"; api.updateTimers();
     assert.equal(countdown.textContent, "0s");
     assert.equal(timers.size, 0, "an elapsed deadline must not loop forever");
   });
@@ -310,13 +390,14 @@ describe("Tallylamp Link panel connection status", () => {
       append(child: Element | string) { this.children.push(child); }
       replaceChildren(...children: Array<Element | string>) { this.children = children; }
       get textContent(): string { return this.children.map((child) => typeof child === "string" ? child : child.textContent).join(""); }
+      set textContent(text: string) { this.children = [text]; }
     }
     const source = readFileSync(new URL("../extension/panel.js", import.meta.url), "utf8").replace(/^import .*;\n/gm, "");
     const render = async (demo: string) => {
       const app = new Element();
       await vm.runInNewContext(`(async () => { ${source}\n })()`, {
         document: { getElementById: () => app, createElement: () => new Element(), activeElement: null, addEventListener() {} },
-        location: { search: `?demo=${demo}` }, URLSearchParams, onServer, siteOf,
+        location: { search: `?demo=${demo}` }, URLSearchParams, onServer, siteOf, normalizeServer,
         clearInterval: () => {}, setInterval: () => 1,
       });
       return app.textContent;
@@ -327,5 +408,39 @@ describe("Tallylamp Link panel connection status", () => {
     assert.doesNotMatch(connecting, /Shared\. |Your agent can see and control/);
     assert.match(connecting, /Stop sharing this tab/);
     assert.match(await render("shared-here"), /Shared\. /);
+  });
+
+  it("renders every fixture in words, with no undefined or null showing", async () => {
+    const source = readFileSync(new URL("../extension/panel.js", import.meta.url), "utf8");
+    const demos = /States: ([^.]+)\./.exec(source)![1].replace(/\s*\/\/\s*/g, " ").split(/,\s*/).map((d) => d.trim());
+    assert.ok(demos.length >= 16, demos.join(" "));
+    class Element {
+      children: Array<Element | string> = [];
+      className = "";
+      setAttribute() {}
+      addEventListener() {}
+      append(child: Element | string) { this.children.push(child); }
+      replaceChildren(...children: Array<Element | string>) { this.children = children; }
+      get textContent(): string { return this.children.map((child) => typeof child === "string" ? child : child.textContent).join(""); }
+      set textContent(text: string) { this.children = [text]; }
+    }
+    const texts: Record<string, string> = {};
+    for (const demo of demos) {
+      const app = new Element();
+      await vm.runInNewContext(`(async () => { ${source.replace(/^import .*;\n/gm, "")}\n })()`, {
+        document: { getElementById: () => app, createElement: () => new Element(), activeElement: null, addEventListener() {} },
+        location: { search: `?demo=${demo}` }, URLSearchParams, onServer, siteOf, normalizeServer,
+        clearInterval: () => {}, setInterval: () => 1,
+      });
+      texts[demo] = app.textContent;
+      assert.doesNotMatch(texts[demo], /undefined|null|NaN|\[object/, demo);
+    }
+    assert.match(texts.pairing, /KXQ7-M2PD|K.*X.*Q.*7/);
+    assert.match(texts.linked, /Linked to tallylamp\.example\.com/);
+    assert.match(texts.offline, /handed back in 4\ds/);
+    assert.match(texts["other-extension"], /Reload and share/);
+    assert.doesNotMatch(texts["other-extension"], /Share this tab/, "one way forward, not two");
+    assert.match(texts.unshareable, /Share one of these instead/);
+    assert.match(texts["notice-left"], /Go to the tab/);
   });
 });

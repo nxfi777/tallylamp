@@ -15,5 +15,6 @@ How it works, what the agent can and cannot reach, and how to test changes are i
 | `guard.js` | Which CDP calls a shared tab may receive. Pure functions, tested in `tests/linked-guard.test.ts` |
 | `address.js` | Parses the server address a person types |
 | `panel.*` | The side panel the toolbar icon opens, and the popup it falls back to where a browser has no side panels. `panel.html?demo=ready` renders any state in an ordinary tab, with no extension APIs |
+| `fonts/` | Geist and Geist Mono for the panel, bundled so it never fetches a font. SIL Open Font License, in `fonts/OFL.txt` |
 
 There is no build step and no dependency. What is in this folder is what runs.
