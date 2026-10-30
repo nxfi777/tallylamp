@@ -106,7 +106,8 @@ browser id: the browser is the one on the grant. Every other path under
 The guest router requires a trusted `Origin` on every request that changes
 state, with no bearer exemption and no allowance for a missing header. `GET`
 requests refuse a foreign `Origin` or a cross-site `Sec-Fetch-Site`. The guest
-page is served with its own script and stylesheet, never the dashboard bundle,
+page is served with its own script and stylesheet, never the dashboard bundle;
+the only file it shares is the typeface, under `/guest/assets/fonts`. It runs
 under `default-src 'none'; script-src 'self'`, `frame-ancestors 'none'`,
 `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
 

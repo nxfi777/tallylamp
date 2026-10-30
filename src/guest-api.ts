@@ -39,6 +39,7 @@ import { guestTicketRef, issueViewerTicket } from "./viewer.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const guestDir = path.resolve(here, "../guest");
+const fontsDir = path.resolve(here, "../dashboard/fonts");
 
 declare global {
   namespace Express {
@@ -52,7 +53,7 @@ function guestHeaders(res: Response): void {
   const ws = config.publicUrl.replace(/^http/, "ws");
   res.setHeader(
     "Content-Security-Policy",
-    `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' ${ws}; ` +
+    `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' ${ws}; ` +
       "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   );
   res.setHeader("X-Frame-Options", "DENY");
@@ -186,6 +187,15 @@ export function mountGuest(app: Express, browsers: BrowserManager): void {
     guestHeaders(res);
     res.sendFile(path.join(guestDir, "index.html"));
   });
+  // The one file the guest page shares with the dashboard: its typeface, not its code.
+  app.use(
+    "/guest/assets/fonts",
+    (_req, res, next) => {
+      guestHeaders(res);
+      next();
+    },
+    express.static(fontsDir, { index: false, dotfiles: "deny", redirect: false }),
+  );
   app.use(
     "/guest/assets",
     (_req, res, next) => {

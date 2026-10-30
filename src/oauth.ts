@@ -62,7 +62,7 @@ function secureHeaders(res: Response, formAction?: string, allowConsentScript = 
   const script = allowConsentScript ? ` script-src 'sha256-${CONSENT_SCRIPT_HASH}';` : "";
   res.setHeader(
     "Content-Security-Policy",
-    `default-src 'none';${script} style-src 'unsafe-inline'; form-action 'self'${extra}; base-uri 'none'; frame-ancestors 'none'`,
+    `default-src 'none';${script} style-src 'unsafe-inline'; font-src 'self'; form-action 'self'${extra}; base-uri 'none'; frame-ancestors 'none'`,
   );
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -458,41 +458,76 @@ const CONSENT_SCRIPT = `
 `;
 const CONSENT_SCRIPT_HASH = createHash("sha256").update(CONSENT_SCRIPT).digest("base64");
 
+// The dashboard's Graphite tokens and Geist, served from the dashboard's own font files. The
+// page is a card on a quiet ground, light or dark with the system, like the dashboard login.
 const PAGE_CSS = `
-  body { margin:0; min-height:100vh; display:grid; place-items:center; background:#0c1014; color:#fdffff;
-    font-family:"IBM Plex Sans", system-ui, sans-serif; }
-  .box { box-sizing:border-box; width:min(534px,calc(100% - 2rem)); background:#161d24; border:1px solid #2a3540; border-radius:12px; padding:1.6rem; }
-  h1 { font-size:1.2rem; margin:0 0 .6rem; }
-  p { color:#93a0ab; font-size:.9rem; line-height:1.5; }
-  dl { margin:1rem 0; font-size:.9rem; }
-  dt { color:#93a0ab; font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; margin-top:.7rem; }
-  dd { margin:.15rem 0 0; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; word-break:break-all; }
-  .scopes-heading { display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-wrap:wrap; }
-  .select-all { min-height:44px; gap:.6rem; color:#fdffff; font-size:.84rem; text-transform:none; letter-spacing:normal; cursor:pointer; }
+  @font-face { font-family:"Geist"; src:url("/fonts/geist.woff2") format("woff2"); font-weight:100 900; font-display:swap; }
+  @font-face { font-family:"Geist Mono"; src:url("/fonts/geist-mono.woff2") format("woff2"); font-weight:100 900; font-display:swap; }
+  :root { color-scheme:light; --bg:#f7f7f8; --surface:#ffffff; --surface-2:#f7f7f8; --line:#ececef; --line-2:#e0e0e4;
+    --text:#0a0a0b; --muted:#52525b; --faint:#71717a; --primary:#0a0a0b; --primary-fg:#ffffff; --lamp:#c27803;
+    --focus:#c27803; --ring-gap:#ffffff; --warn-text:#a16207; --danger-bg:#fef2f2; --danger-line:#fecaca; --danger-text:#b91c1c;
+    --shadow:0 1px 2px rgba(10,10,11,.05); --shadow-card:0 0 0 1px var(--line), 0 8px 24px rgba(10,10,11,.06); }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme:dark; --bg:#0a0a0b; --surface:#111113; --surface-2:#17171a; --line:#1f1f23; --line-2:#2a2a30;
+      --text:#ededf0; --muted:#a1a1aa; --faint:#7c7c86; --primary:#ededf0; --primary-fg:#0a0a0b; --lamp:#f5a524;
+      --focus:#f5a524; --ring-gap:#111113; --warn-text:#f5c451; --danger-bg:rgba(242,85,90,.08); --danger-line:rgba(242,85,90,.3);
+      --danger-text:#f2555a; --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-card:0 0 0 1px var(--line), 0 16px 40px rgba(0,0,0,.5); }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:32px 0; background:var(--bg); color:var(--text);
+    font-family:"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:14px; line-height:20px;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  :focus-visible { outline:none; box-shadow:0 0 0 2px var(--ring-gap), 0 0 0 4px var(--focus); border-radius:6px; }
+  .box { width:min(520px,calc(100% - 32px)); background:var(--surface); border-radius:12px; padding:24px; box-shadow:var(--shadow-card); }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:20px; font-weight:600; letter-spacing:-.01em; }
+  .brand-mark { display:grid; place-items:center; width:28px; height:28px; border-radius:8px; background:var(--surface-2);
+    box-shadow:inset 0 0 0 1px var(--line-2); color:var(--lamp); }
+  .brand-mark svg { width:18px; height:18px; }
+  h1 { font-size:18px; line-height:26px; font-weight:600; letter-spacing:-.01em; margin:0 0 8px; overflow-wrap:anywhere; }
+  p { color:var(--muted); margin:0 0 12px; }
+  dl { margin:20px 0 0; }
+  dt { color:var(--muted); font-size:12px; line-height:16px; font-weight:500; margin-top:16px; }
+  dd { margin:4px 0 0; font-family:"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px; overflow-wrap:anywhere; }
+  dt.scopes-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:0;
+    color:var(--text); font-size:13px; line-height:20px; font-weight:600; }
+  .select-all { min-height:32px; gap:8px; color:var(--muted); font-size:13px; font-weight:500; cursor:pointer; }
   .select-all:not([hidden]) { display:inline-flex; align-items:center; }
-  .select-all input { width:1.05rem; height:1.05rem; margin:0; accent-color:#177abf; }
-  ul.scopes { list-style:none; padding:0; margin:.4rem 0 0; font-size:.86rem; word-break:normal; overflow-wrap:anywhere; }
-  ul.scopes li { display:grid; grid-template-columns:auto 1fr; gap:.1rem .6rem; padding:.5rem 0; }
-  ul.scopes input[type=checkbox] { width:1.05rem; height:1.05rem; margin:.15rem 0 0; accent-color:#177abf; }
+  input[type=checkbox] { width:16px; height:16px; margin:0; accent-color:var(--primary); }
+  ul.scopes { list-style:none; padding:0; margin:8px 0 0; border:1px solid var(--line); border-radius:8px;
+    font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:14px; overflow-wrap:anywhere; }
+  ul.scopes li { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; padding:12px; }
+  ul.scopes li + li { border-top:1px solid var(--line); }
+  ul.scopes input[type=checkbox] { margin-top:2px; }
   ul.scopes label { font-weight:500; cursor:pointer; }
-  ul.scopes .detail { grid-column:2; color:#93a0ab; font-size:.8rem; line-height:1.45; margin:0; }
-  ul.scopes .asked { grid-column:2; color:#f0a92a; font-size:.74rem; letter-spacing:.03em; text-transform:uppercase; margin:.25rem 0 0; }
-  .base { margin:.4rem 0 0; }
-  .base > summary { cursor:pointer; color:#93a0ab; font-size:.82rem; padding:.2rem 0; }
-  .base ul { list-style:none; padding:0; margin:.4rem 0 0; }
-  .base li { display:flex; align-items:center; gap:.5rem; padding:.12rem 0; font-size:.82rem; }
-  .warn { background:#2a1d1d; border:1px solid #5c2a2c; border-radius:8px; padding:.6rem .7rem; margin:.9rem 0 0; }
-  .warn p { color:#f4cdcd; margin:0; font-size:.84rem; }
-  .note { background:#1c252e; border:1px solid #2a3540; border-radius:8px; padding:.6rem .7rem; margin:.9rem 0 0; }
-  .note p { color:#c6d1da; margin:0; font-size:.84rem; }
-  input[type=number] { width:5rem; background:#1c252e; border:1px solid #2a3540; color:#fdffff; border-radius:6px; padding:.35rem .5rem; font:inherit; }
-  .row { display:flex; gap:.6rem; margin-top:1.3rem; }
-  button { font:inherit; flex:1; padding:.65rem .7rem; border-radius:6px; border:0; cursor:pointer; }
-  button.approve { background:#177abf; color:#fff; }
-  button.deny { background:#1c252e; color:#fdffff; border:1px solid #2a3540; }
-  .err { color:#ea1c25; }
-  .lamp { display:inline-block; width:10px; height:10px; border-radius:50%; background:#ea1c25; margin-right:.4rem; }
-  code { background:#1c252e; padding:.1rem .3rem; border-radius:4px; }
+  ul.scopes .detail { grid-column:2; color:var(--muted); font-size:13px; line-height:18px; margin:0; }
+  ul.scopes .asked { grid-column:2; color:var(--warn-text); font-size:12px; line-height:16px; font-weight:500; margin:4px 0 0; }
+  .base { margin:12px 0 0; font-family:"Geist", ui-sans-serif, system-ui, sans-serif; }
+  .base > summary { cursor:pointer; width:fit-content; color:var(--muted); font-size:13px; padding:2px 0; }
+  .base > summary:hover { color:var(--text); }
+  .base ul { list-style:none; padding:0; margin:8px 0 0; }
+  .base li { display:flex; align-items:center; gap:8px; padding:2px 0; font-size:12px; }
+  .warn, .note { border-radius:8px; padding:10px 12px; margin:16px 0 0; }
+  .warn { background:var(--danger-bg); border:1px solid var(--danger-line); }
+  .warn p { color:var(--danger-text); margin:0; font-size:13px; }
+  .note { background:var(--surface-2); border:1px solid var(--line); }
+  .note p { color:var(--text); margin:0; font-size:13px; }
+  input[type=number] { width:88px; height:32px; background:var(--surface); border:1px solid var(--line-2); color:var(--text);
+    border-radius:6px; padding:0 10px; font:inherit; font-size:13px; }
+  small { color:var(--faint); font-family:"Geist", ui-sans-serif, system-ui, sans-serif; font-size:12px; margin-left:6px; }
+  form > p:last-of-type { margin-top:20px; font-size:13px; }
+  .row { display:flex; gap:8px; margin-top:20px; }
+  button { font:inherit; font-weight:500; flex:1; min-height:36px; padding:0 14px; border-radius:6px; cursor:pointer;
+    transition:background-color 120ms, opacity 120ms, transform 120ms cubic-bezier(.16,1,.3,1); }
+  button:active { transform:scale(.97); }
+  button.approve { background:var(--primary); color:var(--primary-fg); border:1px solid var(--primary); }
+  button.approve:hover { opacity:.9; }
+  button.deny { background:var(--surface); color:var(--text); border:1px solid var(--line-2); box-shadow:var(--shadow); }
+  button.deny:hover { background:var(--surface-2); }
+  .err { color:var(--danger-text); }
+  code { font-family:"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; background:var(--surface-2);
+    padding:1px 5px; border-radius:4px; }
+  @media (pointer: coarse) { button, .select-all { min-height:44px; } }
+  @media (prefers-reduced-motion: reduce) { button { transition:none; } button:active { transform:none; } }
 `;
 
 function shell(title: string, inner: string): string {
@@ -503,7 +538,7 @@ function shell(title: string, inner: string): string {
 <title>${escapeHtml(title)}</title>
 <style>${PAGE_CSS}</style>
 <div class="box">
-  <div><span class="lamp"></span><strong>Tallylamp</strong></div>
+  <div class="brand"><span class="brand-mark"><svg viewBox="2 2 20 20" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M14.29 3.44a7.4 9 0 0 1 0 17.12"/><path d="M9.71 3.44a7.4 9 0 0 0 0 17.12"/></g><circle cx="12" cy="12" r="3.3" fill="currentColor"/></svg></span>Tallylamp</div>
   ${inner}
 </div>`;
 }
