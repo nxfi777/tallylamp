@@ -42,9 +42,9 @@ function flash(message, success = false) {
  * `build` receives `close(result)` and `setPending(value)`. Pending writes cannot be dismissed;
  * `onClose` gets the result, or undefined. One-time credentials require explicit acknowledgement.
  */
-function openModal(title, build, onClose, { dismissible = true } = {}) {
+function openModal(title, build, onClose, { dismissible = true, className = "" } = {}) {
   const restoreFocus = document.activeElement;
-  const box = h("div", { class: "modal-box", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: "-1" });
+  const box = h("div", { class: className ? `modal-box ${className}` : "modal-box", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: "-1" });
   const dialog = h("div", { class: "modal", onMousedown: (e) => { if (dismissible && e.target === dialog) close(); } }, box);
   let pending = false;
   let closed = false;
@@ -472,25 +472,6 @@ function applyTheme(next) {
   }
 }
 
-function themeButton() {
-  const label = () => {
-    const t = currentTheme();
-    if (t === "light") return "Theme: light";
-    if (t === "dark") return "Theme: dark";
-    return "Theme: system";
-  };
-  const btn = h("button", {
-    class: "link theme",
-    // The control cycles, so say what it will do rather than only what it is.
-    title: "Switch between system, light and dark",
-    onClick: () => {
-      applyTheme(THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length]);
-      btn.textContent = label();
-    },
-  }, label());
-  return btn;
-}
-
 /**
  * What to do with an address bar entry that is not an address. A person typing "mobbin" means
  * "search for mobbin", and refusing them was the wrong answer — but which engine to send it to
@@ -516,22 +497,41 @@ function currentSearch() {
   return SEARCHES.find((e) => e.id === id) || SEARCHES[0];
 }
 
-function searchButton() {
-  const label = () => `Search: ${currentSearch().label}`;
-  const btn = h("button", {
-    class: "link theme",
-    title: "Choose where the address bar sends a search",
-    onClick: () => {
-      const next = SEARCHES[(SEARCHES.indexOf(currentSearch()) + 1) % SEARCHES.length];
-      try {
-        localStorage.setItem("tallylamp-search", next.id);
-      } catch {
-        /* the choice still applies for this page */
-      }
-      btn.textContent = label();
-    },
-  }, label());
-  return btn;
+function setSearch(id) {
+  try {
+    localStorage.setItem("tallylamp-search", id);
+  } catch {
+    /* the choice still applies for this page */
+  }
+}
+
+/** Darkness as rendered, not as chosen: "system" can be either. */
+function rendersDark() {
+  const t = currentTheme();
+  return t === "dark" || (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+
+/**
+ * The account menu. Theme, search engine and Log out were three buttons at the foot of the nav,
+ * two of which cycled through their values on every press, so reaching DuckDuckGo meant
+ * pressing a button that said "Search: Google" and reading what it changed to. Here every value
+ * is listed with a tick on the current one, which is how every other app does it.
+ */
+function accountMenu(anchor) {
+  const r = anchor.getBoundingClientRect();
+  const theme = currentTheme();
+  const search = currentSearch();
+  showMenu(r.left, r.top, [
+    { group: "Theme" },
+    ...[["system", "Match the system"], ["light", "Light"], ["dark", "Dark"]]
+      .map(([id, label]) => ({ label, checked: theme === id, onSelect: () => applyTheme(id) })),
+    "-",
+    { group: "Address bar search" },
+    ...SEARCHES.map((e) => ({ label: e.id === "off" ? "Off" : e.label, checked: search.id === e.id, onSelect: () => setSearch(e.id) })),
+    "-",
+    { label: "Keyboard shortcuts", kbd: "?", onSelect: shortcutsDialog },
+    { label: "Log out", onSelect: logout },
+  ], "Account");
 }
 
 let openMenu = null;
@@ -564,12 +564,19 @@ function showMenu(x, y, items, label) {
       menu.append(h("div", { class: "menu-sep", role: "separator" }));
       continue;
     }
+    if (it.group) {
+      menu.append(h("div", { class: "menu-group", role: "presentation" }, it.group));
+      continue;
+    }
+    const radio = it.checked !== undefined;
     const btn = h("button", {
-      class: "menu-item" + (it.danger ? " danger" : ""),
-      role: "menuitem",
+      class: "menu-item" + (it.danger ? " danger" : "") + (radio ? " radio" : ""),
+      role: radio ? "menuitemradio" : "menuitem",
+      "aria-checked": radio ? String(Boolean(it.checked)) : false,
       type: "button",
       onClick: () => { closeMenu(); it.onSelect(); },
-    }, it.label);
+    }, radio ? h("span", { class: "menu-check", "aria-hidden": "true" }, it.checked ? icon(ICON_CHECK) : null) : null,
+      it.label, it.kbd ? kbds(it.kbd) : null);
     focusable.push(btn);
     menu.append(btn);
   }
@@ -816,6 +823,26 @@ const ICON_RELOAD = '<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4.5V9h-4
 const ICON_FULLSCREEN = '<path d="M9 3.5H3.5V9"/><path d="M15 3.5h5.5V9"/><path d="M9 20.5H3.5V15"/><path d="M15 20.5h5.5V15"/>';
 const ICON_PLUS = '<path d="M12 5.5v13"/><path d="M5.5 12h13"/>';
 const ICON_CLOSE = '<path d="M6.5 6.5l11 11"/><path d="M17.5 6.5l-11 11"/>';
+// Lucide (ISC), the set the Link panel draws from, so the dashboard and the extension read as
+// one product.
+const ICON_BROWSERS = '<rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M2.5 9h19"/><path d="M6 6.5h.01"/><path d="M9 6.5h.01"/>';
+const ICON_INBOX = '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>';
+const ICON_BOT = '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>';
+const ICON_LAYERS = '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>';
+const ICON_SERVER = '<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>';
+const ICON_ROUTER = '<rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6.01 18H6"/><path d="M10.01 18H10"/><path d="M15 10v4"/><path d="M17.84 7.17a4 4 0 0 0-5.66 0"/><path d="M20.66 4.34a8 8 0 0 0-11.31 0"/>';
+const ICON_SHIELD = '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>';
+const ICON_SEARCH = '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>';
+const ICON_KEYBOARD = '<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>';
+const ICON_UPDOWN = '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>';
+const ICON_CHECK = '<path d="M20 6 9 17l-5-5"/>';
+
+/** Keys as keycaps. "G then B" is a sequence, not a chord, and says so. */
+function kbds(keys) {
+  return h("span", { class: "kbds", "aria-hidden": "true" },
+    ...keys.split(" ").map((k) => k === "then" ? h("span", { class: "kbd-then" }, "then") : h("kbd", { class: "kbd" }, k)));
+}
+const MOD_KEY = /Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌘" : "Ctrl";
 
 function lamp(state) {
   const core = state in LAMP_CORE ? LAMP_CORE[state] : LAMP_LENS;
@@ -831,6 +858,7 @@ function lamp(state) {
 function route() {
   const p = location.pathname;
   if (p.startsWith("/browsers/") && p.split("/").length >= 3) return { name: "browser", id: p.split("/")[2] };
+  if (p.startsWith("/requests")) return { name: "requests" };
   if (p.startsWith("/agents")) return { name: "agents" };
   if (p.startsWith("/seeds")) return { name: "seeds" };
   if (p.startsWith("/workers")) return { name: "workers" };
@@ -914,7 +942,14 @@ function requestBadge() {
     title: failed || false }, failed ? "!" : String(count));
 }
 
+/** Which server this is: its version, once status has loaded, and its host. */
+function instanceLine() {
+  return [state.status?.version ? `v${state.status.version}` : null, location.host].filter(Boolean).join(" · ");
+}
+
 function syncRequestBadges() {
+  for (const el of document.querySelectorAll("[data-browser-count]")) el.textContent = String(state.browsers.length);
+  for (const el of document.querySelectorAll("[data-instance]")) el.textContent = instanceLine();
   for (const el of document.querySelectorAll("[data-request-badge]")) {
     const count = state.requests.length;
     const failed = state.data.requests.error;
@@ -942,54 +977,228 @@ function badge(b) {
   return h("span", { class: "badge idle" }, b.status || "stopped");
 }
 
+const NAV_PAGES = [
+  ["/", "home", "Browsers", ICON_BROWSERS, "G B"],
+  ["/requests", "requests", "Requests", ICON_INBOX, "G R"],
+  ["/agents", "agents", "Agents", ICON_BOT, "G A"],
+  ["/seeds", "seeds", "Saved profiles", ICON_LAYERS, "G P"],
+];
+const NAV_INFRA = [
+  ["/workers", "workers", "Workers", ICON_SERVER, "G W"],
+  ["/gateways", "gateways", "Gateways", ICON_ROUTER],
+  ["/security", "security", "Security", ICON_SHIELD],
+];
+
+function navItem([href, name, label, paths]) {
+  const r = route().name;
+  const active = r === name || (name === "home" && r === "browser");
+  return h("a", {
+    href,
+    class: "nav-item",
+    // Without this the active page is signalled by background colour alone.
+    "aria-current": active ? "page" : false,
+    onClick: (e) => { e.preventDefault(); go(href); },
+  }, icon(paths), h("span", { class: "nav-label" }, label),
+  // The count of requests travels with the operator to every page: a person cannot be woken
+  // by a tool result the way an owning agent can, so the number has to be wherever they are.
+  name === "home" ? h("span", { class: "nav-count", "data-browser-count": "" }, String(state.browsers.length))
+    : name === "requests" ? requestBadge() : null);
+}
+
 function layout(main) {
+  const r = route().name;
+  const current = [...NAV_PAGES, ...NAV_INFRA].find(([, name]) => name === r || (name === "home" && r === "browser"));
   app.replaceChildren(
     h("div", { class: "app" },
-      // Four nav links stand between a keyboard operator and the fleet, on every navigation.
+      // Several nav links stand between a keyboard operator and the fleet, on every navigation.
       h("a", { href: "#main", class: "skip", onClick: (e) => { e.preventDefault(); const m = document.getElementById("main"); if (m) m.focus(); } }, "Skip to content"),
-      h("nav", { class: "nav" },
-        h("div", { class: "brand" }, lamp(), "Tallylamp"),
+      h("nav", { class: "nav", "aria-label": "Main" },
+        h("div", { class: "brand" },
+          h("span", { class: "brand-mark" }, lamp()),
+          h("div", { class: "brand-text" },
+            h("div", { class: "brand-name" }, "Tallylamp"),
+            h("div", { class: "brand-inst", "data-instance": "" }, instanceLine()))),
+        h("button", { class: "search-btn", type: "button", onClick: openPalette, "aria-label": "Search and commands", "aria-keyshortcuts": "Meta+K Control+K" },
+          icon(ICON_SEARCH), h("span", { class: "search-label" }, "Search…"), kbds(`${MOD_KEY} K`)),
         h("details", { class: "nav-pages", open: wideNav.matches },
-        h("summary", {}, TITLES[route().name] || "Browsers", route().name === "home" ? requestBadge() : null),
-        h("div", { class: "nav-links" },
-        ...[
-          ["/", "home", "Browsers"],
-          ["/agents", "agents", "Agents"],
-          ["/seeds", "seeds", "Saved profiles"],
-          ["/workers", "workers", "Workers"],
-          ["/gateways", "gateways", "Gateways"],
-          ["/security", "security", "Security"],
-        ].map(([href, name, label]) => {
-          const active = route().name === name;
-          // The inbox lives on Browsers, so an operator sitting on Agents or Security has no
-          // way to know an agent is waiting. A person cannot be woken by a tool result the way
-          // an owning agent can, so the count has to travel to wherever they already are.
-          const waiting = name === "home" ? (state.requests || []).length : 0;
-          return h("a", {
-            href,
-            class: active ? "active" : "",
-            // Without this the active page is signalled by background colour alone.
-            "aria-current": active ? "page" : false,
-            onClick: (e) => { e.preventDefault(); go(href); },
-          }, label, name === "home" ? requestBadge() : null);
-        }))),
-        h("div", { class: "spacer" }),
-        h("details", { class: "nav-options", open: wideNav.matches },
-        h("summary", {}, "Options"),
-        h("div", { class: "nav-preferences" },
-        searchButton(),
-        themeButton(),
-        h("button", { class: "link logout", onClick: logout }, "Log out"),
-        )),
+          h("summary", {}, current ? current[2] : TITLES[r] || "Browsers", r !== "requests" ? requestBadge() : null),
+          h("div", { class: "nav-links" },
+            ...NAV_PAGES.map(navItem),
+            h("div", { class: "nav-section", role: "presentation" }, "Infrastructure"),
+            ...NAV_INFRA.map(navItem),
+            h("div", { class: "nav-foot" },
+              h("button", { class: "nav-item", type: "button", onClick: shortcutsDialog },
+                icon(ICON_KEYBOARD), h("span", { class: "nav-label" }, "Shortcuts"), kbds("?")),
+              h("button", { class: "user-row", type: "button", "aria-haspopup": "menu", onClick: (e) => accountMenu(e.currentTarget) },
+                h("span", { class: "avatar", "aria-hidden": "true" }, "A"),
+                h("span", { class: "user-meta" },
+                  h("span", { class: "user-name" }, "Administrator"),
+                  h("span", { class: "user-sub" }, "Theme, search, log out")),
+                icon(ICON_UPDOWN))))),
       ),
       // Errors were being written into a plain div, so a screen reader never heard one.
       h("main", { class: "main", id: "main", tabindex: "-1" },
-        h("div", { class: `flash ${state.flashSuccess ? "ok" : "err"}`, role: state.flashSuccess ? "status" : "alert",
-          "aria-live": state.flashSuccess ? "polite" : "assertive", "aria-atomic": "true" }, state.flash || ""),
+        h("div", { class: "flash err", role: "alert", "aria-live": "assertive", "aria-atomic": "true" }, state.flash || ""),
         main),
     ),
   );
 }
+
+/**
+ * Search and commands. Every browser, every page and the actions that otherwise live three
+ * clicks deep, filtered as you type: a browser by its name, its project, its purpose or a site
+ * it is signed in to. Arrow keys move, Enter runs, Escape leaves.
+ */
+function paletteItems() {
+  const r = route();
+  const here = r.name === "browser" ? state.browsers.find((b) => b.id === r.id) : null;
+  const human = here?.control?.controllerType === "human" && !guestHolds(here);
+  const to = (path) => () => go(path);
+  return [
+    ...state.requests.map((q) => ({ group: "Waiting for you", label: `${q.requester_name || q.requester_id} asks to ${(q.access || "control") === "read" ? "read" : "control"} ${q.browserName}`,
+      hint: q.created_at ? ago(q.created_at) : "", keys: "request approve deny access", run: to("/requests") })),
+    ...state.browsers.map((b) => ({ group: "Browsers", label: b.name, hint: b.kind === "linked" ? linkStatus(b) : b.status || "stopped",
+      keys: [b.metadata?.project, b.metadata?.purpose, b.url, ...(b.signedInSites || []).map((site) => site.name)].filter(Boolean).join(" "),
+      run: to(`/browsers/${b.id}`) })),
+    ...[...NAV_PAGES, ...NAV_INFRA].map(([path, , label, , kbd]) => ({ group: "Go to", label, kbd, keys: "page open", run: to(path) })),
+    here && here.kind !== "linked" && (human || here.status === "running")
+      ? { group: "This browser", label: human ? "Return control to the agent" : `Take control of ${here.name}`, kbd: "T",
+        run: () => human ? returnControl(here.id) : takeControl(here.id) } : null,
+    here ? { group: "This browser", label: "Copy browser ID", keys: "id", run: () => copyBrowserId(here) } : null,
+    { group: "Actions", label: "New browser", kbd: "N", keys: "create start", run: () => act(createBrowser) },
+    { group: "Actions", label: "New agent", keys: "token create connect", run: () => { go("/agents"); void createAgent(); } },
+    { group: "Actions", label: "Link your own browser", keys: "extension pair chrome", run: linkBrowserHelp },
+    { group: "Preferences", label: `Switch to the ${rendersDark() ? "light" : "dark"} theme`, keys: "theme appearance mode", run: () => applyTheme(rendersDark() ? "light" : "dark") },
+    { group: "Preferences", label: "Keyboard shortcuts", kbd: "?", run: shortcutsDialog },
+    { group: "Preferences", label: "Log out", keys: "sign out", run: logout },
+  ].filter(Boolean);
+}
+
+function openPalette() {
+  if (document.querySelector(".modal")) return;
+  closeMenu();
+  const input = h("input", { class: "palette-input", type: "text", placeholder: "Search browsers, pages and actions…",
+    "aria-label": "Search browsers, pages and actions", autocomplete: "off", spellcheck: "false",
+    role: "combobox", "aria-expanded": "true", "aria-controls": "palette-list", "aria-autocomplete": "list" });
+  const list = h("div", { class: "palette-list", id: "palette-list", role: "listbox", "aria-label": "Results" });
+  let rows = [];
+  let index = 0;
+  let close = () => {};
+  // Every word has to appear somewhere; a match at the start of the name ranks above one in
+  // the middle, which ranks above one found only in the project, purpose or sites.
+  const score = (it, q) => {
+    const label = it.label.toLowerCase();
+    const rest = `${it.keys || ""} ${it.group}`.toLowerCase();
+    if (!q.split(/\s+/).every((w) => label.includes(w) || rest.includes(w))) return 0;
+    return label.startsWith(q) ? 3 : label.includes(q) ? 2 : 1;
+  };
+  const select = (i, scroll = true) => {
+    if (!rows.length) return;
+    index = (i + rows.length) % rows.length;
+    rows.forEach((row, j) => row.el.setAttribute("aria-selected", String(j === index)));
+    input.setAttribute("aria-activedescendant", rows[index].el.id);
+    if (scroll) rows[index].el.scrollIntoView({ block: "nearest" });
+  };
+  const run = (it) => { close(); setTimeout(() => it.run(), 0); };
+  const paint = () => {
+    const q = input.value.trim().toLowerCase();
+    let items = paletteItems();
+    if (q) items = items.map((it) => [it, score(it, q)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).map(([it]) => it);
+    rows = [];
+    input.removeAttribute("aria-activedescendant");
+    if (!items.length) {
+      list.replaceChildren(h("div", { class: "palette-empty", role: "status" }, `Nothing matches “${input.value.trim()}”.`,
+        h("div", { class: "sub" }, "Try a browser's name, a site it is signed in to, or a page.")));
+      return;
+    }
+    const groups = new Map();
+    for (const it of items) groups.set(it.group, [...(groups.get(it.group) || []), it]);
+    const nodes = [];
+    for (const [group, its] of groups) {
+      nodes.push(h("div", { class: "palette-group", role: "presentation" }, group));
+      for (const it of its) {
+        const i = rows.length;
+        const el = h("div", { class: "palette-item", role: "option", id: `palette-${i}`, "aria-selected": "false",
+          onPointermove: () => { if (index !== i) select(i, false); }, onClick: () => run(it) },
+        h("span", { class: "palette-label" }, it.label),
+        it.kbd ? kbds(it.kbd) : it.hint ? h("span", { class: "palette-hint" }, it.hint) : null);
+        rows.push({ el, it });
+        nodes.push(el);
+      }
+    }
+    list.replaceChildren(...nodes);
+    select(0, false);
+  };
+  input.addEventListener("input", paint);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); select(index + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); select(index - 1); }
+    else if (e.key === "Home" && rows.length) { e.preventDefault(); select(0); }
+    else if (e.key === "End" && rows.length) { e.preventDefault(); select(rows.length - 1); }
+    else if (e.key === "Enter") { e.preventDefault(); if (rows[index]) run(rows[index].it); }
+  });
+  openModal("Search and commands", (c) => {
+    close = c;
+    return [
+      h("div", { class: "palette-in" }, icon(ICON_SEARCH), input, kbds("Esc")),
+      list,
+      h("div", { class: "palette-foot", "aria-hidden": "true" },
+        h("span", {}, kbds("↑ ↓"), "Move"), h("span", {}, kbds("↵"), "Open"), h("span", {}, kbds("Esc"), "Close")),
+    ];
+  }, null, { className: "palette" });
+  paint();
+  input.focus();
+}
+
+function shortcutsDialog() {
+  if (document.querySelector(".modal")) return;
+  const row = (keys, text) => h("div", { class: "shortcut" }, h("span", {}, text), kbds(keys));
+  openModal("Keyboard shortcuts", (close) => [
+    h("h2", {}, "Keyboard shortcuts"),
+    h("div", { class: "shortcuts" },
+      h("div", {}, h("h3", {}, "Anywhere"),
+        row(`${MOD_KEY} K`, "Search and run commands"), row("?", "Show this list"), row("N", "New browser"),
+        row("G then B", "Go to Browsers"), row("G then R", "Go to Requests"), row("G then A", "Go to Agents"),
+        row("G then P", "Go to Saved profiles"), row("G then W", "Go to Workers")),
+      h("div", {}, h("h3", {}, "On a browser"),
+        row("T", "Take or return control"), row("F", "Fill the screen"), row("Esc", "Leave full screen"),
+        h("h3", {}, "On Browsers"), row("/", "Filter the browsers"))),
+    h("p", { class: "sub" }, "Shortcuts are off while you type in a field and while a browser's page has the keyboard, so every key you press there reaches the page."),
+    h("div", { class: "row modal-foot" }, h("button", { class: "btn primary", type: "button", onClick: () => close() }, "Close")),
+  ], undefined, { className: "wide" });
+}
+
+// Single keys only act when nothing else wants them: no field has focus, no dialog or menu is
+// open, and the live view does not have the keyboard -- there, every key belongs to the page.
+let chordAt = 0;
+document.addEventListener("keydown", (e) => {
+  if (!state.me || ["login", "pair"].includes(route().name)) return;
+  if (e.target?.closest?.(".stage")) return;
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    openPalette();
+    return;
+  }
+  if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || openMenu || document.querySelector(".modal")) return;
+  const t = e.target;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName || "") || t?.isContentEditable) return;
+  const k = e.key.toLowerCase();
+  if (chordAt && Date.now() - chordAt < 1200) {
+    chordAt = 0;
+    const path = { b: "/", r: "/requests", a: "/agents", p: "/seeds", w: "/workers" }[k];
+    if (path) { e.preventDefault(); go(path); }
+    return;
+  }
+  chordAt = 0;
+  if (k === "g") chordAt = Date.now();
+  else if (e.key === "?") { e.preventDefault(); shortcutsDialog(); }
+  else if (k === "n") { e.preventDefault(); void act(createBrowser); }
+  else if (e.key === "/" && route().name === "home") { e.preventDefault(); document.getElementById("browser-filter")?.focus(); }
+  else if (k === "t" || k === "f") {
+    const el = document.querySelector(`[data-shortcut="${k}"]`);
+    if (el && !el.disabled) { e.preventDefault(); el.click(); }
+  }
+});
 
 async function loginView() {
   const err = h("div", { class: "err" });
@@ -1263,7 +1472,7 @@ function freeSlots() {
 function requestsPanel() {
   const list = state.requests || [];
   const notice = dataNotice("requests", "access requests", () => loadDataset("requests").then(paintBrowsers));
-  if (!list.length) return notice;
+  if (!list.length) return notice || null;
   const anyControl = list.some((r) => (r.access || "control") === "control");
   return h("section", { class: "banner asks", "aria-label": "Access requests" },
     h("h2", { class: "asks-h" },
@@ -1377,11 +1586,54 @@ function askRow(r) {
   );
 }
 
+/**
+ * The top of the fleet page: capacity trouble, and a line saying who is waiting. The requests
+ * themselves have their own page now, with room to explain what each grant allows; this keeps
+ * one line of them where the operator lands, because a request buried a click away expires
+ * unanswered just as surely as one buried under the cards did.
+ */
+function homeNotices() {
+  const n = state.requests.length;
+  return [
+    dataNotice("status", "local capacity", () => retryDataset("status")),
+    hostRefusalBanner(),
+    n ? h("div", { class: "banner asks-callout", role: "status" },
+      h("span", {}, n === 1 ? "1 agent is waiting on a browser." : `${n} agents are waiting on a browser.`),
+      h("button", { class: "btn sm", type: "button", onClick: () => go("/requests") }, n === 1 ? "Review it" : "Review them")) : null,
+  ].filter(Boolean);
+}
+
+let inboxHost = null;
+
+function paintRequests() {
+  if (!inboxHost?.isConnected) return;
+  const panel = requestsPanel();
+  inboxHost.replaceChildren(...(state.requests.length || !state.data.requests.loadedAt
+    ? [panel]
+    : [panel, h("div", { class: "empty" },
+      h("h2", {}, "Nothing is waiting"),
+      h("p", { class: "sub" }, "When an agent asks to use a browser it does not own, the request lands here and on the Requests badge. Approve it for read or control, for as long as you choose."),
+      h("p", { class: "sub" }, "Ignoring one is safe: it expires by itself and nothing is blocked meanwhile."))]).filter(Boolean));
+}
+
+async function requestsView() {
+  inboxHost = h("div", { class: "inbox" });
+  layout([
+    h("div", { class: "top" },
+      h("div", {},
+        h("h1", {}, "Requests"),
+        h("div", { class: "sub" }, "Agents asking to use a browser they do not own."))),
+    inboxHost,
+  ]);
+  paintRequests();
+}
+
 function paintBrowsers() {
   syncRequestBadges();
+  paintRequests();
   // Repainted on the same tick as the fleet, so an SSE event lands a new request in front of
   // the operator within a second or two rather than on the next full navigation.
-  if (requestsHost) requestsHost.replaceChildren(...[dataNotice("status", "local capacity", () => retryDataset("status")), hostRefusalBanner(), requestsPanel()].filter(Boolean));
+  if (requestsHost) requestsHost.replaceChildren(...homeNotices());
   if (!browsersHost) return;
   // These cards are about to be replaced; a menu anchored to one of them would outlive it.
   closeMenu();
@@ -1450,7 +1702,9 @@ async function homeView() {
       ),
       h("div", { class: "row" },
         h("input", {
+          id: "browser-filter",
           "aria-label": "Filter browsers",
+          "aria-keyshortcuts": "/",
           placeholder: "Filter browsers…",
           value: state.filter,
           onInput: (e) => {
@@ -1462,7 +1716,7 @@ async function homeView() {
         h("button", { class: "btn primary", onClick: () => act(createBrowser) }, "New browser"),
       ),
     ),
-    // Above the fleet, not below it. This is the only thing on the page with a deadline on it.
+    // Above the fleet, not below it. A request is the only thing here with a deadline on it.
     requestsHost,
     browsersHost,
   ]);
@@ -2000,6 +2254,8 @@ async function browserView(id, seq) {
     class: "btn tiny navbtn",
     title: "Fill the screen with this browser (Esc to leave)",
     "aria-label": "Toggle full screen",
+    "data-shortcut": "f",
+    "aria-keyshortcuts": "F",
   }, icon(ICON_FULLSCREEN));
   const newTabBtn = h("button", {
     class: "tab-new",
@@ -2113,10 +2369,10 @@ async function browserView(id, seq) {
         // Stopped, Start is the one thing to do and takes the filled style; Take control has
         // nothing to take. A lease can outlive a stop, so Return to agent stays when it applies.
         human
-          ? h("button", { class: "btn ok", onClick: () => returnControl(id) }, "Return to agent")
+          ? h("button", { class: "btn ok", "data-shortcut": "t", "aria-keyshortcuts": "T", onClick: () => returnControl(id) }, "Return to agent")
           : ["stopped", "crashed", "queued", "moving"].includes(b.status)
             ? null
-            : h("button", { class: "btn human", onClick: () => takeControl(id) }, "Take control"),
+            : h("button", { class: "btn human", "data-shortcut": "t", "aria-keyshortcuts": "T", onClick: () => takeControl(id) }, "Take control"),
         // One of Start and Stop, never both with one greyed out, and only one button filled:
         // Save profile used to be filled white beside the takeover button and the two fought
         // for the eye.
@@ -4029,7 +4285,7 @@ async function pairView(code) {
   );
 }
 
-const TITLES = { pair: "Link a browser", home: "Browsers", agents: "Agents", seeds: "Saved profiles", workers: "Workers", gateways: "Gateways", security: "Security state", login: "Sign in" };
+const TITLES = { pair: "Link a browser", home: "Browsers", requests: "Requests", agents: "Agents", seeds: "Saved profiles", workers: "Workers", gateways: "Gateways", security: "Security state", login: "Sign in" };
 
 let renderSeq = 0;
 
@@ -4069,6 +4325,9 @@ async function render() {
       } else detailMetadataRefresh?.();
     } else if (r.name === "pair") {
       if (!detailStarted && !state.data.agents.loading) { detailStarted = true; void pairView(r.code); }
+    } else if (r.name === "requests") {
+      if (!name) void requestsView();
+      else paintRequests();
     } else if (r.name === "agents" && (!name || name === "agents")) void agentsView();
     else if (r.name === "seeds" && (!name || ["seeds", "browsers"].includes(name))) void seedsView();
     else if (r.name === "workers" && (!name || name === "workers")) void workersView();
@@ -4103,7 +4362,7 @@ function startEvents() {
     if (route().name !== "home" || document.hidden) return;
     await loadDataset("status");
     if (fleetCountEl) fleetCountEl.replaceChildren(fleetMeter());
-    if (requestsHost) requestsHost.replaceChildren(...[dataNotice("status", "local capacity", () => retryDataset("status")), hostRefusalBanner(), requestsPanel()].filter(Boolean));
+    if (requestsHost) requestsHost.replaceChildren(...homeNotices());
   }, 15_000);
   let timer = 0;
   let backoff = 1000;
@@ -4126,7 +4385,9 @@ function startEvents() {
         // Repaint the cards, not the page. This used to call homeView(), which rebuilds the
         // whole layout — so an operator typing in the filter lost focus to <body> and had the
         // caret sent back to the start, roughly every time any agent touched any browser.
+        syncRequestBadges();
         if (route().name === "home") paintBrowsers();
+        if (route().name === "requests") paintRequests();
         // A worker joining or dropping off is an event too. Not while a dialog is open: the
         // join token is shown once, and the page behind it can wait.
         if (route().name === "workers" && !document.querySelector(".modal")) void workersView();

@@ -180,8 +180,8 @@ scopes with `PATCH /api/v1/agents/:id`. A running agent picks up a change on its
 next request and keeps its token.
 
 `browser:borrow` and `browser:lend` cover lending *between agents*. Neither is
-needed for an agent to ask **you** for a browser you own: that request appears in
-the panel on **Browsers** and your approval is the whole permission. See
+needed for an agent to ask **you** for a browser you own: that request appears on
+**Requests** and your approval is the whole permission. See
 [asking the administrator](architecture.md#asking-the-administrator).
 
 Agents create browsers through `tallylamp_create_browser` or

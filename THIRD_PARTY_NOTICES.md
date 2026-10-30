@@ -77,7 +77,8 @@ https://github.com/lucide-icons/lucide
 ISC  
 Copyright (c) Lucide Contributors 2022. Portions copyright (c) Cole Bemis 2013-2022 as
 part of Feather (MIT).  
-The extension panel's icons (`extension/panel.js`) are Lucide's SVG paths.
+The extension panel's icons (`extension/panel.js`) and the dashboard's navigation icons
+(`dashboard/app.js`) are Lucide's SVG paths.
 
 ```
 ISC License

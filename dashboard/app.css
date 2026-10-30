@@ -229,25 +229,86 @@ button { cursor: pointer; }
   padding: 8px 0; background: var(--bg);
 }
 
-.app { min-height: 100%; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+.app { min-height: 100%; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
 .nav, .main { min-width: 0; }
-.nav-pages, .nav-options { width: 100%; }
-.nav-pages > summary, .nav-options > summary { display: none; }
-.nav-links, .nav-preferences { display: flex; flex-direction: column; gap: 6px; }
+.nav-pages { width: 100%; flex: 1; display: flex; flex-direction: column; }
+.nav-pages > summary { display: none; }
+.nav-links { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+/* A <details> lays its content out in its own slot box, so .nav-links cannot fill the column
+   without reaching through it. Where ::details-content is unsupported the foot simply follows
+   the last link instead of sitting at the bottom. */
+@media (min-width: 901px) {
+  .nav-pages { display: flex; flex-direction: column; }
+  .nav-pages::details-content { flex: 1; display: flex; flex-direction: column; }
+}
 @media (min-width: 901px) { .app { height: 100%; } }
 .nav {
   border-right: 1px solid var(--line);
   background: var(--nav-bg);
-  padding: 20px 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  overflow-y: auto;
 }
-.brand {
-  display: flex; align-items: center; gap: 10px;
-  font-weight: 600; letter-spacing: -0.014em; font-size: 14px;
-  padding: 4px 6px 16px;
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 12px; }
+/* The lamp in a small raised tile, the way an app icon sits in a sidebar header. */
+.brand-mark {
+  flex: none; width: 28px; height: 28px; border-radius: var(--radius);
+  display: grid; place-items: center;
+  background: var(--surface-3); box-shadow: 0 0 0 1px var(--line-2) inset;
 }
+.brand-text { min-width: 0; }
+.brand-name { font-weight: 600; font-size: 14px; line-height: 18px; letter-spacing: -0.01em; }
+.brand-inst { font-size: 12px; line-height: 16px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-btn {
+  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; margin-bottom: 8px;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-sm);
+  color: var(--faint); font-size: 13px; text-align: left;
+  transition: border-color var(--d-fast), color var(--d-fast);
+}
+.search-btn:hover { border-color: var(--line-strong); color: var(--muted); }
+.search-btn .icon { width: 14px; height: 14px; }
+.search-label { flex: 1; }
+.kbds { display: inline-flex; align-items: center; gap: 4px; }
+.kbd {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 4px;
+  border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px;
+  background: var(--surface); color: var(--muted);
+  font: 500 11px/1 var(--sans);
+}
+.kbd-then { color: var(--faint); font-size: 12px; }
+.nav-item {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  width: 100%; height: 32px; padding: 0 8px;
+  border: 0; border-radius: var(--radius-sm); background: none;
+  color: var(--muted); font-size: 14px; text-align: left;
+  transition: background-color var(--d-fast), color var(--d-fast);
+}
+.nav-item .icon { width: 16px; height: 16px; flex: none; }
+.nav-item:hover { background: var(--hover); color: var(--text); }
+.nav-item[aria-current="page"] {
+  background: var(--surface-3); box-shadow: 0 0 0 1px var(--line-2) inset;
+  color: var(--text); font-weight: 500;
+}
+.nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.nav-section { padding: 16px 8px 4px; font-size: 11px; line-height: 16px; font-weight: 500; color: var(--faint); letter-spacing: 0.02em; }
+.nav-foot { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.nav-foot .nav-item .kbds { margin-left: auto; }
+.user-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px;
+  border: 0; border-radius: var(--radius-sm); background: none; text-align: left; color: var(--text);
+}
+.user-row:hover { background: var(--hover); }
+.user-row > .icon { width: 14px; height: 14px; margin-left: auto; color: var(--faint); }
+.avatar {
+  flex: none; width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center;
+  background: var(--primary); color: var(--primary-fg); font-size: 11px; font-weight: 600;
+}
+.user-meta { display: flex; flex-direction: column; min-width: 0; }
+.user-name { font-size: 13px; line-height: 18px; font-weight: 500; }
+.user-sub { font-size: 12px; line-height: 16px; color: var(--faint); }
 /* The mark is a pilot lamp: a lens held between two bezel arcs. It replaces a plain 12px circle.
    Three things about it are load-bearing and should not be "tidied":
 
@@ -276,16 +337,7 @@ button { cursor: pointer; }
 .lamp.idle { color: var(--line-strong); filter: none; }
 .lamp.ok { color: var(--ok); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ok) 55%, transparent)); }
 .lamp.human { color: var(--human); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--human) 55%, transparent)); }
-.nav a, .nav button.link {
-  display: block; padding: 6px 10px; border-radius: var(--radius-sm);
-  color: var(--muted); background: none; border: 0; text-align: left; width: 100%;
-  font-size: 14px; font-weight: 500;
-}
-.nav a:hover, .nav button.link:hover { background: var(--hover); color: var(--text); }
-.nav a.active { background: var(--surface-2); color: var(--text); }
-.nav .spacer { flex: 1; }
-.nav .theme { font-size: 13px; }
-.main { padding: 20px 24px 32px; overflow: auto; }
+.main { padding: 28px 32px 64px; overflow: auto; }
 .top {
   display: flex; justify-content: space-between; align-items: flex-end;
   gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
@@ -344,7 +396,7 @@ input::placeholder { color: var(--muted); }
 .btn:active:not(:disabled) { transform: scale(0.97); }
 @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active:not(:disabled) { transform: none; } }
 @media (pointer: coarse) {
-  .btn, .nav a, .nav button.link { min-height: 44px; display: inline-flex; align-items: center; }
+  .btn, .nav-item, .user-row { min-height: 44px; }
 }
 .btn:hover:not(:disabled) { background: var(--surface-2); }
 /* `.tab-new` and `.navbtn` had this and `.btn` did not, so every disabled button in the
@@ -456,13 +508,19 @@ input::placeholder { color: var(--muted); }
 .actions .more { margin-left: auto; padding-inline: 10px; line-height: 1; }
 
 .menu {
-  position: fixed; z-index: 200; min-width: 190px;
+  position: fixed; z-index: 200; min-width: 200px;
   background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 4px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-pop);
+  animation: menu-in var(--d-fast) var(--ease-out);
 }
+@keyframes menu-in { from { opacity: 0; transform: scale(0.97); } }
+.menu-group { padding: 8px 10px 4px; font-size: 11px; line-height: 16px; font-weight: 500; color: var(--faint); }
+.menu-item { display: flex !important; align-items: center; gap: 8px; }
+.menu-item .kbds { margin-left: auto; }
+.menu-check { width: 14px; height: 14px; flex: none; }
+.menu-check .icon { width: 14px; height: 14px; }
 .menu-item {
   display: block; width: 100%; text-align: left;
   background: none; border: 0; border-radius: 5px;
@@ -779,7 +837,7 @@ pre { background: var(--surface-2); padding: 12px; border-radius: 8px; overflow:
 /* Sits on the nav link, not in a corner of the page: it has to be visible from the two views
    that are not the inbox, which is the only reason it exists. */
 .nav-badge {
-  display: inline-block; margin-left: 6px; padding: 0 6px;
+  display: inline-block; margin-left: auto; padding: 0 6px;
   min-width: 20px; border-radius: 999px; text-align: center;
   font-size: 12px; font-weight: 600; line-height: 20px;
   background: var(--human); color: var(--human-fg);
@@ -826,18 +884,19 @@ pre { background: var(--surface-2); padding: 12px; border-radius: 8px; overflow:
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   /* Wrap rather than scroll sideways. As a scroller this nav overflowed (527px of items in
      485px) and pushed Log out off the edge. */
-  .nav { position: relative; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; gap: 4px; }
-  .nav-pages, .nav-options { width: auto; }
-  .nav-pages { margin-left: auto; }
-  .nav-pages > summary, .nav-options > summary { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-sm); }
-  .nav-pages > summary::after, .nav-options > summary::after { content: "⌄"; }
-  .nav-links, .nav-preferences { position: absolute; right: 8px; top: calc(100% - 4px); z-index: 30; min-width: 200px; padding: 8px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); }
-  .nav .spacer { display: none; }
-  /* `.nav .logout` used to sit here too and never applied: `.nav button.link` above is more
-     specific and kept it displayed. Log out now stays on purpose — an operator on a tablet
-     still has to be able to end their session. */
-  .nav a, .nav button.link { width: auto; }
-  .brand { padding: 4px 10px 4px 6px; }
+  .nav { position: relative; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; gap: 4px; overflow: visible; }
+  .nav-pages { width: auto; flex: none; }
+  .nav-pages > summary { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-sm); font-weight: 500; }
+  .nav-pages > summary::after { content: "⌄"; }
+  .nav-pages > summary .nav-badge { margin-left: 0; }
+  .nav-links { position: absolute; right: 8px; top: calc(100% - 4px); z-index: 30; width: min(280px, calc(100vw - 16px)); padding: 8px; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); }
+  .nav-foot { margin-top: 8px; }
+  /* Icon only: the label and keycaps do not fit beside the brand and the page menu at 375px,
+     and a phone has no Command key to press anyway. The button keeps its aria-label. */
+  .search-btn { margin: 0 0 0 auto; width: 44px; height: 44px; justify-content: center; padding: 0; border-color: transparent; background: none; }
+  .search-btn .search-label, .search-btn .kbds { display: none; }
+  .brand { padding: 4px 8px 4px 4px; }
+  .brand-inst { display: none; }
   .detail { grid-template-columns: 1fr; }
   /* Stacked, the page scrolls rather than .main, but overflow: auto still made .main the box
      sticky elements stick to, so the flash scrolled away with it. clip trims sideways overflow
@@ -1073,3 +1132,37 @@ body.busy::before {
   .switch:active:not(:disabled)::after { width: 16px; }
   .switch[aria-checked="true"]:active:not(:disabled)::after { transform: translateX(16px); }
 }
+
+/* ---------- requests ---------- */
+.asks-callout { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-left: 3px solid var(--human); }
+.empty { max-width: 60ch; padding: 32px 0; }
+.empty h2 { margin-top: 0; }
+.empty .sub + .sub { margin-top: 8px; }
+
+/* ---------- search and commands ---------- */
+.modal:has(.palette) { place-items: start center; padding-top: 14vh; }
+.modal-box.palette { width: min(600px, calc(100vw - 32px)); padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: 70vh; }
+.modal-box.wide { width: min(680px, calc(100vw - 32px)); }
+.palette-in { display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--line); color: var(--faint); }
+.palette-in .icon { width: 16px; height: 16px; flex: none; }
+.palette-input, .palette-input:focus-visible {
+  flex: 1; min-width: 0; height: 52px; padding: 0; border: 0; outline: 0; box-shadow: none;
+  background: none; color: var(--text); font-size: 15px;
+}
+.palette-list { overflow-y: auto; padding: 6px; flex: 1; }
+.palette-group { padding: 10px 10px 4px; font-size: 11px; line-height: 16px; font-weight: 500; color: var(--faint); }
+.palette-item {
+  display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px;
+  border-radius: var(--radius-sm); cursor: pointer; font-size: 14px;
+}
+.palette-item[aria-selected="true"] { background: var(--surface-3); }
+.palette-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-hint { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.palette-empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+.palette-empty .sub { margin-top: 6px; }
+.palette-foot { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
+.palette-foot > span { display: inline-flex; align-items: center; gap: 6px; }
+
+.shortcuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 32px; margin-top: 12px; }
+.shortcuts h3 { margin: 12px 0 4px; font-size: 12px; font-weight: 500; color: var(--faint); }
+.shortcut { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--line); }

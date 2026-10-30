@@ -189,10 +189,11 @@ that browser, so share one that holds only what they need. See
 
 ### Let an agent use one of your browsers
 
-An agent can ask for a browser you own. The request shows up on **Browsers** with
-the agent's name and its reason. You can approve it at **control**, which lets
-the agent act in the browser, or at **read**, which lets it see pages and nothing
-more. You can also approve a control request as read only. Pick how long the
+An agent can ask for a browser you own. The request shows up on **Requests** with
+the agent's name and its reason. A badge on **Requests** and a line at the top of
+**Browsers** show how many are waiting. You can approve it at **control**, which
+lets the agent act in the browser, or at **read**, which lets it see pages and
+nothing more. You can also approve a control request as read only. Pick how long the
 grant lasts, from 30 minutes up to until you revoke it. The browser's page lists
 everyone with access, with a **Revoke** button for each. See
 [lending and granting access](docs/architecture.md#lending-and-granting-access-to-a-browser).

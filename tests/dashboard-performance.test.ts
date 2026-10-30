@@ -53,6 +53,7 @@ test('live changes refresh immediately after idle, rate-limit bursts, and wait w
     window: { EventSource }, EventSource, document, performance: { now: () => now },
     setInterval: () => {}, setTimeout: (callback: () => void, delay: number) => { const id = ++nextId; timers.set(id, { at: now + delay, callback }); return id; },
     refresh: async () => { refreshes++; }, route: () => ({ name: 'home' }), paintBrowsers: () => {},
+    syncRequestBadges: () => {}, paintRequests: () => {},
   });
   const runDue = async () => {
     for (const [id, task] of [...timers]) if (task.at <= now) { timers.delete(id); task.callback(); }
