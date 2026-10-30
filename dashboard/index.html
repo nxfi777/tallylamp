@@ -4,20 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tallylamp</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!--
-      Loaded without blocking the first paint. Tallylamp is meant to run as a container that may
-      have no egress at all, and as a render-blocking stylesheet this held the whole dashboard
-      on a connection to fonts.googleapis.com that was never going to complete. The stack in
-      --sans/--mono carries the page until (or unless) this arrives.
+      Geist ships with the dashboard (see @font-face in app.css). Tallylamp is meant to run as a
+      container that may have no egress at all, and the old Google Fonts link either never
+      arrived there or swapped the face in late. Preloaded so the text paints in Geist at once.
     -->
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
-      media="print"
-      onload="this.media='all'"
-    />
+    <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/app.css" />
     <!--
       Blocking and inline on purpose. app.js is a module, so it runs after the document has

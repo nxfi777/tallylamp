@@ -11,43 +11,50 @@
 :root {
   color-scheme: light;
 
-  /* Near-zero chroma. The dashboard's job is to frame live browser screenshots, and a tinted
-     shell competes with them; every hue below is reserved for meaning. */
+  /* Graphite: zinc neutrals with almost no chroma. The dashboard's job is to frame live browser
+     screenshots, and a tinted shell competes with them; every hue below is reserved for meaning. */
   --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f5f4f2;
-  --line: #e6e3e0;
-  /* WCAG 1.4.11 wants 3:1 for the boundary that identifies a control; --line is a divider and
-     sits deliberately below that. --line-strong: 3.20 on --surface. */
-  --line-strong: #8d8986;
-  --text: #171514;         /* 19.87 on --bg */
-  --muted: #615c58;        /* 6.34 on --bg */
+  --surface-2: #f7f7f8;
+  --surface-3: #efeff1;
+  --line: #ececef;
+  --line-2: #e0e0e4;
+  /* WCAG 1.4.11 wants 3:1 for the boundary that identifies a control; --line and --line-2 are
+     dividers and sit deliberately below that. --line-strong: 3.25 on --surface. */
+  --line-strong: #8e8e96;
+  --text: #0a0a0b;         /* 19.79 on --bg */
+  --muted: #52525b;        /* 7.73 on --bg */
+  --faint: #71717a;        /* 4.83 on --bg: metadata only, never the only copy of a fact */
 
   /* The one high-contrast fill. Solid near-black in light, solid near-white in dark — the
      page's single loudest element, so there is never a question which action is the main one. */
-  --primary: #1c1a19;
-  --primary-fg: #faf9f8;   /* 15.649 on --primary */
+  --primary: #0a0a0b;
+  --primary-fg: #ffffff;   /* 19.79 on --primary */
 
   /* The lamp is the identity, not a status. It was sharing the danger red with the LIVE
      badge, which made the logo read as "something is live". Amber, and its own token. */
-  --lamp: #b8770c;
-  --tally: #c4302b;        /* danger fill — white on it 5.51 */
-  --tally-text: #a32521;   /* danger label — 7.44 on --bg */
-  --info-text: #1d5fa4;    /* links — 6.94 on --bg */
-  --ok: #136c43;           /* white on it 6.42 */
-  --ok-text: #136c43;
-  --human: #9a3412;        /* takeover fill — white on it 8.10 */
-  --warn: #7a5c00;         /* 6.36 on --bg */
+  --lamp: #c27803;
+  --tally: #dc2626;        /* danger fill — white on it 4.83 */
+  --tally-text: #dc2626;   /* danger label — 4.83 on --bg */
+  --info-text: #2563eb;    /* links — 5.17 on --bg */
+  --ok: #15803d;
+  --ok-fg: #ffffff;        /* 5.02 on --ok */
+  --ok-text: #15803d;      /* 5.02 on --bg */
+  /* Takeover amber carries dark text in both themes: white on it measured 3.19. */
+  --human: #d97706;
+  --human-fg: #160e00;     /* 6.01 on --human */
+  --warn: #a16207;         /* 4.92 on --bg */
   /* Drawn outside the control with a background-coloured gap between the two, so it only ever
-     has to beat the page and surfaces — never the fill it surrounds. */
-  --focus: #1c1a19;
+     has to beat the page and surfaces — never the fill it surrounds. Lamp amber: 3.51 on --bg. */
+  --focus: #c27803;
   --ring-gap: #ffffff;
 
-  --stage-bg: #f5f4f2;     /* letterbox around the live frame */
-  --thumb-bg: #f5f4f2;
-  --nav-bg: #faf9f8;
-  --scrim: rgba(23, 21, 20, 0.45);
-  --hover: rgba(23, 21, 20, 0.04);
+  --stage-bg: #f4f4f5;     /* letterbox around the live frame */
+  --thumb-bg: #f4f4f5;
+  --nav-bg: #fafafa;
+  --scrim: rgba(10, 10, 11, 0.4);
+  --hover: rgba(10, 10, 11, 0.03);
+  --press: rgba(10, 10, 11, 0.06);
 
   /* Chips that sit ON a live browser frame. The backdrop there is whatever the agent is looking
      at, not the theme, so these are identical in both: measured on the #0b0b0d chip —
@@ -59,12 +66,21 @@
   --chip-human: #e8935f;
   --chip-warn: #d0a24a;    /* 8.5 on --chip */
 
-  --radius: 8px;
+  /* Whole pixels everywhere. The old 0.78rem / 0.85rem / 0.35rem values landed text and 1px
+     borders on half pixels, which is most of why the dashboard read soft. */
   --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
   /* Borders carry the structure. A card that needs a drop shadow to separate from the page is
      a card whose border is not doing its job. */
-  --shadow: 0 1px 2px rgba(23, 21, 20, 0.05);
-  --shadow-pop: 0 10px 30px rgba(23, 21, 20, 0.12);
+  --shadow: 0 1px 2px rgba(10, 10, 11, 0.05);
+  --shadow-pop: 0 0 0 1px var(--line-2), 0 16px 40px rgba(10, 10, 11, 0.12), 0 2px 6px rgba(10, 10, 11, 0.08);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --d-fast: 120ms;
+  --d: 180ms;
+  --d-slow: 260ms;
 
   --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -74,64 +90,91 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #191818;
-    --surface: #201f21;
-    --surface-2: #292828;
-    --line: #343333;
-    --line-strong: #7a7573;  /* 3.32 on --bg */
-    --text: #f4f2f0;         /* 15.58 on --bg */
-    --muted: #a9a5a1;        /* 7.30 on --bg */
-    --primary: #f4f2f0;
-    --primary-fg: #191818;   /* 17.40 on --primary */
-    --lamp: #f5a623;
-    --tally: #d93a33;        /* white on it 4.55 */
-    --tally-text: #f58079;   /* 6.28 on --bg */
-    --info-text: #84b7e8;    /* 8.03 on --bg */
-    --ok: #2f8256;           /* white on it 5.15 */
-    --ok-text: #78bd98;
-    --human: #c2560c;        /* white on it 5.06 */
-    --warn: #d0a24a;         /* 7.58 on --bg */
-    --focus: #a9a5a1;
-    --ring-gap: #191818;
-    --stage-bg: #191818;
-    --thumb-bg: #1d1c1e;
-    --nav-bg: #141313;
+    --bg: #0a0a0b;
+    --surface: #111113;
+    --surface-2: #17171a;
+    --surface-3: #1e1e22;
+    --line: #1f1f23;
+    --line-2: #2a2a30;
+    --line-strong: #62626c;  /* 3.13 on --surface */
+    --text: #ededf0;         /* 16.94 on --bg */
+    --muted: #a1a1aa;        /* 7.72 on --bg */
+    --faint: #7c7c86;        /* 4.79 on --bg */
+    --primary: #ededf0;
+    --primary-fg: #0a0a0b;   /* 16.94 on --primary */
+    --lamp: #f5a524;
+    --tally: #dc2626;        /* white on it 4.83 */
+    --tally-text: #f2555a;   /* 5.86 on --bg */
+    --info-text: #7aa2f7;    /* 7.86 on --bg */
+    --ok: #3dd68c;
+    --ok-fg: #03140b;        /* 10.10 on --ok */
+    --ok-text: #3dd68c;      /* 10.55 on --bg */
+    --human: #f59e0b;
+    --human-fg: #160e00;     /* 8.91 on --human */
+    --warn: #f5c451;         /* 12.15 on --bg */
+    --focus: #f5a524;        /* 9.70 on --bg */
+    --ring-gap: #0a0a0b;
+    --stage-bg: #0a0a0b;
+    --thumb-bg: #16161a;
+    --nav-bg: #0d0d0f;
     --scrim: rgba(0, 0, 0, 0.7);
-    --hover: rgba(250, 250, 250, 0.06);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.5);
+    --hover: rgba(255, 255, 255, 0.04);
+    --press: rgba(255, 255, 255, 0.07);
+    --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-pop: 0 0 0 1px var(--line-2), 0 16px 40px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4);
   }
 }
 
 /* And the explicit choice, which must also beat a light system preference. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #191818;
-  --surface: #201f21;
-  --surface-2: #292828;
-  --line: #343333;
-  --line-strong: #7a7573;
-  --text: #f4f2f0;
-  --muted: #a9a5a1;
-  --primary: #f4f2f0;
-  --primary-fg: #191818;
-  --lamp: #f5a623;
-  --tally: #d93a33;
-  --tally-text: #f58079;
-  --info-text: #84b7e8;
-  --ok: #2f8256;
-  --ok-text: #78bd98;
-  --human: #c2560c;
-  --warn: #d0a24a;
-  --focus: #a9a5a1;
-  --ring-gap: #191818;
-  --stage-bg: #191818;
-  --thumb-bg: #1d1c1e;
-  --nav-bg: #141313;
+  --bg: #0a0a0b;
+  --surface: #111113;
+  --surface-2: #17171a;
+  --surface-3: #1e1e22;
+  --line: #1f1f23;
+  --line-2: #2a2a30;
+  --line-strong: #62626c;
+  --text: #ededf0;
+  --muted: #a1a1aa;
+  --faint: #7c7c86;
+  --primary: #ededf0;
+  --primary-fg: #0a0a0b;
+  --lamp: #f5a524;
+  --tally: #dc2626;
+  --tally-text: #f2555a;
+  --info-text: #7aa2f7;
+  --ok: #3dd68c;
+  --ok-fg: #03140b;
+  --ok-text: #3dd68c;
+  --human: #f59e0b;
+  --human-fg: #160e00;
+  --warn: #f5c451;
+  --focus: #f5a524;
+  --ring-gap: #0a0a0b;
+  --stage-bg: #0a0a0b;
+  --thumb-bg: #16161a;
+  --nav-bg: #0d0d0f;
   --scrim: rgba(0, 0, 0, 0.7);
-  --hover: rgba(250, 250, 250, 0.06);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --hover: rgba(255, 255, 255, 0.04);
+  --press: rgba(255, 255, 255, 0.07);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 0 0 1px var(--line-2), 0 16px 40px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Self-hosted, so the first paint never waits on a third-party font host and the dashboard
+   works on an instance with no internet access. Variable fonts: one file covers 400-600. */
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("fonts/geist-mono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
 }
 
 * { box-sizing: border-box; }
@@ -140,8 +183,8 @@ html, body {
   margin: 0; height: 100%;
   background: var(--bg); color: var(--text);
   font-family: var(--sans);
-  font-size: 14px; line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+  font-size: 14px; line-height: 20px;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 /* The app root had no height at all, so every `min-height: 100%` below it — on .app and on
@@ -164,13 +207,13 @@ button { cursor: pointer; }
 }
 
 .skip {
-  position: absolute; left: 0.5rem; top: -3rem; z-index: 60;
+  position: absolute; left: 8px; top: -48px; z-index: 60;
   background: var(--surface-2); color: var(--text);
   border: 1px solid var(--line-strong); border-radius: 6px;
-  padding: 0.5rem 0.8rem;
+  padding: 8px 12px;
   transition: top 0.12s ease-out;
 }
-.skip:focus { top: 0.5rem; }
+.skip:focus { top: 8px; }
 #main:focus { outline: none; }
 @media (prefers-reduced-motion: reduce) { .skip { transition: none; } }
 
@@ -181,29 +224,29 @@ button { cursor: pointer; }
    the card it is about, which on a phone is often well below the top: a move's "now runs on
    the worker" was rendered out of sight, at exactly the moment it answered the question. */
 .flash {
-  margin-bottom: 0.8rem;
+  margin-bottom: 12px;
   position: sticky; top: 0; z-index: 5;
-  padding: 0.45rem 0; background: var(--bg);
+  padding: 8px 0; background: var(--bg);
 }
 
 .app { min-height: 100%; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
 .nav, .main { min-width: 0; }
 .nav-pages, .nav-options { width: 100%; }
 .nav-pages > summary, .nav-options > summary { display: none; }
-.nav-links, .nav-preferences { display: flex; flex-direction: column; gap: 0.35rem; }
+.nav-links, .nav-preferences { display: flex; flex-direction: column; gap: 6px; }
 @media (min-width: 901px) { .app { height: 100%; } }
 .nav {
   border-right: 1px solid var(--line);
   background: var(--nav-bg);
-  padding: 1.25rem 0.9rem;
+  padding: 20px 14px;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 6px;
 }
 .brand {
-  display: flex; align-items: center; gap: 0.65rem;
-  font-weight: 600; letter-spacing: -0.014em; font-size: 0.95rem;
-  padding: 0.2rem 0.4rem 1.1rem;
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 600; letter-spacing: -0.014em; font-size: 14px;
+  padding: 4px 6px 16px;
 }
 /* The mark is a pilot lamp: a lens held between two bezel arcs. It replaces a plain 12px circle.
    Three things about it are load-bearing and should not be "tidied":
@@ -234,34 +277,34 @@ button { cursor: pointer; }
 .lamp.ok { color: var(--ok); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ok) 55%, transparent)); }
 .lamp.human { color: var(--human); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--human) 55%, transparent)); }
 .nav a, .nav button.link {
-  display: block; padding: 0.4rem 0.6rem; border-radius: var(--radius-sm);
+  display: block; padding: 6px 10px; border-radius: var(--radius-sm);
   color: var(--muted); background: none; border: 0; text-align: left; width: 100%;
-  font-size: 0.875rem; font-weight: 500;
+  font-size: 14px; font-weight: 500;
 }
 .nav a:hover, .nav button.link:hover { background: var(--hover); color: var(--text); }
 .nav a.active { background: var(--surface-2); color: var(--text); }
 .nav .spacer { flex: 1; }
-.nav .theme { font-size: 0.85rem; }
-.main { padding: 1.25rem 1.5rem 2rem; overflow: auto; }
+.nav .theme { font-size: 13px; }
+.main { padding: 20px 24px 32px; overflow: auto; }
 .top {
   display: flex; justify-content: space-between; align-items: flex-end;
-  gap: 1rem; margin-bottom: 1.1rem; flex-wrap: wrap;
+  gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
 }
-h1 { font-size: 1.5rem; margin: 0; font-weight: 600; letter-spacing: -0.021em; }
-/* The UA default for h2 is 1.5rem, which is larger than this h1 — the heading levels were
+h1 { font-size: 24px; line-height: 32px; margin: 0; font-weight: 600; letter-spacing: -0.02em; }
+/* The UA default for h2 is 24px, which is larger than this h1 — the heading levels were
    rendering upside down anywhere a section heading appeared. */
-h2 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.5rem; letter-spacing: -0.014em; }
-.sub { color: var(--muted); font-size: 0.875rem; margin-top: 0.3rem; }
+h2 { font-size: 16px; line-height: 24px; font-weight: 600; margin: 28px 0 8px; letter-spacing: -0.011em; }
+.sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
 
 /* Fleet capacity, drawn. One segment per running slot. */
-.meter-wrap { display: flex; align-items: center; gap: 0.6rem; }
+.meter-wrap { display: flex; align-items: center; gap: 10px; }
 .meter { display: flex; gap: 3px; }
 .meter .slot {
   width: 18px; height: 4px; border-radius: 2px;
   background: var(--line);
 }
 .meter .slot.on { background: var(--text); }
-.meter-label { color: var(--muted); font-size: 0.875rem; }
+.meter-label { color: var(--muted); font-size: 14px; }
 .meter-label.warn { color: var(--warn); }
 
 /* Remaining capacity as empty tiles, matching the height of a real card's frame. */
@@ -270,35 +313,40 @@ h2 { font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.5rem; letter-spac
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius);
   background: none;
-  display: grid; place-items: center; gap: 0.4rem;
+  display: grid; place-items: center; gap: 6px;
   align-content: center;
-  color: var(--muted); font-size: 0.875rem; font-weight: 500;
+  color: var(--muted); font-size: 14px; font-weight: 500;
   transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
 }
 button.ghost { cursor: pointer; width: 100%; font-family: inherit; }
 button.ghost:hover { border-color: var(--text); color: var(--text); background: var(--hover); }
-.ghost-plus { font-size: 1.5rem; line-height: 1; font-weight: 400; }
+.ghost-plus { font-size: 24px; line-height: 1; font-weight: 400; }
 @media (prefers-reduced-motion: reduce) { .ghost { transition: none; } }
-.row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 input, select {
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
-  padding: 0 0.65rem; min-height: 32px;
-  font-size: 0.875rem;
+  padding: 0 10px; min-height: 32px;
+  font-size: 14px;
 }
 input::placeholder { color: var(--muted); }
 .btn {
-  background: transparent; border: 1px solid var(--line); border-radius: var(--radius-sm);
-  padding: 0 0.75rem;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 0 12px; gap: 6px;
   min-height: 32px;
-  font-size: 0.875rem; font-weight: 500;
+  font-size: 13px; line-height: 18px; font-weight: 500; white-space: nowrap;
   display: inline-flex; align-items: center; justify-content: center;
-  transition: background-color 0.1s ease, border-color 0.1s ease, opacity 0.1s ease;
+  transition: background-color var(--d-fast), border-color var(--d-fast), opacity var(--d-fast),
+    transform var(--d-fast) var(--ease-out);
 }
-@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+/* A press you can feel: the button gives a little under the pointer, so a click on a slow
+   action registers before the network answers. */
+.btn:active:not(:disabled) { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active:not(:disabled) { transform: none; } }
 @media (pointer: coarse) {
   .btn, .nav a, .nav button.link { min-height: 44px; display: inline-flex; align-items: center; }
 }
-.btn:hover:not(:disabled) { background: var(--hover); }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
 /* `.tab-new` and `.navbtn` had this and `.btn` did not, so every disabled button in the
    sidebar -- Enable extensions while the browser runs, Configure proxy, Start on a running
    browser -- looked exactly like a live one and did nothing when pressed. The explanation was
@@ -315,17 +363,17 @@ input::placeholder { color: var(--muted); }
 /* `margin-left: auto` was doing nothing: .row is sized to its content, so there is no free
    space for it to absorb, and Delete sat the same 8px from Restart as every routine button.
    Separate it with real distance and a rule you can see. */
-.top .row .btn.danger { margin-left: 1.4rem; position: relative; }
+.top .row .btn.danger { margin-left: 24px; position: relative; }
 .top .row .btn.danger::before {
-  content: ""; position: absolute; left: -0.75rem; top: 50%; transform: translateY(-50%);
+  content: ""; position: absolute; left: -12px; top: 50%; transform: translateY(-50%);
   width: 1px; height: 20px; background: var(--line-strong);
 }
-.btn.human { background: var(--human); border-color: var(--human); color: #fff; }
-.btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.btn.human { background: var(--human); border-color: var(--human); color: var(--human-fg); }
+.btn.ok { background: var(--ok); border-color: var(--ok); color: var(--ok-fg); }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0.9rem;
+  gap: 14px;
 }
 /* A column, so the action row can be pushed to the bottom. This was always wrong — a purpose
    that wraps to two lines puts one card's Watch button ~25px below its neighbour's — but the
@@ -347,7 +395,7 @@ input::placeholder { color: var(--muted); }
   aspect-ratio: 16/10;
   background: var(--thumb-bg);
   display: grid; place-items: center;
-  color: var(--muted); font-size: 0.8rem;
+  color: var(--muted); font-size: 12px;
   position: relative;
 }
 /* Take the frame out of flow. In flow its own proportions set the row height, which beat the
@@ -356,8 +404,8 @@ input::placeholder { color: var(--muted); }
 .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .badge {
   position: absolute; top: 8px; right: 8px;
-  font: 500 0.7rem var(--mono);
-  padding: 0.15rem 0.4rem; border-radius: 999px;
+  font: 500 11px var(--mono);
+  padding: 2px 6px; border-radius: 999px;
   /* Opaque, not translucent. This badge sits on top of a live screenshot, so at 0.8 alpha the
      real backdrop was whatever the agent happened to be looking at — measured 3.76:1 for LIVE
      and 3.00:1 for HUMAN over a white page, both below AA. */
@@ -370,8 +418,8 @@ input::placeholder { color: var(--muted); }
 .badge.human { color: var(--chip-human); }
 .badge.idle { color: var(--chip-muted); }
 .badge.warn { color: var(--chip-warn); }
-.body { padding: 0.8rem 0.9rem 0.95rem; flex: 1; display: flex; flex-direction: column; }
-.body h3 { margin: 0 0 0.3rem; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.011em; }
+.body { padding: 12px 14px 16px; flex: 1; display: flex; flex-direction: column; }
+.body h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; letter-spacing: -0.011em; }
 /* The project, back on the card now that it is not a section heading. Clamped to one line on
    purpose: a metadata value is legal up to 400 characters, and .card has no height cap, so a
    wrapped project name drags its whole grid row taller and re-ragged the row this change was
@@ -379,46 +427,46 @@ input::placeholder { color: var(--muted); }
    only because it was one heading; as free text per card, uppercasing mangles Greek (μ→Μ is a
    different letter). */
 .card-project {
-  color: var(--muted); font-size: 0.75rem; font-weight: 500;
-  margin: 0 0 0.15rem;
+  color: var(--muted); font-size: 12px; font-weight: 500;
+  margin: 0 0 2px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.meta { color: var(--muted); font-size: 0.8125rem; line-height: 1.5; display: grid; gap: 0.15rem; }
+.meta { color: var(--muted); font-size: 13px; line-height: 18px; display: grid; gap: 2px; }
 .meta .purpose { color: var(--text); }
 .meta .url { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.site-pills { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.55rem; }
+.site-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .site-pill {
   display: inline-flex; align-items: center; min-height: 22px;
-  padding: 0.12rem 0.42rem; border: 1px solid var(--line); border-radius: 999px;
-  color: var(--text); background: var(--surface-2); font-size: 0.72rem;
+  padding: 2px 6px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--text); background: var(--surface-2); font-size: 12px;
 }
 .site-pill.expected { color: var(--muted); border-style: dashed; }
 .site-pill.needs_sign_in { color: var(--warn); }
 .site-pill.more-sites { color: var(--muted); }
-.who { margin-top: 0.55rem; font-size: 0.75rem; color: var(--muted); }
-/* auto, not 0.7rem: the margin absorbs the card's spare height so the buttons sit on the
-   floor. padding-top keeps the 0.7rem minimum when there is no spare height to absorb. */
-.actions { display: flex; gap: 0.4rem; margin-top: auto; padding-top: 0.7rem; }
-.actions .more { margin-left: auto; padding-inline: 0.6rem; line-height: 1; }
+.who { margin-top: 8px; font-size: 12px; color: var(--muted); }
+/* auto, not 12px: the margin absorbs the card's spare height so the buttons sit on the
+   floor. padding-top keeps the 12px minimum when there is no spare height to absorb. */
+.actions { display: flex; gap: 6px; margin-top: auto; padding-top: 12px; }
+.actions .more { margin-left: auto; padding-inline: 10px; line-height: 1; }
 
 .menu {
   position: fixed; z-index: 200; min-width: 190px;
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  padding: 0.3rem;
+  padding: 4px;
   box-shadow: var(--shadow);
 }
 .menu-item {
   display: block; width: 100%; text-align: left;
   background: none; border: 0; border-radius: 5px;
-  padding: 0.4rem 0.6rem;
-  font-size: 0.85rem;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 .menu-item:hover, .menu-item:focus-visible { background: var(--hover); box-shadow: none; }
 .menu-item.danger { color: var(--tally-text); }
 .menu-item.danger:hover, .menu-item.danger:focus-visible { background: var(--tally); color: #fff; }
-.menu-sep { height: 1px; background: var(--line); margin: 0.3rem 0.2rem; }
+.menu-sep { height: 1px; background: var(--line); margin: 4px 4px; }
 @media (pointer: coarse) { .menu-item { min-height: 40px; } }
 .login {
   min-height: 100%; display: grid; place-items: center;
@@ -428,22 +476,22 @@ input::placeholder { color: var(--muted); }
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 1.6rem;
+  padding: 24px;
   box-shadow: var(--shadow);
 }
-.login-box h1 { margin-bottom: 0.3rem; }
-.login-box form { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 1rem; }
-.login-box input { padding: 0.65rem 0.7rem; }
-.table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.table th, .table td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); }
-.table th { color: var(--muted); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.02em; }
-.detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; }
+.login-box h1 { margin-bottom: 4px; }
+.login-box form { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.login-box input { padding: 10px 12px; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th, .table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+.table th { color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: 0.02em; }
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
 /* Full browser hides the tab strip and address row -- Chrome brings its own -- and streams a
    2560-wide desktop letterboxed into the stage. The stage is therefore the only thing deciding
    how big Chrome's own toolbar and tabs land, so this view takes the sidebar's 320px and the
    window's remaining height, and the facts sit below the browser instead of beside it. */
 .detail.desktop { grid-template-columns: minmax(0, 1fr); }
-.desktop-hint { padding: 0 0 0.5rem; }
+.desktop-hint { padding: 0 0 8px; }
 .detail.desktop .stage { height: clamp(320px, calc(100vh - 210px), 1400px); }
 /* Tab strip, address row, then the frame — the order of a browser window, because that is
    what the operator is looking at. Chrome's own strip is browser UI and Page.startScreencast
@@ -451,7 +499,9 @@ input::placeholder { color: var(--muted); }
 .stagewrap { display: flex; flex-direction: column; min-width: 0; }
 .viewer-surfaces { padding: 8px 0; flex-wrap: wrap; }
 .viewer-surfaces .btn { min-height: 44px; }
-.viewer-surfaces [aria-pressed="true"] { border-color: var(--focus); font-weight: 600; }
+/* Not the focus colour: the focus ring is amber now, and a selected option that looks focused
+   reads as a keyboard position rather than a choice. */
+.viewer-surfaces [aria-pressed="true"] { border-color: var(--line-strong); background: var(--surface-3); color: var(--text); font-weight: 600; }
 .stagewrap [hidden] { display: none !important; }
 .tabstrip {
   display: flex; gap: 2px; align-items: stretch;
@@ -462,13 +512,13 @@ input::placeholder { color: var(--muted); }
   background: var(--surface-2); border: 1px solid var(--line); border-bottom: none;
   border-radius: 10px 10px 0 0; padding: 4px 4px 0;
 }
-.tabstrip .sub { padding: 0.35rem 0.5rem; font-size: 0.78rem; }
+.tabstrip .sub { padding: 6px 8px; font-size: 12px; }
 .tab {
   flex: 0 1 190px; min-width: 60px; max-width: 190px;
-  display: flex; align-items: center; gap: 0.3rem;
-  padding: 0 0.4rem 0 0.6rem; border: 1px solid transparent; border-bottom: none;
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 6px 0 10px; border: 1px solid transparent; border-bottom: none;
   border-radius: 7px 7px 0 0; background: none; color: var(--muted);
-  font-size: 0.78rem; text-align: left; white-space: nowrap; overflow: hidden;
+  font-size: 12px; text-align: left; white-space: nowrap; overflow: hidden;
 }
 .tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tab { cursor: default; }
@@ -495,10 +545,10 @@ input::placeholder { color: var(--muted); }
 .tab-new:hover:not(:disabled) { background: var(--surface); color: var(--text); }
 .tab-new:disabled { opacity: 0.35; cursor: default; }
 .urlrow {
-  display: flex; align-items: center; gap: 0.3rem;
-  padding: 0.3rem 0.4rem;
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 6px;
   background: var(--surface-2); border: 1px solid var(--line); border-bottom: none;
-  font-size: 0.78rem;
+  font-size: 12px;
 }
 .icon { display: block; width: 15px; height: 15px; }
 .icon svg { width: 100%; height: 100%; display: block; }
@@ -509,9 +559,9 @@ input::placeholder { color: var(--muted); }
 .navbtn:disabled { opacity: 0.35; cursor: default; }
 .urlinput {
   flex: 1; min-width: 0; margin: 0;
-  padding: 0.3rem 0.6rem; border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
   background: var(--bg); color: var(--text);
-  font-family: var(--mono); font-size: 0.78rem;
+  font-family: var(--mono); font-size: 12px;
   text-overflow: ellipsis;
 }
 .urlinput:focus { outline: 2px solid var(--focus); outline-offset: -1px; border-color: var(--focus); }
@@ -542,9 +592,9 @@ input::placeholder { color: var(--muted); }
 .stage img:focus-visible, .stage canvas:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .stage-status {
   position: absolute; inset: 0; display: grid; place-items: center;
-  color: var(--muted); font-size: 0.85rem;
+  color: var(--muted); font-size: 13px;
   z-index: 1;
-  padding: 1rem; text-align: center;
+  padding: 16px; text-align: center;
 }
 /* An author `display` beats the UA stylesheet's `[hidden] { display: none }`, so without this
    the connecting/error overlay stayed in the page once it had nothing to say — invisible, and
@@ -555,15 +605,15 @@ input::placeholder { color: var(--muted); }
      top-aligned far more often than bottom-aligned. */
   position: absolute; bottom: 0; left: 0; right: 0;
   display: flex; justify-content: space-between; align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.7rem;
+  gap: 12px;
+  padding: 8px 12px;
   /* The frame is positioned now, and it comes after this bar in the DOM, so without a stacking
      order it would paint straight over the mode label. */
   z-index: 2;
   /* The bar covers a ~35px band of the remote page. Without this it ate every click there. */
   pointer-events: none;
   background: none;
-  font-size: 0.8rem;
+  font-size: 12px;
 }
 .stage .bar button { pointer-events: auto; }
 /* An opaque chip rather than a fade. The gradient ended at transparent and the text sits at
@@ -571,16 +621,16 @@ input::placeholder { color: var(--muted); }
 .stage .bar > * > span, .stage .bar > span, .stage .bar .mono {
   background: var(--chip);
   color: var(--chip-text);
-  padding: 0.2rem 0.45rem;
+  padding: 4px 8px;
   border-radius: 5px;
 }
 .stage .bar .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stage .bar-left { display: flex; align-items: center; gap: 0.6rem; flex: none; }
+.stage .bar-left { display: flex; align-items: center; gap: 10px; flex: none; }
 .stage .bar .mode { text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
 /* A frame nobody is updating any more. Dimming it is the difference between "live" and "the
    last thing we saw", which the viewer previously left the operator to guess. */
 .stage img.stale, .stage canvas.stale { opacity: 0.35; filter: grayscale(0.6); }
-.stage-status-inner { display: grid; gap: 0.6rem; justify-items: center; max-width: 34ch; }
+.stage-status-inner { display: grid; gap: 10px; justify-items: center; max-width: 34ch; }
 .stage-status.err { color: var(--chip-text); background: rgba(5, 7, 10, 0.86); }
 /* A transient notice is a note, not a wall. The terminal overlay covers the whole stage
    because it carries the Reconnect button and there would be nothing left to press; a
@@ -594,28 +644,28 @@ input::placeholder { color: var(--muted); }
    at the picture, not a word at the far end of a 1400px stage. */
 .stage .watchmark {
   position: absolute; top: 0; right: 0; z-index: 2;
-  padding: 0.5rem 0.6rem;
+  padding: 8px 10px;
   pointer-events: none;
 }
 .stage .watchmark span {
   background: var(--chip); color: var(--chip-text);
-  padding: 0.25rem 0.65rem; border-radius: 999px;
-  font-size: 0.75rem; font-weight: 500;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 500;
   text-transform: uppercase; letter-spacing: 0.05em;
 }
 .stage-status.toast {
-  inset: 0.6rem 0 auto 0;
+  inset: 10px 0 auto 0;
   pointer-events: none;
-  padding: 0 1rem;
+  padding: 0 16px;
 }
 .toast-chip {
   background: var(--chip); color: var(--chip-text);
-  padding: 0.3rem 0.6rem; border-radius: 6px; max-width: 40ch;
+  padding: 4px 10px; border-radius: 6px; max-width: 40ch;
 }
 .stage .bar .btn.tiny {
   background: var(--chip); color: var(--chip-text); border-color: var(--chip-muted);
 }
-.btn.tiny { min-height: 0; padding: 0.15rem 0.5rem; font-size: 0.75rem; border-radius: 5px; }
+.btn.tiny { min-height: 0; padding: 2px 8px; font-size: 12px; border-radius: 5px; }
 
 /* Read-only mode stays visible without tinting the remote page's pixels. */
 .stage.watching { outline: 2px solid var(--ok-text); outline-offset: 1px; }
@@ -623,20 +673,20 @@ input::placeholder { color: var(--muted); }
 /* Settings as rows: what it is and what it is set to on the left, the one control on the
    right. Each used to be a heading, a sentence, a bordered button and a paragraph or two of
    caveats, so the column was half prose and every button weighed the same. */
-.settings { border: 1px solid var(--line); border-radius: var(--radius); margin-top: 0.5rem; }
-.settings-note { margin: 0.4rem 0 0; }
-.setting { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.7rem; }
+.settings { border: 1px solid var(--line); border-radius: var(--radius); margin-top: 8px; }
+.settings-note { margin: 6px 0 0; }
+.setting { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
 .setting + .setting, .setting + .setting-more, .setting-more + .setting, .setting-extra + .setting { border-top: 1px solid var(--line); }
-.setting.nested { padding-left: 1.5rem; }
+.setting.nested { padding-left: 24px; }
 .setting-text { flex: 1; min-width: 0; }
-.setting-name { font-size: 0.875rem; font-weight: 500; }
-.setting-text .sub { margin-top: 0.1rem; font-size: 0.8125rem; overflow-wrap: anywhere; }
-.setting .btn { flex: none; min-height: 0; padding: 0.3rem 0.7rem; font-size: 0.8125rem; }
-.setting-extra { padding: 0 0.7rem 0.6rem; }
-.setting-more { padding: 0.5rem 0.7rem; font-size: 0.8125rem; color: var(--muted); }
-.setting-more.plain { padding: 0.3rem 0 0; }
+.setting-name { font-size: 14px; font-weight: 500; }
+.setting-text .sub { margin-top: 2px; font-size: 13px; overflow-wrap: anywhere; }
+.setting .btn { flex: none; min-height: 0; padding: 4px 12px; font-size: 13px; }
+.setting-extra { padding: 0 12px 10px; }
+.setting-more { padding: 8px 12px; font-size: 13px; color: var(--muted); }
+.setting-more.plain { padding: 4px 0 0; }
 .setting-more summary { cursor: pointer; }
-.setting-more p { margin: 0.4rem 0 0; max-width: 60ch; }
+.setting-more p { margin: 6px 0 0; max-width: 60ch; }
 .switch {
   position: relative; flex: none; width: 40px; height: 24px; padding: 0;
   border-radius: 999px; border: 1px solid var(--line-strong); background: transparent;
@@ -653,35 +703,35 @@ input::placeholder { color: var(--muted); }
 .switch:disabled { opacity: 0.45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
 /* The project picker grows a text field when "New project" is chosen. */
-.project-new { margin-top: 0.4rem; }
-.side { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem; }
-.side h2 { font-size: 1rem; margin: 1.1rem 0 0; }
-.kv { display: grid; grid-template-columns: 110px 1fr; gap: 0.35rem 0.6rem; font-size: 0.85rem; }
+.project-new { margin-top: 6px; }
+.side { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.side h2 { font-size: 16px; margin: 16px 0 0; }
+.kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px 10px; font-size: 13px; }
 .kv dt { color: var(--muted); }
 .browser-id { min-width: 0; overflow-wrap: anywhere; }
-.browser-id .btn { display: block; margin-top: 0.35rem; }
+.browser-id .btn { display: block; margin-top: 6px; }
 /* Prose stops being readable somewhere past 75 characters a line. On the security page these
    ran the full width of the window — a 150-character measure. */
 .main > p, .main > .kv { max-width: 60ch; }
 .sub { max-width: 78ch; }
 .banner { max-width: 92ch; }
-.mono { font-family: var(--mono); font-size: 0.8rem; letter-spacing: -0.01em; }
+.mono { font-family: var(--mono); font-size: 12px; letter-spacing: -0.01em; }
 .warn { color: var(--warn); }
 .ok { color: var(--ok-text); }
 .err { color: var(--tally-text); }
-.timeline { list-style: none; padding: 0; margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--muted); }
-.timeline li { padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
-.filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
-.group-h { margin: 1.2rem 0 0.5rem; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
-code { font-family: var(--mono); font-size: 0.82em; background: var(--surface-2); padding: 0.1rem 0.3rem; border-radius: 4px; }
-pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflow: auto; font-family: var(--mono); font-size: 0.78rem; }
+.timeline { list-style: none; padding: 0; margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+.timeline li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.group-h { margin: 20px 0 8px; color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 2px 4px; border-radius: 4px; }
+pre { background: var(--surface-2); padding: 12px; border-radius: 8px; overflow: auto; font-family: var(--mono); font-size: 12px; }
 .banner {
-  border: 1px solid var(--line); background: var(--surface-2); padding: 0.6rem 0.8rem;
-  border-radius: 8px; margin-bottom: 0.8rem; font-size: 0.9rem;
+  border: 1px solid var(--line); background: var(--surface-2); padding: 10px 12px;
+  border-radius: 8px; margin-bottom: 12px; font-size: 14px;
 }
 /* One idea per line. As a single paragraph this said four things at once and read as none. */
 .banner p { margin: 0; max-width: 76ch; }
-.banner p + p { margin-top: 0.35rem; color: var(--muted); }
+.banner p + p { margin-top: 6px; color: var(--muted); }
 .banner.watch { border-left: 3px solid var(--ok); }
 .banner.control { border-left: 3px solid var(--human); }
 /* Amber, not the takeover orange and not the danger red: someone is waiting on you is an
@@ -692,17 +742,17 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
 .banner.host { border-left: 3px solid var(--warn); }
 /* Its gateway is not connected: attention about the route out, not a failure of Chrome. */
 .banner.gateway { border-left: 3px solid var(--warn); }
-.asks-h { font-size: 0.95rem; margin: 0 0 0.15rem; }
+.asks-h { font-size: 14px; margin: 0 0 2px; }
 /* One row per request, and the rule between them rather than a card each: three nested cards
    inside a panel is three borders saying the same thing. */
 .ask {
-  display: flex; gap: 0.75rem; align-items: center; justify-content: space-between;
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
   flex-wrap: wrap;
-  padding: 0.6rem 0; border-top: 1px solid var(--line);
+  padding: 10px 0; border-top: 1px solid var(--line);
 }
-.ask:first-of-type { margin-top: 0.5rem; }
+.ask:first-of-type { margin-top: 8px; }
 .ask-what { min-width: 18ch; flex: 1 1 26ch; }
-.ask .sub { margin-top: 0.15rem; }
+.ask .sub { margin-top: 2px; }
 /* Actions stay together and stay to the right of the text they act on, so the pointer travels
    once per decision rather than hunting between two columns. */
 .ask .row { min-width: 0; flex: 0 1 auto; }
@@ -718,44 +768,44 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
 /* Sits on the nav link, not in a corner of the page: it has to be visible from the two views
    that are not the inbox, which is the only reason it exists. */
 .nav-badge {
-  display: inline-block; margin-left: 0.4rem; padding: 0 0.38rem;
-  min-width: 1.15rem; border-radius: 999px; text-align: center;
-  font-size: 0.72rem; font-weight: 600; line-height: 1.35rem;
-  background: var(--human); color: #fff;
+  display: inline-block; margin-left: 6px; padding: 0 6px;
+  min-width: 20px; border-radius: 999px; text-align: center;
+  font-size: 12px; font-weight: 600; line-height: 20px;
+  background: var(--human); color: var(--human-fg);
 }
 
-.ask-actions { gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-.ask-actions select { font-size: 0.85rem; padding: 0.3rem 0.4rem; min-height: 32px; }
+.ask-actions { gap: 8px; align-items: center; flex-wrap: wrap; }
+.ask-actions select { font-size: 13px; padding: 4px 6px; min-height: 32px; }
 
 /* A grant is two facts -- who, and how much for how long. Stacked, because reading them as one
    run-on line is how "read only" gets skimmed as "access". */
-.lending .loans .loan-who { display: grid; gap: 0.1rem; min-width: 0; }
-.lending .loans .loan-who .sub { font-size: 0.78rem; }
+.lending .loans .loan-who { display: grid; gap: 2px; min-width: 0; }
+.lending .loans .loan-who .sub { font-size: 12px; }
 
-.lending .loans, .tunnels .loans { list-style: none; margin: 0.4rem 0 0.7rem; padding: 0; font-size: 0.85rem; }
+.lending .loans, .tunnels .loans { list-style: none; margin: 6px 0 12px; padding: 0; font-size: 13px; }
 .lending .loans li, .tunnels .loans li {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-  padding: 0.25rem 0; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 0; border-bottom: 1px solid var(--line);
 }
-.site-list { list-style: none; margin: 0.4rem 0 0.7rem; padding: 0; }
+.site-list { list-style: none; margin: 6px 0 12px; padding: 0; }
 .site-list li {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
-  padding: 0.45rem 0; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--line);
 }
-.site-main { display: grid; gap: 0.08rem; min-width: 0; }
-.site-main strong { font-size: 0.85rem; font-weight: 600; }
+.site-main { display: grid; gap: 1px; min-width: 0; }
+.site-main strong { font-size: 13px; font-weight: 600; }
 .site-main .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.site-main .sub { font-size: 0.75rem; }
+.site-main .sub { font-size: 12px; }
 .site-actions { flex: none; }
-.site-add { margin: 0.45rem 0; }
+.site-add { margin: 8px 0; }
 /* Saved-profile rows: pills and their Edit button read as one cell, and the pills' card margin
    is wrong inside a table row. */
-.seed-sites { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+.seed-sites { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .seed-sites .site-pills { margin-top: 0; }
 /* A profile with a dozen sign-ins must not push Done off the bottom of the dialog. */
 .modal-box .site-list { max-height: 44vh; overflow-y: auto; }
-.modal-box .seed-site-add { border-top: 1px solid var(--line); padding-top: 0.2rem; }
-.modal-box .seed-site-add button { align-self: flex-start; margin-top: 0.7rem; }
+.modal-box .seed-site-add { border-top: 1px solid var(--line); padding-top: 4px; }
+.modal-box .seed-site-add button { align-self: flex-start; margin-top: 12px; }
 @media (pointer: coarse) {
   .switch { width: 48px; height: 28px; }
   .switch::after { width: 20px; height: 20px; }
@@ -765,23 +815,23 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   /* Wrap rather than scroll sideways. As a scroller this nav overflowed (527px of items in
      485px) and pushed Log out off the edge. */
-  .nav { position: relative; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 0.5rem; gap: 0.25rem; }
+  .nav { position: relative; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; gap: 4px; }
   .nav-pages, .nav-options { width: auto; }
   .nav-pages { margin-left: auto; }
-  .nav-pages > summary, .nav-options > summary { display: flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0.4rem 0.55rem; cursor: pointer; border-radius: var(--radius-sm); }
+  .nav-pages > summary, .nav-options > summary { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-sm); }
   .nav-pages > summary::after, .nav-options > summary::after { content: "⌄"; }
-  .nav-links, .nav-preferences { position: absolute; right: 0.5rem; top: calc(100% - 0.25rem); z-index: 30; min-width: 200px; padding: 0.5rem; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); }
+  .nav-links, .nav-preferences { position: absolute; right: 8px; top: calc(100% - 4px); z-index: 30; min-width: 200px; padding: 8px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); }
   .nav .spacer { display: none; }
   /* `.nav .logout` used to sit here too and never applied: `.nav button.link` above is more
      specific and kept it displayed. Log out now stays on purpose — an operator on a tablet
      still has to be able to end their session. */
   .nav a, .nav button.link { width: auto; }
-  .brand { padding: 0.2rem 0.6rem 0.2rem 0.4rem; }
+  .brand { padding: 4px 10px 4px 6px; }
   .detail { grid-template-columns: 1fr; }
   /* Stacked, the page scrolls rather than .main, but overflow: auto still made .main the box
      sticky elements stick to, so the flash scrolled away with it. clip trims sideways overflow
      the same way without claiming the scrolling. */
-  .main { overflow: visible; padding: 1rem; }
+  .main { overflow: visible; padding: 16px; }
   .stage { height: clamp(240px, 56vh, 560px); }
   .site-list li { align-items: flex-start; flex-direction: column; }
 }
@@ -798,20 +848,20 @@ pre { background: var(--surface-2); padding: 0.8rem; border-radius: 8px; overflo
   .tab-x { opacity: 1; }
 }
 @media (max-width: 500px) {
-  .brand { font-size: 0.85rem; gap: 0.35rem; padding-inline: 0; }
-  .nav-pages > summary, .nav-options > summary { font-size: 0.85rem; padding-inline: 0.4rem; }
-  .top { gap: 0.7rem; }
+  .brand { font-size: 13px; gap: 6px; padding-inline: 0; }
+  .nav-pages > summary, .nav-options > summary { font-size: 13px; padding-inline: 6px; }
+  .top { gap: 12px; }
   .top > .row { width: 100%; }
   .top input { width: 100%; }
   .thumb { aspect-ratio: auto; height: 100px; }
-  .body { padding: 0.7rem; }
+  .body { padding: 12px; }
   .body .purpose, .body .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ask-actions { width: 100%; }
   .ask-actions > .row { flex: 1 1 100%; }
-  .request-help { margin-block: 0.5rem; }
+  .request-help { margin-block: 8px; }
 }
-.data-notice { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.7rem; margin-block: 0.7rem; }
-.data-notice p { margin: 0 0 0.5rem; }
+.data-notice { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-block: 12px; }
+.data-notice p { margin: 0 0 8px; }
 .table-wrap { min-width: 0; max-width: 100%; }
 .tabrow { display: flex; min-width: 0; background: var(--surface-2); border: 1px solid var(--line); border-bottom: 0; border-radius: 10px 10px 0 0; }
 .tabrow .tabstrip { flex: 1; min-width: 0; border: 0; background: none; }
@@ -842,97 +892,97 @@ body.busy::before {
 .modal-box {
   width: min(560px, 92vw); background: var(--surface);
   border: 1px solid var(--line-strong); border-radius: 12px;
-  padding: 1.2rem; box-shadow: var(--shadow);
+  padding: 20px; box-shadow: var(--shadow);
   /* A form taller than the screen, like New agent with its permissions on a phone, ran off both
      edges with nothing to scroll: the backdrop is fixed and centres the box. */
-  max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem); overflow-y: auto;
+  max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto;
 }
-.modal-box h2 { margin: 0 0 0.3rem; font-size: 1.05rem; }
+.modal-box h2 { margin: 0 0 4px; font-size: 16px; }
 .token {
-  width: 100%; margin: 0.7rem 0; resize: vertical;
+  width: 100%; margin: 12px 0; resize: vertical;
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--line-strong); border-radius: 6px; padding: 0.6rem;
-  font-family: var(--mono); font-size: 0.8rem;
+  border: 1px solid var(--line-strong); border-radius: 6px; padding: 10px;
+  font-family: var(--mono); font-size: 12px;
 }
 .group-h { font-weight: 500; }
-.login-box label { color: var(--muted); font-size: 0.85rem; }
-.modal-box form { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 1rem; }
-.modal-box form label { color: var(--muted); font-size: 0.85rem; margin-top: 0.6rem; }
-.modal-box .field-hint { font-size: 0.78rem; margin-top: 0.15rem; }
-.advanced-settings { margin-top: 0.8rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.login-box label { color: var(--muted); font-size: 13px; }
+.modal-box form { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+.modal-box form label { color: var(--muted); font-size: 13px; margin-top: 10px; }
+.modal-box .field-hint { font-size: 12px; margin-top: 2px; }
+.advanced-settings { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
 .advanced-settings summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
-.advanced-settings summary::after { content: "⌄"; margin-left: 0.5rem; }
-.advanced-fields { display: flex; flex-direction: column; gap: 0.25rem; }
-.card-task { margin-bottom: 0.35rem; font-size: 0.85rem; }
+.advanced-settings summary::after { content: "⌄"; margin-left: 8px; }
+.advanced-fields { display: flex; flex-direction: column; gap: 4px; }
+.card-task { margin-bottom: 6px; font-size: 13px; }
 @media (max-width: 500px) {
   .meter-wrap { flex-wrap: wrap; }
   .meter-label { flex: 1 1 100%; }
   .card-task { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 }
-.modal-box .cmd-label { margin: 0.9rem 0 0; }
-.modal-box .modal-foot { margin-top: 1rem; align-items: center; }
-.modal-box .token { margin: 0.5rem 0 0.6rem; }
+.modal-box .cmd-label { margin: 14px 0 0; }
+.modal-box .modal-foot { margin-top: 16px; align-items: center; }
+.modal-box .token { margin: 8px 0 10px; }
 
 /* Linked browsers: the approval page and its few extras. One column, read top to bottom:
    the code to check, who is asking, what it grants, then the decision. */
-.pair { max-width: 34rem; display: flex; flex-direction: column; gap: 1rem; }
+.pair { max-width: 544px; display: flex; flex-direction: column; gap: 16px; }
 .pair h1 { margin: 0; }
 .pair-code {
-  font: 600 1.9rem/1 var(--mono); letter-spacing: 0.08em; text-align: center;
-  padding: 1.1rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
+  font: 600 32px/1 var(--mono); letter-spacing: 0.08em; text-align: center;
+  padding: 16px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
 }
-.pair-grant { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.85rem 1rem; font-size: 0.875rem; }
-.pair-grant h2 { margin: 0 0 0.35rem; font-size: 0.875rem; }
+.pair-grant { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; font-size: 14px; }
+.pair-grant h2 { margin: 0 0 6px; font-size: 14px; }
 .pair-grant p { margin: 0; color: var(--muted); }
-.pair-grant p + p { margin-top: 0.5rem; }
-.pair-form { display: flex; flex-direction: column; gap: 0.3rem; }
-.pair-form label { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+.pair-grant p + p { margin-top: 8px; }
+.pair-form { display: flex; flex-direction: column; gap: 4px; }
+.pair-form label { color: var(--muted); font-size: 13px; margin-top: 8px; }
 .pair-form select, .pair-form input { width: 100%; }
-.pair-actions { margin-top: 0.9rem; }
+.pair-actions { margin-top: 14px; }
 .kind-tag {
-  margin-left: 0.45rem; padding: 0 0.4rem; vertical-align: 0.1em;
-  font-size: 0.7rem; font-weight: 500; color: var(--muted);
+  margin-left: 8px; padding: 0 6px; vertical-align: 0.1em;
+  font-size: 11px; font-weight: 500; color: var(--muted);
   border: 1px solid var(--line-strong); border-radius: 99px;
 }
 .kind-tag.warn { color: var(--warn); border-color: var(--warn); }
-.steps { margin: 1rem 0 0.75rem; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.9rem; }
-.copyrow { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
-.copyrow code { flex: 1; padding: 0.4rem 0.55rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); overflow-wrap: anywhere; }
+.steps { margin: 16px 0 12px; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.copyrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.copyrow code { flex: 1; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); overflow-wrap: anywhere; }
 
 /* Which agents may use a linked browser. The fieldset carries the grouping; its border does
    not, because the approval page already frames the form. */
-.agent-picker { border: 0; padding: 0; margin: 0.6rem 0 0; min-width: 0; }
-.agent-picker legend { color: var(--muted); font-size: 0.85rem; padding: 0; margin-bottom: 0.4rem; }
-.agent-picker .pick-any, .agent-pick li { display: flex; align-items: flex-start; gap: 0.55rem; }
-.agent-picker input[type="checkbox"] { margin: 0.2rem 0 0; padding: 0; flex: none; width: 1rem; height: 1rem; min-height: 0; accent-color: var(--primary); }
-.agent-picker label { color: var(--text); font-size: 0.9rem; margin: 0; cursor: pointer; }
-.agent-picker label .sub { display: block; margin: 0; font-size: 0.78rem; }
-.agent-picker .pick-any { padding-bottom: 0.6rem; margin-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
-.agent-pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; max-height: 22rem; overflow-y: auto; }
+.agent-picker { border: 0; padding: 0; margin: 10px 0 0; min-width: 0; }
+.agent-picker legend { color: var(--muted); font-size: 13px; padding: 0; margin-bottom: 6px; }
+.agent-picker .pick-any, .agent-pick li { display: flex; align-items: flex-start; gap: 8px; }
+.agent-picker input[type="checkbox"] { margin: 4px 0 0; padding: 0; flex: none; width: 16px; height: 16px; min-height: 0; accent-color: var(--primary); }
+.agent-picker label { color: var(--text); font-size: 14px; margin: 0; cursor: pointer; }
+.agent-picker label .sub { display: block; margin: 0; font-size: 12px; }
+.agent-picker .pick-any { padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+.agent-pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 352px; overflow-y: auto; }
 .agent-pick input:disabled + label { color: var(--muted); }
-.linked-access .row { margin-top: 0.7rem; }
+.linked-access .row { margin-top: 12px; }
 
 /* An agent's permissions, on New agent and on Permissions. The agent picker's shape: the fieldset
    groups, the modal frames. Each consequence sits inside its label, so the whole row is the
    target. Two classes deep because `.modal-box form label` would otherwise mute every row. */
-.scope-picker { border: 0; padding: 0; margin: 0.6rem 0 0; min-width: 0; }
-.scope-picker legend { color: var(--muted); font-size: 0.85rem; padding: 0; }
-.scope-picker .scope-pick { list-style: none; margin: 0.7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
-.scope-picker .scope-pick li { display: flex; align-items: flex-start; gap: 0.6rem; }
+.scope-picker { border: 0; padding: 0; margin: 10px 0 0; min-width: 0; }
+.scope-picker legend { color: var(--muted); font-size: 13px; padding: 0; }
+.scope-picker .scope-pick { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.scope-picker .scope-pick li { display: flex; align-items: flex-start; gap: 10px; }
 /* min-height: the text-field rule above makes every input 32px tall, which dropped the box to the
    middle of a two-line row instead of beside the permission's name. */
-.scope-picker .scope-pick input[type="checkbox"] { margin: 0.2rem 0 0; padding: 0; flex: none; width: 1rem; height: 1rem; min-height: 0; accent-color: var(--primary); }
-.scope-picker .scope-pick label { color: var(--text); font-size: 0.9rem; font-weight: 500; margin: 0; cursor: pointer; }
-.scope-picker .scope-pick label .sub { display: block; margin: 0.15rem 0 0; font-size: 0.8rem; font-weight: 400; line-height: 1.45; }
+.scope-picker .scope-pick input[type="checkbox"] { margin: 4px 0 0; padding: 0; flex: none; width: 16px; height: 16px; min-height: 0; accent-color: var(--primary); }
+.scope-picker .scope-pick label { color: var(--text); font-size: 14px; font-weight: 500; margin: 0; cursor: pointer; }
+.scope-picker .scope-pick label .sub { display: block; margin: 2px 0 0; font-size: 12px; font-weight: 400; line-height: 16px; }
 
 /* The Agents page groups by liveness rather than listing everything at one weight. The token
    policy that used to sit above the table folds away here too: it is a rule you read once, and
    it was occupying the space the table needed to answer "what can reach my browsers right now?". */
-.main > .setting-more.plain { margin-bottom: 1rem; }
+.main > .setting-more.plain { margin-bottom: 16px; }
 /* Revoked agents are history, not inventory. Behind a rule and a count so the page never
    pretends they are gone, and muted once opened so a dead credential cannot read with the same
    weight as a live one -- .setting-more already sets the muted colour these rows inherit. */
-.main > .setting-more.revoked { margin: 1.6rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--line); }
+.main > .setting-more.revoked { margin: 24px 0 0; padding-top: 12px; border-top: 1px solid var(--line); }
 .setting-more summary { font-weight: 500; }
 /* Name, id, last seen and two buttons do not fit 375px, and the old fallback was to crush every
    cell until "connector · chatgpt.com" wrapped over three lines. Scroll the table instead. The
@@ -941,7 +991,7 @@ body.busy::before {
 .table-wrap { overflow-x: auto; }
 .table-wrap .table { min-width: 620px; }
 .table-wrap:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-.main > .setting-more.revoked .table-wrap { margin-top: 0.6rem; }
+.main > .setting-more.revoked .table-wrap { margin-top: 10px; }
 @media (pointer: coarse) {
   .agent-picker label, .scope-picker label { min-height: 44px; flex: 1; display: block; }
   summary { min-height: 44px; cursor: pointer; }

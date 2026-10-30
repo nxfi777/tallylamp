@@ -68,8 +68,8 @@ Pinned at 1.30.0.
 https://github.com/vercel/geist-font  
 SIL Open Font License 1.1  
 Copyright 2024 The Geist Project Authors  
-The Latin subsets ship inside the browser extension, in `extension/fonts/`, with the
-license beside them in `extension/fonts/OFL.txt`.
+The Latin subsets ship inside the browser extension, in `extension/fonts/`, and with the
+dashboard, in `dashboard/fonts/`, with the license beside them in each `OFL.txt`.
 
 ## Lucide
 
