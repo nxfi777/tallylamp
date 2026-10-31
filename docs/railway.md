@@ -6,7 +6,7 @@ The volume keeps browser profiles and the database across redeploys.
 
 ## Deploy and connect
 
-1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.12.1` and pin the
+1. Create an image service using `ghcr.io/nxfi777/tallylamp:0.12.3` and pin the
    [release digest](#releasing-and-upgrading). The published Railway template
    pins the same digest, supplies these settings, and leaves automatic image
    updates disabled.
@@ -267,29 +267,33 @@ release: a worker and the instance it joins must run the same release.
 
 ## Releasing and upgrading
 
-The current release is [0.12.1](https://github.com/nxfi777/tallylamp/releases/tag/v0.12.1)
+The current release is [0.12.3](https://github.com/nxfi777/tallylamp/releases/tag/v0.12.3)
 for Linux amd64. To pin the tested artifact, use this image reference:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:12f81452827a66e122542fc61a8e6ed7540c6e58cf4634f49aa666be82f18523
+ghcr.io/nxfi777/tallylamp@sha256:45449ecd9737a893c5fd74496e57d993b4c4aeead7e01d18819f2db63754125b
 ```
 
-The [0.12.1 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/40681152841)
+The [0.12.3 release workflow](https://github.com/nxfi777/tallylamp/actions/runs/41207136886)
 passed application tests, headed Chrome tests, and running-container checks
 before publishing the same artifact, then attached `tallylamp-link.zip`, the
 linked-browser extension, to the release. Anonymous registry access, the manifest
 digest, the version and source-revision labels, and the zip's manifest version
 were verified afterward. The image's source revision is
-`577e309f04ad0d760f8b7e7b833b216ae17cd2de`.
+`45ef2b95a39b12b9a880eeacc2a8a22d4ee1a217`.
 
-The Railway template pins the `0.12.1` digest for new installations, and the
+The Railway template pins the `0.12.3` digest for new installations, and the
 [Tallylamp Worker](https://railway.com/deploy/tallylamp-worker) template pins
 the same one. Each template's published configuration was read back after the
 update, and only the image had changed. Existing deployments keep their
-selected image. Version 0.12.1 changes no tables and adds no settings. Version
-0.12.0 added a `gateways` table and a `browsers.gateway_id` column. Before rolling
+selected image. Versions 0.12.1 to 0.12.3 change no tables and add no settings.
+Version 0.12.0 added a `gateways` table and a `browsers.gateway_id` column. Before rolling
 back below 0.12.0, switch every browser off its gateway: older releases ignore the
 column and would start those browsers on the host's own address.
+
+After the 0.12.3 deploy, production's main instance served the corrected
+stylesheet and its worker reported 0.12.3. 0.12.2 ran in production for forty
+minutes before it and was never pinned in the templates.
 
 After the 0.12.1 deploy, production's worker reported 0.12.1 and ran its next
 scheduled browser. It held 0.60 GB as that Chrome exited and 0.13 GB a minute
@@ -364,8 +368,10 @@ browser routing](release-0.11.3.md), [0.11.4 notes on linked-browser bridges
 on workers](release-0.11.4.md), [0.11.5 notes on extension debugging,
 export and import](release-0.11.5.md), [0.11.6 notes on OAuth refresh
 tokens for clients with several processes](release-0.11.6.md), [0.12.0
-notes on gateways and viewer mouse input](release-0.12.0.md), and [0.12.1 notes
-on holding less memory when nothing is running](release-0.12.1.md).
+notes on gateways and viewer mouse input](release-0.12.0.md), [0.12.1 notes
+on holding less memory when nothing is running](release-0.12.1.md), [0.12.2
+notes on the redesigned dashboard](release-0.12.2.md), and [0.12.3 notes on
+readable buttons under the pointer](release-0.12.3.md).
 
 The template's image change was applied through its dashboard change-set API,
 then verified through the public API. `railway templates publish` updates listing

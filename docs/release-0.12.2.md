@@ -56,3 +56,21 @@ for no new permissions.
 
 See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
 backups and deployment settings.
+
+## Release validation
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/41169929630)
+passed application, headed Chrome, and running-container checks before
+publishing the tested image. Its anonymous registry access, digest, version and
+source-revision labels were verified, and `tallylamp-link.zip` is attached to the
+release with the orb engine byte-identical to the dashboard's copy. The Linux
+amd64 artifact is:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:ffb43e700006ef855789e1655b8573eb13d0a161cbbf82ee666825acc756f340
+```
+
+All 527 service tests passed. Production's main instance and worker ran 0.12.2,
+with the worker reporting `worker ready` on release 0.12.2. A hover bug in filled
+buttons, which 0.12.1 already had, was reported on that deploy, so the Railway
+templates went straight to [0.12.3](release-0.12.3.md) and never pinned 0.12.2.

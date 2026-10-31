@@ -23,3 +23,20 @@ Tallylamp Link is unchanged apart from its version number.
 
 See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
 backups and deployment settings.
+
+## Release validation
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/41207136886)
+passed application, headed Chrome, and running-container checks before
+publishing the tested image. Its anonymous registry access, digest, version and
+source-revision labels were verified, and `tallylamp-link.zip` is attached to the
+release. Pin this Linux amd64 artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:45449ecd9737a893c5fd74496e57d993b4c4aeead7e01d18819f2db63754125b
+```
+
+Before release, Sign in was hovered in both themes on a local build: it kept its
+light fill with dark text in the dark theme, and its near-black fill with white
+text in the light one. All 527 service tests passed. After the deploy,
+production served the corrected stylesheet and its worker reported 0.12.3.
