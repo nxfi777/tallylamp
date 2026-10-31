@@ -411,7 +411,9 @@ input::placeholder { color: var(--muted); }
    no hierarchy, so the card's main action is the quieter filled variant. */
 .btn.secondary { background: var(--surface-2); border-color: var(--line); color: var(--text); }
 .btn.secondary:hover:not(:disabled) { background: var(--line); }
-.btn.primary:hover:not(:disabled) { opacity: 0.9; border-color: var(--primary); }
+/* Filled buttons restate their fill on hover. Without it `.btn:hover` above paints them
+   --surface-2 under their own text colour, and Sign in turned into dark text on dark grey. */
+.btn.primary:hover:not(:disabled) { background: var(--primary); opacity: 0.9; border-color: var(--primary); }
 .btn.danger { background: transparent; border-color: var(--tally-text); color: var(--tally-text); }
 .btn.danger:hover:not(:disabled) { background: var(--tally); color: #fff; border-color: var(--tally); }
 /* `margin-left: auto` was doing nothing: .row is sized to its content, so there is no free
@@ -429,7 +431,9 @@ input::placeholder { color: var(--muted); }
 .btn.danger-solid:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; }
 .btn.sm { min-height: 28px; padding: 0 10px; font-size: 12px; }
 .btn.human { background: var(--human); border-color: var(--human); color: var(--human-fg); }
+.btn.human:hover:not(:disabled) { background: var(--human); opacity: 0.9; }
 .btn.ok { background: var(--ok); border-color: var(--ok); color: var(--ok-fg); }
+.btn.ok:hover:not(:disabled) { background: var(--ok); opacity: 0.9; }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
