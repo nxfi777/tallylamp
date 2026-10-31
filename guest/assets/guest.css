@@ -235,6 +235,9 @@ button svg { width: 16px; height: 16px; flex: none; }
   pointer-events: none;
 }
 .overlay p { max-width: 36em; margin: 0; }
+.overlay { flex-direction: column; gap: 12px; }
+.overlay-orb:empty { display: none; }
+.orb { display: block; flex: none; }
 
 /* The first thing a guest sees, before the link is spent: one card, one action. */
 .welcome:not([hidden]) ~ .stagewrap { display: none; }

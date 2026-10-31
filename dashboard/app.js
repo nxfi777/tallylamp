@@ -1,3 +1,5 @@
+import { orb } from "./vendor/orbs.js";
+
 const app = document.getElementById("app");
 
 // The live viewer owns a socket, a heartbeat, a reconnect timer and key handlers. Held here so
@@ -280,7 +282,7 @@ function revealToken(title, token, { note, command, commandLabel = "To point Cla
     ? h("textarea", { class: "token", readonly: "readonly", rows: commandOnly ? "4" : "3", spellcheck: "false", "aria-label": commandLabel.replace(/:$/, "") }, command)
     : null;
   const waiting = wait ? h("div", { class: "waiting", role: "status" },
-    h("span", { class: "spinner", "aria-hidden": "true" }), h("span", {}, wait.pending)) : null;
+    orb("listening", 20), h("span", {}, wait.pending)) : null;
   let done;
 
   openModal(title, (close) => [
@@ -1330,14 +1332,15 @@ function card(b) {
   const project = md.project && md.project !== b.name ? md.project : null;
   // The badge already says the status; this caption said "not running" over a browser that was
   // starting, and over one that had simply never produced a frame.
+  const caption = b.status === "moving" ? h("span", { "data-move-progress": b.id }, movingText(b))
+    : b.status === "starting" ? "starting…" : b.status === "stopping" ? "stopping…"
+    : b.status === "queued" ? "waiting for room on the host…"
+    : b.status === "unhealthy" ? "Chrome is up but cannot load pages"
+    // Nothing on this side can wake somebody's laptop, so say who can.
+    : b.kind === "linked" ? linkedCaption(b)
+    : "no live view";
   const thumb = h("div", { class: "thumb" }, badge(b),
-    b.status === "moving" ? h("span", { "data-move-progress": b.id }, movingText(b))
-      : b.status === "starting" ? "starting…" : b.status === "stopping" ? "stopping…"
-      : b.status === "queued" ? "waiting for room on the host…"
-      : b.status === "unhealthy" ? "Chrome is up but cannot load pages"
-      // Nothing on this side can wake somebody's laptop, so say who can.
-      : b.kind === "linked" ? linkedCaption(b)
-      : "no live view");
+    CHANGING_STATES.has(b.status) ? h("span", { class: "thumb-busy" }, orb("breathing", 20), caption) : caption);
   if (b.status === "running") {
     const img = thumbnail(b);
     // A swallowed error left a black rectangle that looked like a browser showing a black page.
@@ -1366,7 +1369,7 @@ function card(b) {
         b.worker ? h("span", { class: "kind-tag" + (b.worker.online ? "" : " warn"), title: b.worker.online ? `Its Chrome runs on the worker ${b.worker.name}` : `Its worker, ${b.worker.name}, is not answering` }, b.worker.name) : null),
       // Six identical grey lines was most of what made this card hard to scan. Owner and
       // reported source moved to the detail page; what stays is what tells you whether to click.
-      h("div", { class: "who" }, b.control?.controllerType && b.control.controllerType !== "none" ? `${controllerName(b)} has control` : "No controller"),
+      agentLine(b),
       md.task ? h("div", { class: "card-task" }, h("span", { class: "sub" }, "Reported task: "), md.task) : null,
       h("div", { class: "meta" },
         md.purpose ? h("div", { class: "purpose" }, md.purpose) : null,
@@ -2386,6 +2389,62 @@ function tunnelSection(tunnels) {
   ];
 }
 
+/** Starting, stopping, moving or queued: the states that end by themselves, shown with the orb. */
+const CHANGING_STATES = new Set(["starting", "stopping", "moving", "queued"]);
+
+/**
+ * Which browsers an agent is acting in right now. Holding control says nothing about that: an
+ * agent can hold a browser for an hour and make one call in it. While its calls keep coming the
+ * server sends a beat every few seconds (browser.agent_active), and a browser counts as busy for
+ * 15 s after the last one, which spans a model's pause between calls without lingering once it
+ * has stopped.
+ */
+const AGENT_BUSY_MS = 15_000;
+const agentBusy = new Map();
+
+function markAgentBusy(id, payload) {
+  if (!id) return;
+  const known = state.agents.find((a) => a.id === payload?.agentId)?.name || payload?.agent;
+  const name = known ? known.replace(/\s*\(connector\)$/, "") : "An agent";
+  const prev = agentBusy.get(id);
+  clearTimeout(prev?.timer);
+  const timer = setTimeout(() => {
+    agentBusy.delete(id);
+    repaintAgentBusy(id);
+  }, AGENT_BUSY_MS);
+  agentBusy.set(id, { name, timer });
+  if (prev?.name !== name) repaintAgentBusy(id);
+}
+
+function repaintAgentBusy(id) {
+  for (const el of document.querySelectorAll(`[data-agent-busy="${CSS.escape(id)}"]`)) el.repaint?.();
+}
+
+/** A card's line about who has the browser, which says so while an agent is working in it. */
+function agentLine(b) {
+  const held = b.control?.controllerType && b.control.controllerType !== "none" ? `${controllerName(b)} has control` : "No controller";
+  const el = h("div", { class: "who", "data-agent-busy": b.id });
+  el.repaint = () => {
+    const busy = agentBusy.get(b.id);
+    el.classList.toggle("busy", Boolean(busy));
+    el.replaceChildren(...(busy ? [orb("working", 20), `${busy.name} is working`] : [held]));
+  };
+  el.repaint();
+  return el;
+}
+
+/** The same, beside the name on a browser's own page. Absent while nobody is working in it. */
+function agentPill(b) {
+  const el = h("span", { class: "pill agent", "data-agent-busy": b.id });
+  el.repaint = () => {
+    const busy = agentBusy.get(b.id);
+    el.hidden = !busy;
+    el.replaceChildren(...(busy ? [orb("working", 20), `${busy.name} is working`] : []));
+  };
+  el.repaint();
+  return el;
+}
+
 /** The state beside a browser's name: the facts of the card badge, in the page's own colours. */
 function statusPill(b) {
   const mine = b.control?.controllerId && b.control.controllerId === state.me?.id;
@@ -2869,7 +2928,7 @@ async function browserView(id, seq) {
         icon(ICON_CHEVRON), crumbName),
       h("div", { class: "dhead-row" },
         h("div", { class: "dhead-main" },
-          h("div", { class: "dtitle" }, h("h1", {}, nameButton), statusPill(b)),
+          h("div", { class: "dtitle" }, h("h1", {}, nameButton), statusPill(b), agentPill(b)),
           h("div", { class: "dmeta" }, ...meta)),
         h("div", { class: "dactions" }, stop, more, primary))),
     b.status === "running" && b.gateway && !b.gateway.online ? h("div", { class: "banner gateway", role: "status" },
@@ -2886,7 +2945,8 @@ async function browserView(id, seq) {
     // filled one in the header sits directly above this at every width, and a second copy of
     // the same choice split the eye between them.
     stagewrap.replaceChildren(h("div", { class: "stage-empty", role: "status" },
-      lamp("idle"),
+      // Moving only while something is: a stopped or crashed browser keeps the still lamp.
+      CHANGING_STATES.has(b.status) ? orb("breathing", 64) : lamp("idle"),
       h("p", {}, b.status === "starting" ? "Chrome is starting…"
         : b.status === "stopping" ? "Chrome is stopping…"
         : b.status === "moving" ? h("span", { "data-move-progress": b.id }, movingText(b))
@@ -3203,7 +3263,10 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     // A toast is a chip near the bottom, not a full-stage wall: `.stage-status` covers the
     // whole frame, so a notice used to black out the browser and swallow every click in it
     // for four seconds -- which is worse than the thing it was reporting.
-    status.replaceChildren(...(text ? [kind === "toast" ? h("span", { class: "toast-chip" }, text) : text] : []));
+    status.replaceChildren(...(!text ? []
+      : kind === "toast" ? [h("span", { class: "toast-chip" }, text)]
+      : kind === "connecting" ? [h("div", { class: "stage-status-inner" }, orb("connecting", 64), h("div", {}, text))]
+      : [text]));
   };
 
   const fail = (text, retryable) => {
@@ -3286,7 +3349,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
   const open = async () => {
     if (stopped) return;
     clearTimeout(retry);
-    setStatus(attempt ? "Reconnecting to the live browser…" : "Connecting to the live browser…");
+    setStatus(attempt ? "Reconnecting to the live browser…" : "Connecting to the live browser…", "connecting");
     let ticket;
     try {
       // Tickets are single use and expire in a minute, so every reconnect mints a new one.
@@ -3401,7 +3464,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
         return;
       }
       if (ev.code === 1000) return; // a clean close is us navigating away
-      if (live) setStatus("The live view dropped. Reconnecting…");
+      if (live) setStatus("The live view dropped. Reconnecting…", "connecting");
       img.classList.add("stale");
       live = false;
       schedule();
@@ -5127,6 +5190,11 @@ function startEvents() {
       // refetch and no repaint in between.
       try {
         const ev = JSON.parse(msg.data);
+        // A beat, not a change: nothing to refetch, only the "is working" lines to light.
+        if (ev.type === "browser.agent_active") {
+          markAgentBusy(ev.browserId, ev.payload);
+          return;
+        }
         if (ev.type === "browser.moving") {
           for (const el of document.querySelectorAll(`[data-move-progress="${ev.browserId}"]`)) el.textContent = movingText({ moving: ev.payload });
         }

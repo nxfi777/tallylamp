@@ -72,3 +72,24 @@ test('live changes refresh immediately after idle, rate-limit bursts, and wait w
   now = 7000; env.setMenu({}); event(); await runDue(); assert.equal(refreshes, 3);
   env.setMenu(null); now = 8500; await runDue(); assert.equal(refreshes, 4);
 });
+test('an agent beat lights its browser once, clears itself, and refetches nothing', () => {
+  const timers: Array<() => void> = [];
+  let repaints = 0;
+  const ctx = {
+    state: { agents: [{ id: 'a1', name: 'Claude (connector)' }] },
+    agentBusy: new Map<string, { name: string }>(), AGENT_BUSY_MS: 15_000,
+    setTimeout: (cb: () => void) => { timers.push(cb); return timers.length; }, clearTimeout: () => {},
+    document: { querySelectorAll: () => [{ repaint: () => { repaints++; } }] },
+    CSS: { escape: (s: string) => s },
+  };
+  const mark = runInNewContext(`${fn('markAgentBusy')};${fn('repaintAgentBusy')};markAgentBusy`, ctx);
+  mark('b1', { agentId: 'a1', agent: 'Old name (connector)' });
+  mark('b1', { agentId: 'a1' });
+  assert.equal(repaints, 1, 'a second beat from the same agent repaints nothing');
+  assert.equal(ctx.agentBusy.get('b1')!.name, 'Claude', 'the current name, without the connector suffix');
+  timers.at(-1)!();
+  assert.equal(ctx.agentBusy.has('b1'), false);
+  assert.equal(repaints, 2, 'going quiet repaints the line back');
+  const handler = source.slice(source.indexOf('if (ev.type === "browser.agent_active")'), source.indexOf('if (ev.type === "browser.moving")'));
+  assert.match(handler, /markAgentBusy\(ev\.browserId, ev\.payload\);\s*return;/, 'a beat must not queue the fleet refetch');
+});

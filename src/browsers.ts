@@ -2032,6 +2032,18 @@ export class BrowserManager {
   }
 }
 
-export function logToolActivity(browserId: string, tool: string): void {
+// How often a busy browser tells the dashboard that an agent is still at work in it. The dashboard
+// counts it busy for 15 s after each beat, which spans a model's pause between calls.
+const AGENT_BEAT_MS = 3_000;
+const agentBeats = new Map<string, number>();
+
+export function logToolActivity(browserId: string, tool: string, by?: { id: string; name: string }): void {
   activity(browserId, tool, tool);
+  // Every call is logged; only a beat is broadcast. A tool call is not a change to the fleet, so
+  // this event carries no state and the dashboard answers it without refetching anything.
+  const now = Date.now();
+  if (now - (agentBeats.get(browserId) ?? 0) < AGENT_BEAT_MS) return;
+  agentBeats.set(browserId, now);
+  if (agentBeats.size > 1000) for (const [id, at] of agentBeats) if (now - at > AGENT_BEAT_MS) agentBeats.delete(id);
+  hub.emitEvent("browser.agent_active", by ? { agentId: by.id, agent: by.name } : {}, browserId);
 }

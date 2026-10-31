@@ -901,7 +901,7 @@ export class McpGateway {
       if (refused) return refused;
       if (session.closed || binding?.closed) throw Err.browserUnavailable("The browser connection closed; retry with the same browserId.");
       this.browsers.touch(context.browserId);
-      logToolActivity(context.browserId, name);
+      logToolActivity(context.browserId, name, context.principal);
       const bound = context.browserId;
       const { browserId: _routingId, ...forwardedArgs } = args;
       const child = context.child;
@@ -1122,7 +1122,7 @@ export class McpGateway {
         if (refused) return refused;
         if (this.browsers.isHumanControlled(id)) throw Err.humanControlling();
         const started = await startCapture(id, rt.cdpUrl, args as CaptureOptions);
-        logToolActivity(id, "screencast_start");
+        logToolActivity(id, "screencast_start", session.principal);
         this.browsers.touch(id);
         return {
           content: [
@@ -1141,7 +1141,7 @@ export class McpGateway {
         };
       }
       const result = await stopCapture(id);
-      logToolActivity(id, "screencast_stop");
+      logToolActivity(id, "screencast_stop", session.principal);
       this.browsers.touch(id);
       const summary = {
         targetId: result.targetId,
@@ -1196,7 +1196,7 @@ export class McpGateway {
         // The target can differ from the binding: authorization and the human guard live
         // inside agentDesktop and are checked again throughout the native operation.
         const { image, ...dimensions } = await agentDesktop(this.browsers, p, id, args, name === "tallylamp_desktop_screenshot");
-        logToolActivity(id, name);
+        logToolActivity(id, name, p);
         return { content: [
           { type: "text" as const, text: JSON.stringify({ browserId: id, ...dimensions, ...(image ? {} : { performed: args.action, note: "Inspect a new desktop screenshot to confirm the result." }) }) },
           ...(image ? [{ type: "image" as const, mimeType: "image/jpeg", data: image.toString("base64") }] : []),
@@ -1466,7 +1466,7 @@ export class McpGateway {
           name: "select_page",
           arguments: { pageId, bringToFront: false },
         });
-        logToolActivity(context.browserId, "select_page");
+        logToolActivity(context.browserId, "select_page", context.principal);
         return out;
       }
       if (name === "tallylamp_use_browser") {

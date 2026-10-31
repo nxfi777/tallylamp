@@ -40,6 +40,7 @@ import { guestTicketRef, issueViewerTicket } from "./viewer.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const guestDir = path.resolve(here, "../guest");
 const fontsDir = path.resolve(here, "../dashboard/fonts");
+const vendorDir = path.resolve(here, "../dashboard/vendor");
 
 declare global {
   namespace Express {
@@ -187,7 +188,8 @@ export function mountGuest(app: Express, browsers: BrowserManager): void {
     guestHeaders(res);
     res.sendFile(path.join(guestDir, "index.html"));
   });
-  // The one file the guest page shares with the dashboard: its typeface, not its code.
+  // What the guest page shares with the dashboard: its typeface and its loading orb, never its
+  // code. Both directories are public on the dashboard's side already.
   app.use(
     "/guest/assets/fonts",
     (_req, res, next) => {
@@ -195,6 +197,14 @@ export function mountGuest(app: Express, browsers: BrowserManager): void {
       next();
     },
     express.static(fontsDir, { index: false, dotfiles: "deny", redirect: false }),
+  );
+  app.use(
+    "/guest/assets/vendor",
+    (_req, res, next) => {
+      guestHeaders(res);
+      next();
+    },
+    express.static(vendorDir, { index: false, dotfiles: "deny", redirect: false }),
   );
   app.use(
     "/guest/assets",

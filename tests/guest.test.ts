@@ -258,6 +258,11 @@ describe("guest links", () => {
       assert.match(r.headers.get("cache-control") ?? "", /no-store/);
       const js = await fetch(`${ctx.url}/guest/assets/guest.js`);
       assert.equal(js.status, 200);
+      // The loading orb is shared with the dashboard, under the guest page's own headers.
+      const orbs = await fetch(`${ctx.url}/guest/assets/vendor/orbs.js`);
+      assert.equal(orbs.status, 200);
+      assert.match(orbs.headers.get("content-security-policy") ?? "", /default-src 'none'/);
+      assert.equal((await fetch(`${ctx.url}/guest/assets/vendor/app.js`)).status, 404, "only the vendor folder is shared");
       assert.ok(!(await js.text()).includes("/api/v1/browsers/${id}/viewer-ticket"), "the page must not call admin routes");
     });
   });

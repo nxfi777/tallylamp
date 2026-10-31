@@ -16,5 +16,6 @@ How it works, what the agent can and cannot reach, and how to test changes are i
 | `address.js` | Parses the server address a person types |
 | `panel.*` | The side panel the toolbar icon opens, and the popup it falls back to where a browser has no side panels. `panel.html?demo=ready` renders any state in an ordinary tab, with no extension APIs |
 | `fonts/` | Geist and Geist Mono for the panel, bundled so it never fetches a font. SIL Open Font License, in `fonts/OFL.txt` |
+| `vendor/` | The animated orbs the panel shows while an agent is working or an approval is pending: thinking-orbs' engine (MIT, in `vendor/thinking-orbs.LICENSE`) and the small helper that draws it. A copy of the dashboard's `dashboard/vendor/`, kept identical by `tests/linked-extension.test.ts` |
 
 There is no build step and no dependency. What is in this folder is what runs.

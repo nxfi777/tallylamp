@@ -2,6 +2,8 @@
 // no dashboard code, no admin API. The link token arrives in the URL fragment, is sent once to
 // be exchanged for an HttpOnly cookie, and is dropped from the address bar before anything else.
 
+import { orb } from "./vendor/orbs.js";
+
 const API = "/guest/api/v1";
 const $ = (id) => document.getElementById(id);
 
@@ -9,7 +11,7 @@ const el = {
   name: $("name"), state: $("state"), take: $("take"), give: $("give"), leave: $("leave"),
   tools: $("tools"), back: $("back"), fwd: $("fwd"), reload: $("reload"), url: $("url"),
   newtab: $("newtab"), tabs: $("tabs"), stage: $("stage"), overlay: $("overlay"),
-  overlayText: $("overlay-text"), notice: $("notice"), foot: $("foot"),
+  overlayText: $("overlay-text"), overlayOrb: $("overlay-orb"), notice: $("notice"), foot: $("foot"),
   welcome: $("welcome"), open: $("open"),
 };
 
@@ -53,8 +55,10 @@ function notify(message) {
   if (message) noticeTimer = setTimeout(() => { el.notice.hidden = true; }, 8000);
 }
 
-function overlay(message) {
+/** `busy` names the orb to show while something is on its way. A dead end gets words alone. */
+function overlay(message, busy) {
   el.overlayText.textContent = message || "";
+  el.overlayOrb.replaceChildren(...(message && busy ? [orb(busy, 64)] : []));
   el.overlay.hidden = !message;
 }
 
@@ -327,7 +331,7 @@ function openViewer(mode, leaseToken) {
         return;
       }
       canvas.classList.add("stale");
-      overlay("The live view dropped. Reconnecting…");
+      overlay("The live view dropped. Reconnecting…", "connecting");
       schedule();
     });
     if (mode === "control") {
@@ -482,9 +486,11 @@ async function start(browser) {
   el.stage.hidden = false;
   render(browser);
   if (browser.status !== "running") {
-    overlay("Starting the browser…");
+    overlay("Starting the browser…", "breathing");
     render((await api("/start", { method: "POST", body: {} })).browser);
   }
+  // Until the first frame. After the welcome card nothing said anything was happening at all.
+  overlay("Connecting…", "connecting");
   connect(view && view.control.holder === "you" ? "control" : "watch");
   poll = setInterval(refresh, 10000);
 }

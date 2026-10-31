@@ -651,11 +651,12 @@ input::placeholder { color: var(--muted); }
 .stagewrap:fullscreen > :not(.stage) { flex-shrink: 0; }
 /* contain, never cover: cropping a browser you are about to click in would hide the button
    you came for. */
-.stage img, .stage canvas {
+/* The frame only: children of the stage, so the connecting orb inside its status is left alone. */
+.stage > img, .stage > canvas {
   position: absolute; inset: 0;
   width: 100%; height: 100%; object-fit: contain; display: block;
 }
-.stage img:focus-visible, .stage canvas:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.stage > img:focus-visible, .stage > canvas:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .stage-status {
   position: absolute; inset: 0; display: grid; place-items: center;
   color: var(--muted); font-size: 13px;
@@ -1174,7 +1175,9 @@ body.busy::before {
 /* Top-aligned: the buttons sit level with the name, and the meta line runs under the name only. */
 .dhead-row { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; }
 .dhead-main { flex: 1 1 320px; min-width: 0; }
-.dtitle { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* Wraps, so the pills drop under a name that needs the room: squeezed beside them, a short name
+   broke mid-word on a phone. */
+.dtitle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
 .dtitle h1 { min-width: 0; }
 /* The heading is the rename control. It looks like the heading until the pointer is on it. */
 .dname {
@@ -1542,3 +1545,9 @@ body.busy::before {
   .pill-dot.live, .spinner, .waiting-ic { animation: none; }
   .meterline i, .theme-card, .subnav-item, .table .click-row { transition: none; }
 }
+
+/* Thinking orbs (vendor/orbs.js). The helper sizes the canvas; these only place it. */
+.orb { display: block; flex: none; }
+.who.busy { display: flex; align-items: center; gap: 4px; margin-left: -2px; color: var(--text); }
+.thumb-busy { display: inline-flex; align-items: center; gap: 6px; }
+.pill.agent { gap: 5px; padding-left: 3px; color: var(--text); }

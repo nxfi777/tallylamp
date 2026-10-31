@@ -81,7 +81,7 @@ describe("profile site inventory", () => {
       principal: () => "Test", layout() {}, icon() {}, tunnelSection() {}, guestSection() {}, guestHolds: () => false, canMove: () => false,
       dataNotice: () => null,
       // The page's own sections: rendering them is not what this test is about.
-      connectionSection: () => ({ refresh() {} }), pageSection() {}, loansSection() {}, activitySection() {}, statusPill() {},
+      connectionSection: () => ({ refresh() {} }), pageSection() {}, loansSection() {}, activitySection() {}, statusPill() {}, agentPill() {},
       tabBar: () => ({ select() {}, setCount() {} }), detailTabs: new Map(),
       ICON_BACK: [], ICON_FORWARD: [], ICON_RELOAD: [], ICON_FULLSCREEN: [], ICON_PLUS: [], ICON_CHEVRON: [], ICON_MORE: [], ICON_LAYERS: [],
       connectViewer: (...args: unknown[]) => { active = args[5] as typeof active; },

@@ -10,6 +10,8 @@
 // shared-elsewhere, offline, notice, notice-left, flagged. &tab=2 puts another fixture tab in front.
 
 import { onServer, siteOf } from "./guard.js";
+// A copy of the dashboard's dashboard/vendor, kept identical by tests/linked-extension.test.ts.
+import { orb } from "./vendor/orbs.js";
 import { normalizeServer } from "./address.js";
 
 const PRIVACY = "https://tallylamp.dev/privacy";
@@ -349,7 +351,7 @@ function pairingView() {
       exp,
     ),
     h("div", { class: "xwait" },
-      h("span", { class: "xradar", "aria-hidden": "true" }, icon("shield", "s14")),
+      orb("listening", 20),
       h("div", {},
         h("p", { class: "t" }, "Waiting for your approval"),
         h("p", { class: "d" }, "This panel moves on by itself once you approve."))),
@@ -478,10 +480,27 @@ const ACTIVITY = {
   file: ["file", () => "Attached a file"],
 };
 
+// The agent counts as at work for this long after its newest action: long enough to span a
+// model's pause between calls, the same window the dashboard uses.
+const WORKING_MS = 15_000;
+
+/** "Working", beside the feed's heading while the agent's newest action is that fresh. */
+function working(at) {
+  const el = h("span", { class: "xfeed-now" }, orb("working", 20), "Working");
+  const update = (now) => {
+    el.hidden = !(at && now - at < WORKING_MS);
+    return !el.hidden;
+  };
+  update.el = el;
+  update(Date.now());
+  timed.push(update);
+  return el;
+}
+
 function feed(entry, cardDrawn) {
   const events = entry.activity ?? [];
   return h("div", { class: "xfeed", id: "feed" },
-    h("p", { class: "xfeed-h" }, "Activity through Tallylamp"),
+    h("p", { class: "xfeed-h" }, "Activity through Tallylamp", working(events[0]?.at)),
     events.length
       ? h("ul", { style: "margin:0;padding:0;list-style:none", "aria-live": "polite" }, events.map((a) => {
         const [ico, words] = ACTIVITY[a.kind] ?? ["pointer", () => a.kind];

@@ -359,6 +359,14 @@ describe("Tallylamp Link worker, what the panel is told", () => {
 });
 
 describe("Tallylamp Link panel connection status", () => {
+  it("carries the dashboard's orb files unchanged", () => {
+    for (const file of ["orbs.js", "thinking-orbs.js", "thinking-orbs.LICENSE"]) {
+      const theirs = readFileSync(new URL(`../dashboard/vendor/${file}`, import.meta.url), "utf8");
+      const ours = readFileSync(new URL(`../extension/vendor/${file}`, import.meta.url), "utf8");
+      assert.equal(ours, theirs, `extension/vendor/${file} has drifted from dashboard/vendor/${file}; copy it across`);
+    }
+  });
+
   it("updates only the clock text and suspends its timer while hidden", () => {
     const source = readFileSync(new URL("../extension/panel.js", import.meta.url), "utf8");
     const code = source.slice(source.indexOf("let timed = [];"), source.indexOf('document.addEventListener("visibilitychange"'));
@@ -397,7 +405,7 @@ describe("Tallylamp Link panel connection status", () => {
       const app = new Element();
       await vm.runInNewContext(`(async () => { ${source}\n })()`, {
         document: { getElementById: () => app, createElement: () => new Element(), activeElement: null, addEventListener() {} },
-        location: { search: `?demo=${demo}` }, URLSearchParams, onServer, siteOf, normalizeServer,
+        location: { search: `?demo=${demo}` }, URLSearchParams, onServer, siteOf, normalizeServer, orb: () => new Element(),
         clearInterval: () => {}, setInterval: () => 1,
       });
       return app.textContent;
@@ -429,7 +437,7 @@ describe("Tallylamp Link panel connection status", () => {
       const app = new Element();
       await vm.runInNewContext(`(async () => { ${source.replace(/^import .*;\n/gm, "")}\n })()`, {
         document: { getElementById: () => app, createElement: () => new Element(), activeElement: null, addEventListener() {} },
-        location: { search: `?demo=${demo}` }, URLSearchParams, onServer, siteOf, normalizeServer,
+        location: { search: `?demo=${demo}` }, URLSearchParams, onServer, siteOf, normalizeServer, orb: () => new Element(),
         clearInterval: () => {}, setInterval: () => 1,
       });
       texts[demo] = app.textContent;

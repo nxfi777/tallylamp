@@ -231,10 +231,8 @@ h3 { font-size: 14px; line-height: 20px; font-weight: 600; }
 .xwait { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--r); border: 1px dashed var(--line-3); }
 .xwait .t { font-weight: 500; }
 .xwait .d { font-size: 12px; line-height: 16px; color: var(--text-3); }
-.xradar { position: relative; width: 32px; height: 32px; flex: none; display: grid; place-items: center; color: var(--lamp); }
-.xradar::before, .xradar::after { content: ""; position: absolute; inset: 4px; border-radius: 99px; border: 1.5px solid var(--lamp); opacity: 0; animation: radar 2200ms var(--ease-out) infinite; }
-.xradar::after { animation-delay: 1100ms; }
-@keyframes radar { 0% { transform: scale(.5); opacity: .8; } 100% { transform: scale(1.6); opacity: 0; } }
+/* Thinking orbs (vendor/orbs.js). The helper sizes the canvas; these only place it. */
+.orb { display: block; flex: none; }
 .row { display: flex; gap: 8px; align-items: center; }
 .row .grow { flex: 1; }
 
@@ -277,7 +275,9 @@ h3 { font-size: 14px; line-height: 20px; font-weight: 600; }
 .xname b { color: var(--text); font-weight: 500; }
 .xname.paused { border-style: dashed; }
 .xfeed { border-top: 1px solid var(--line); padding: 8px 0; }
-.xfeed-h { display: flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-3); }
+.xfeed-h { display: flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--text-3); min-height: 28px; }
+.xfeed-now { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; color: var(--text); }
+.xfeed-now[hidden] { display: none; }
 .xev { display: flex; align-items: center; gap: 10px; padding: 4px 12px; font-size: 12px; line-height: 20px; color: var(--text-2); }
 .xev .ico { color: var(--text-3); }
 .xev .w { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -400,6 +400,26 @@ describe("agent screencast", () => {
   });
   after(async () => own.close());
 
+  it("tells the dashboard an agent is at work once per beat, while logging every call", async () => {
+    const { logToolActivity } = await import("../src/browsers.js");
+    const { hub } = await import("../src/events.js");
+    const id = `beat-${Date.now()}`;
+    const beats: Array<{ type: string; browserId?: string; payload: Record<string, unknown> }> = [];
+    const on = (ev: { type: string; browserId?: string; payload: Record<string, unknown> }) => {
+      if (ev.type === "browser.agent_active" && ev.browserId === id) beats.push(ev);
+    };
+    hub.on("event", on);
+    try {
+      for (const tool of ["click", "fill", "take_screenshot"]) logToolActivity(id, tool, { id: "agent-1", name: "Claude (connector)" });
+    } finally {
+      hub.off("event", on);
+    }
+    assert.equal(beats.length, 1, "three calls inside one beat broadcast once");
+    assert.deepEqual(beats[0]!.payload, { agentId: "agent-1", agent: "Claude (connector)" });
+    const rows = getDb().prepare(`SELECT kind FROM activity_events WHERE browser_id = ? ORDER BY id`).all(id) as Array<{ kind: string }>;
+    assert.deepEqual(rows.map((r) => r.kind), ["click", "fill", "take_screenshot"]);
+  });
+
   it("advertises the recording tools", async () => {
     const list = await json(`${own.url}/mcp`, {
       method: "POST",
