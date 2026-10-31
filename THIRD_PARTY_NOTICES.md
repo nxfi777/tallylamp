@@ -71,6 +71,16 @@ Copyright 2024 The Geist Project Authors
 The Latin subsets ship inside the browser extension, in `extension/fonts/`, and with the
 dashboard, in `dashboard/fonts/`, with the license beside them in each `OFL.txt`.
 
+## thinking-orbs
+
+https://github.com/Jakubantalik/thinking-orbs  
+MIT  
+Copyright (c) 2026 Jakub Antalik  
+Version 0.3.1's drawing engine ships unmodified with the dashboard, in
+`dashboard/vendor/thinking-orbs.js`, and inside the browser extension, in
+`extension/vendor/thinking-orbs.js`, with the license beside it in each
+`thinking-orbs.LICENSE`.
+
 ## Lucide
 
 https://github.com/lucide-icons/lucide  
