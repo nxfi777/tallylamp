@@ -90,6 +90,43 @@ function openModal(title, build, onClose, { dismissible = true, className = "" }
 }
 
 /**
+ * A pressed button that is waiting on the server says so where the click landed: an orb for
+ * what it is waiting on, then the words. It keeps its own colour (app.css), because the faded
+ * disabled look read as switched off rather than working. `state` is an orb state from
+ * vendor/orbs.js: "breathing" while Chrome itself starts or stops, "shaping" for the rest.
+ * `say(label, state)` moves on to the next step; `release()` gives the button back as it was.
+ */
+function holdButton(button, label, state = "shaping") {
+  const before = [...button.childNodes];
+  const wasDisabled = button.disabled;
+  // Never narrower than it was, so the button beside it does not jump.
+  button.style.minWidth = `${button.offsetWidth}px`;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  const words = h("span", {}, label);
+  let showing = null;
+  function say(next, nextState = showing) {
+    words.textContent = next;
+    if (nextState === showing) return;
+    const fresh = orb(nextState, 20, { ink: true });
+    // Only the first orb waits a beat before it shows. A later step swaps it in place.
+    if (showing) fresh.setAttribute("class", "orb orb-now");
+    button.replaceChildren(fresh, words);
+    showing = nextState;
+  }
+  say(label, state);
+  return {
+    say,
+    release() {
+      button.replaceChildren(...before);
+      button.disabled = wasDisabled;
+      button.removeAttribute("aria-busy");
+      button.style.minWidth = "";
+    },
+  };
+}
+
+/**
  * Ask for a few values at once. This replaces a run of prompt() dialogs, which arrive one at a
  * time with no labels, no hint of how many are coming, and no way back to the previous answer.
  */
@@ -114,17 +151,17 @@ function askFor(title, fields, submitLabel, submit, { description } = {}) {
           const wasDisabled = controls.map((el) => el.disabled);
           controls.forEach((el) => { el.disabled = true; });
           const button = form.querySelector('button[type="submit"]');
-          button.textContent = submit ? (submitLabel.startsWith("Create") ? "Creating…"
+          const hold = submit ? holdButton(button, submitLabel.startsWith("Create") ? "Creating…"
             : submitLabel.startsWith("Replace") ? "Replacing…"
-            : submitLabel.includes("sign-out") ? "Signing out…" : "Saving…") : submitLabel;
+            : submitLabel.includes("sign-out") ? "Signing out…" : "Saving…") : null;
           error.textContent = "";
           try { if (submit) await submit(out); setPending(false); close(out); }
           catch (e) { error.textContent = e.message; }
           finally {
             submitting = false;
             setPending(false);
+            hold?.release();
             controls.forEach((el, i) => { el.disabled = wasDisabled[i]; });
-            button.textContent = submitLabel;
           }
         },
       });
@@ -1827,14 +1864,12 @@ function linkedAccessSection(b) {
     const save = h("button", {
       class: "btn",
       onClick: () => act(async () => {
-        save.disabled = true;
-        save.textContent = "Saving…";
+        const hold = holdButton(save, "Saving…");
         try {
           const out = await api(`/api/v1/browsers/${b.id}/access`, { method: "PUT", body: picker.value() });
           flash(accessSummary(out.access, b.name), true);
         } finally {
-          save.disabled = false;
-          save.textContent = "Save";
+          hold.release();
         }
       }),
     }, "Save");
@@ -2020,14 +2055,14 @@ function connectionSection(b) {
       proxy = proxyFromFields({ proxyServer: address, proxyUsername: user.value, proxyPassword: pass.value });
     }
     const gatewayName = (state.gateways || []).find((g) => g.id === gwSelect.value)?.name;
-    for (const el of [save, cancel]) el.disabled = true;
+    cancel.disabled = true;
+    const hold = holdButton(save, running ? "Stopping…" : "Saving…", running ? "breathing" : "shaping");
     let error = null;
     try {
       if (running) {
-        save.textContent = "Stopping…";
         await api(`/api/v1/browsers/${b.id}/stop`, { method: "POST" });
       }
-      save.textContent = "Saving…";
+      hold.say("Saving…", "shaping");
       // One route out: the server refuses the new one until the old one is cleared.
       if (b.gateway && chosen !== "gateway") await api(`/api/v1/browsers/${b.id}/gateway`, { method: "PUT", body: { gatewayId: null } });
       if (b.proxy && chosen !== "proxy") await api(`/api/v1/browsers/${b.id}`, { method: "PATCH", body: { proxy: null } });
@@ -2039,7 +2074,7 @@ function connectionSection(b) {
     // Started again even when the change failed: the operator asked for a different route, not
     // for the browser to stay down.
     if (running) {
-      save.textContent = "Starting…";
+      hold.say("Starting…", "breathing");
       try { await api(`/api/v1/browsers/${b.id}/start`, { method: "POST" }); } catch (e) { error = error || e; }
     }
     if (error) {
@@ -4757,21 +4792,15 @@ const PENDING = { start: "Starting…", stop: "Stopping…", restart: "Restartin
  * is happening, at once. A successful call repaints; a failed one gets its button back.
  */
 async function call(path, button) {
-  const label = button?.textContent;
-  if (button) {
-    button.disabled = true;
-    button.textContent = PENDING[path.split("/").pop()] || label;
-  }
+  const pending = PENDING[path.split("/").pop()];
+  const hold = button ? holdButton(button, pending || button.textContent, pending ? "breathing" : "shaping") : null;
   try {
     return await act(async () => {
       await api(path, { method: "POST" });
       await render();
     });
   } finally {
-    if (button?.isConnected) {
-      button.disabled = false;
-      button.textContent = label;
-    }
+    if (button?.isConnected) hold.release();
   }
 }
 
@@ -4811,8 +4840,7 @@ async function logout() {
   if (state.signingOut) return;
   state.signingOut = true;
   const button = document.querySelector(".logout");
-  const label = button?.textContent;
-  if (button) { button.disabled = true; button.textContent = "Signing out…"; }
+  const hold = button ? holdButton(button, "Signing out…") : null;
   try {
     try {
       await api("/api/v1/logout", { method: "POST" });
@@ -4827,7 +4855,7 @@ async function logout() {
     go("/login");
   } finally {
     state.signingOut = false;
-    if (button) { button.disabled = false; button.textContent = label; }
+    hold?.release();
   }
 }
 
@@ -4856,12 +4884,11 @@ function dataNotice(name, label, retry = () => retryDataset(name)) {
     data.loadedAt ? h("div", { class: "sub" }, `Showing the last successful update from ${new Date(data.loadedAt).toLocaleTimeString()}.`) : null,
     h("button", { class: "btn", disabled: data.loading, onClick: (e) => {
       const button = e.currentTarget;
-      button.disabled = true;
-      button.textContent = "Retrying…";
+      const hold = holdButton(button, "Retrying…");
       void act(async () => {
         try { await retry(); }
         finally {
-          if (button.isConnected) { button.disabled = false; button.textContent = "Retry"; }
+          if (button.isConnected) hold.release();
         }
       });
     } }, data.loading ? "Retrying…" : "Retry"));
@@ -4981,12 +5008,14 @@ async function pairView(code) {
   const picker = agentPicker(enabled.length === 1 ? [enabled[0].id] : [], false);
   const err = h("div", { class: "err", role: "alert" });
   let pending = false;
+  let hold = null;
   function setPending(value, decision) {
     pending = value;
+    hold?.release();
+    hold = null;
     form.approve.disabled = value;
     form.deny.disabled = value;
-    form.approve.textContent = value && decision === "approve" ? "Linking…" : "Approve and link";
-    form.deny.textContent = value && decision === "deny" ? "Denying…" : "Deny";
+    if (value) hold = decision === "approve" ? holdButton(form.approve, "Linking…") : holdButton(form.deny, "Denying…");
     if (value) form.setAttribute("aria-busy", "true");
     else form.removeAttribute("aria-busy");
   }

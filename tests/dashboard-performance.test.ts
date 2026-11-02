@@ -15,12 +15,21 @@ test('a lifecycle action does one refresh and keeps its pending state until rend
     act: (cb: () => Promise<void>) => cb(), api: async () => { requests++; },
     refresh: () => { throw new Error('redundant refresh'); },
     render: async () => { renders++; await pending; },
+    // Chrome starting is the breathing orb's meaning; the stand-in records which orb was asked for.
+    holdButton: (b: any, label: string, state: string) => {
+      orbs.push(state);
+      const before = b.textContent;
+      b.disabled = true; b.textContent = label;
+      return { release() { b.disabled = false; b.textContent = before; } };
+    },
   });
+  const orbs: string[] = [];
   const button = { textContent: 'Start', isConnected: true, disabled: false };
   const task = call('/api/v1/browsers/example/start', button);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(requests, 1); assert.equal(renders, 1);
   assert.equal(button.disabled, true); assert.equal(button.textContent, 'Starting…');
+  assert.deepEqual(orbs, ['breathing']);
   finish(); await task;
   assert.equal(button.disabled, false); assert.equal(button.textContent, 'Start');
 });

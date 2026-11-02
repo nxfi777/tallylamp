@@ -1552,6 +1552,18 @@ body.busy::before {
 
 /* Thinking orbs (vendor/orbs.js). The helper sizes the canvas; these only place it. */
 .orb { display: block; flex: none; }
+/* A button waiting on the server is busy, not unavailable, so it keeps its colour and holds an
+   orb (holdButton in app.js). Faded to the disabled look, a pressed Save read as switched off.
+   The orb waits a beat before it shows, so a save that lands at once never flickers. The dots'
+   own padding sits it a little in from the edge, so it moves back to match the text's margin. */
+.btn[aria-busy="true"]:disabled { opacity: 1; cursor: progress; }
+.btn > .orb { margin-left: -3px; animation: orb-in var(--d-slow) var(--ease-out) 250ms both; }
+.btn > .orb.orb-now { animation: none; }
+@keyframes orb-in { from { opacity: 0; transform: scale(0.6); } }
+@keyframes orb-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .btn > .orb { animation-name: orb-fade; }
+}
 .who.busy { display: flex; align-items: center; gap: 4px; margin-left: -2px; color: var(--text); }
 .thumb-busy { display: inline-flex; align-items: center; gap: 6px; }
 .pill.agent { gap: 5px; padding-left: 3px; color: var(--text); }

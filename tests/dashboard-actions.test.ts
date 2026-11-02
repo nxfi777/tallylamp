@@ -23,7 +23,10 @@ class Element {
   ownText = "";
   connected = true;
   open = false;
+  style: Record<string, string> = {};
+  offsetWidth = 0;
   constructor(public tag: string, public doc: any) {}
+  get childNodes() { return [...this.children]; }
   get tagName() { return this.tag.toUpperCase(); }
   get isConnected() { return this.connected && (!this.parent || this.parent.isConnected); }
   get textContent(): string { return this.ownText + this.children.map(el => el.textContent).join(""); }
@@ -95,7 +98,7 @@ function harness(names: string[], extra: Record<string, unknown> = {}) {
     return el;
   };
   const state = { me: { id: "operator" }, agents: [], browsers: [], seeds: [], ...extra.state as object };
-  const context: any = { h, document, state, knownProjects: () => [], ...extra };
+  const context: any = { h, document, state, knownProjects: () => [], orb: () => h("canvas", { class: "orb" }), ...extra };
   context.state = state;
   const functions = runInNewContext(`${names.map(fn).join("\n")}; ({${names.join(",")}})`, context);
   return { ...functions, document, state, h, app, key: (key: string) => listeners.get("keydown")?.({ key, preventDefault() {} }) };
@@ -109,7 +112,7 @@ function deferred<T = void>() {
 }
 const event = () => ({ preventDefault() {} });
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
-const forms = ["openModal", "askFor"];
+const forms = ["openModal", "askFor", "holdButton"];
 
 test("pending forms cannot be dismissed and retain their committed result", async () => {
   const request = deferred();
@@ -120,6 +123,11 @@ test("pending forms cannot be dismissed and retain their committed result", asyn
   const submitting = form.events.submit(event());
   const cancel = form.querySelector('button[type="button"]');
   assert.equal(cancel.disabled, true);
+  // The pressed button holds an orb beside what it is doing, and stays marked busy.
+  const submitButton = form.querySelector('button[type="submit"]');
+  assert.equal(submitButton.attrs["aria-busy"], "true");
+  assert.ok(submitButton.querySelector(".orb"), "the pressed button shows an orb");
+  assert.equal(submitButton.textContent, "Creating…");
   cancel.events.click();
   env.key("Escape");
   const backdrop = env.document.body.querySelector(".modal");
@@ -143,7 +151,11 @@ test("a failed form retains fields and restores retry and cancellation", async (
   form.querySelector("input").value = "Unsaved input";
   await form.events.submit(event());
   assert.equal(form.querySelector("input").value, "Unsaved input");
-  assert.equal(form.querySelector('button[type="submit"]').disabled, false);
+  const submitButton = form.querySelector('button[type="submit"]');
+  assert.equal(submitButton.disabled, false);
+  assert.equal(submitButton.attrs["aria-busy"], undefined);
+  assert.equal(submitButton.querySelector(".orb"), null);
+  assert.equal(submitButton.textContent, "Save");
   assert.equal(form.querySelector('button[type="button"]').disabled, false);
   assert.equal(form.querySelector(".err").textContent, "Try again");
   env.key("Escape");
@@ -255,7 +267,7 @@ test("pairing denial cannot race approval and failed denial keeps the code retry
   const screens: Element[] = [];
   const calls: string[] = [];
   let fail = true;
-  const env = harness(["pairView"], {
+  const env = harness(["pairView", "holdButton"], {
     api: async (path: string, options?: any) => {
       if (!options) return { pairing: { state: "pending", userCode: "ABC123", deviceName: "My browser", createdAt: "now" } };
       calls.push(path);
