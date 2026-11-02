@@ -238,6 +238,12 @@ button svg { width: 16px; height: 16px; flex: none; }
 .overlay { flex-direction: column; gap: 12px; }
 .overlay-orb:empty { display: none; }
 .orb { display: block; flex: none; }
+/* A pressed button waiting on the server keeps its colour and holds an orb, as in the dashboard.
+   The orb waits a beat, so an answer that comes at once never flickers. */
+button[aria-busy="true"]:disabled { opacity: 1; cursor: progress; }
+button > .orb { margin-left: -3px; animation: orb-in 260ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both; }
+@keyframes orb-in { from { opacity: 0; transform: scale(0.6); } }
+@keyframes orb-fade { from { opacity: 0; } }
 
 /* The first thing a guest sees, before the link is spent: one card, one action. */
 .welcome:not([hidden]) ~ .stagewrap { display: none; }
@@ -273,4 +279,5 @@ button svg { width: 16px; height: 16px; flex: none; }
 @media (prefers-reduced-motion: reduce) {
   button { transition: none; }
   button:active:not(:disabled) { transform: none; }
+  button > .orb { animation-name: orb-fade; }
 }

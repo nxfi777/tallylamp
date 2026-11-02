@@ -57,6 +57,11 @@ function h(tag, attrs = {}, ...kids) {
   return el;
 }
 
+/** A pressed button while its action is in flight: an orb, then what it is doing (vendor/orbs.js). */
+function pressed(label) {
+  return [orb("shaping", 20, { ink: true }), label];
+}
+
 /** Lucide icons (ISC), drawn as currentColor strokes. Constant markup, never anything a page sent. */
 const ICONS = {
   more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
@@ -312,8 +317,8 @@ function connectView() {
         },
       }),
       state.error ? h("p", { class: "field-err", id: "server-err", role: "alert" }, icon("alert", "s12"), h("span", {}, state.error)) : preview,
-      h("button", { class: `btn primary lg block${busy ? " busy" : ""}`, type: "submit", key: "connect", disabled: Boolean(busy), style: "margin-top:6px" },
-        busy === "startPairing" ? [h("span", { class: "spinner", "aria-hidden": "true" }), "Contacting your server…"] : expired ? "Get a new code" : "Connect"),
+      h("button", { class: `btn primary lg block${busy ? " busy" : ""}`, type: "submit", key: "connect", disabled: Boolean(busy), "aria-busy": busy === "startPairing" ? "true" : null, style: "margin-top:6px" },
+        busy === "startPairing" ? pressed("Contacting your server…") : expired ? "Get a new code" : "Connect"),
     ),
     // Said here, before anything is sent, and not only in the policy: the Web Store asks for
     // disclosure in the product itself, and this is the moment somebody decides.
@@ -423,7 +428,7 @@ function offlineBanner() {
   return banner("off", "wifioff", `Can't reach ${state.host}`, words, {
     key: "offline",
     role: "alert",
-    acts: [h("button", { class: "btn sm", key: "retry", disabled: Boolean(busy), onclick: () => ask("retry") }, busy === "retry" ? "Trying…" : "Try now")],
+    acts: [h("button", { class: "btn sm", key: "retry", disabled: Boolean(busy), "aria-busy": busy === "retry" ? "true" : null, onclick: () => ask("retry") }, busy === "retry" ? pressed("Trying…") : "Try now")],
     extra: releaseAt ? h("span", { class: "xdrain", "aria-hidden": "true" }, drain) : null,
   });
 }
@@ -460,8 +465,8 @@ function shareCard(tab, site) {
         h("div", {}, h("p", { class: "t" }, "Any site"),
           h("p", { class: "d" }, "Your agent can take this tab anywhere, signed in as you.")))),
     h("div", { class: "xshare" },
-      h("button", { class: `btn primary lg block${busy ? " busy" : ""}`, key: "share", disabled: Boolean(busy) || connecting, onclick: share, "aria-keyshortcuts": shortcut || null },
-        busy === "shareTab" ? [h("span", { class: "spinner", "aria-hidden": "true" }), "Sharing…"]
+      h("button", { class: `btn primary lg block${busy ? " busy" : ""}`, key: "share", disabled: Boolean(busy) || connecting, "aria-busy": busy === "shareTab" ? "true" : null, onclick: share, "aria-keyshortcuts": shortcut || null },
+        busy === "shareTab" ? pressed("Sharing…")
           : connecting ? "Connecting to your server…" : ["Share this tab", kbds(shortcut)]),
       h("p", { class: "xwhy" }, `Your agent sees and controls this tab through ${state.host}, signed in as you. Chrome shows a debugging bar while anything is shared, and Cancel on that bar stops sharing too.`)),
   );
@@ -596,7 +601,7 @@ function extensionCard() {
         h("li", {}, "Reload the page and share it again.")),
       h("div", { class: "acts" },
         h("button", { class: "btn sm", onclick: () => ask("openExtensions", { id: fix.id }) }, fix.id ? "Show that extension" : "Open your extensions", icon("ext", "s12")),
-        here ? h("button", { class: "btn sm primary", key: "reload-share", disabled: Boolean(busy), onclick: reloadAndShare }, busy === "reload" ? "Reloading…" : "Reload and share") : null,
+        here ? h("button", { class: "btn sm primary", key: "reload-share", disabled: Boolean(busy), "aria-busy": busy === "reload" ? "true" : null, onclick: reloadAndShare }, busy === "reload" ? pressed("Reloading…") : "Reload and share") : null,
         h("button", { class: "linkbtn", onclick: () => ask("openFrameHelp") }, "Why, and other fixes"))),
   );
 }

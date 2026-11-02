@@ -102,8 +102,12 @@ export function orb(state, size = 20, { ink = false } = {}) {
   canvas.style.width = canvas.style.height = `${px}px`;
   canvas.setAttribute("aria-hidden", "true");
   canvas.orb = { size: px, speed, opts, ink, draw: MODE_DRAWS[mode], ctx: canvas.getContext("2d") };
-  // Drawn once now, so it never shows up blank for the frame before the observer reports it.
-  paint(canvas, reduced.matches ? STILL : performance.now() / 1000, isDark());
+  // Drawn once now, so it never shows up blank for the frame before the observer reports it. An
+  // orb that takes its tone from the text around it waits until the caller has put it there,
+  // still before the next frame, or its first frame would be in the page's tone.
+  const first = () => paint(canvas, reduced.matches ? STILL : performance.now() / 1000, isDark());
+  if (ink) queueMicrotask(first);
+  else first();
   watch.observe(canvas);
   return canvas;
 }

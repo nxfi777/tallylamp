@@ -522,7 +522,11 @@ async function boot() {
   el.welcome.hidden = false;
   el.open.focus();
   el.open.onclick = async () => {
+    // Busy, not unavailable: it keeps its colour and width and holds an orb while the link is spent.
+    el.open.style.minWidth = `${el.open.offsetWidth}px`;
     el.open.disabled = true;
+    el.open.setAttribute("aria-busy", "true");
+    el.open.replaceChildren(orb("shaping", 20, { ink: true }), "Opening…");
     try {
       await start((await api("/session", { method: "POST", body: { token } })).browser);
     } catch (e) {

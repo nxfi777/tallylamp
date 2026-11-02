@@ -152,8 +152,11 @@ h3 { font-size: 14px; line-height: 20px; font-weight: 600; }
 /* A narrow panel spends its width on the words. */
 @media (max-width: 339px) { .btn .kbds { display: none; } }
 .btn.busy { cursor: progress; }
-.spinner { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: spin 700ms linear infinite; flex: none; }
-@keyframes spin { to { transform: rotate(360deg); } }
+/* The pressed button keeps its colour and holds an orb while its action is in flight, as in the
+   dashboard: faded, it read as switched off rather than working. The dots' own padding sits the
+   orb a little in from the edge, so it moves back to match the text's margin. */
+.btn[aria-busy="true"]:disabled { opacity: 1; cursor: progress; }
+.btn > .orb { margin-left: -3px; }
 .linkbtn { border: 0; background: none; padding: 0; color: var(--text-2); font-size: 12px; line-height: 16px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .linkbtn:hover { color: var(--text); }
 
