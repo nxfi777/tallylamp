@@ -307,7 +307,7 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
 
   api.get("/api/v1/status", (req, res) => {
     res.json({
-      version: config.version,
+      version: config.release,
       maxBrowsers: config.maxBrowsers,
       running: browsers.runningCount(),
       occupiedSlots: browsers.occupiedSlotCount(),

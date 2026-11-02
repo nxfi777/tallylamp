@@ -97,9 +97,15 @@
 
   /* The Tallylamp dashboard's approval page, from dashboard/app.js pairView. */
   .dash { height: 100%; display: flex; flex-direction: column; }
-  .dash > header { height: 52px; display: flex; align-items: center; gap: 22px; padding: 0 26px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); flex: none; }
-  .dash > header b { display: flex; align-items: center; gap: 7px; font-size: 15px; color: var(--text); margin-right: 10px; }
-  .dash > header img { width: 18px; }
+  /* Below 900px the dashboard folds its sidebar into this bar: the brand, search, and a menu
+     named after the page you are on. */
+  .dash > header { height: 60px; display: flex; align-items: center; gap: 8px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--line); font-size: 14px; flex: none; }
+  .dash > header b { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--text); }
+  .dash > header .tile { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+  .dash > header img { width: 16px; }
+  .dash > header svg { margin-left: auto; width: 15px; height: 15px; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
+  .dash > header .pages { padding: 0 6px 0 14px; font-weight: 500; color: var(--text); }
+  .dash > header .pages::after { content: "⌄"; margin-left: 6px; font-size: 12px; }
   .pair { padding: 26px 34px; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
   .pair h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.015em; }
   .pair p { margin: 0; color: var(--muted); font-size: 13.5px; }
@@ -204,7 +210,7 @@ const PAGES = {
       ${Array.from({ length: 8 }, (_, i) => `<tr>${Array.from({ length: 6 }, (_, j) => `<td>${j === 0 ? i + 10 : "&nbsp;"}</td>`).join("")}</tr>`).join("")}
     </table></div>`;
   },
-  pair: () => `<div class="dash"><header><b><img src="${MARK}" alt="">Tallylamp</b><span>Browsers</span><span>Agents</span><span>Saved profiles</span></header>
+  pair: () => `<div class="dash"><header><b><span class="tile"><img src="${MARK}" alt=""></span>Tallylamp</b><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span class="pages">Link a browser</span></header>
     <div class="pair">
       <h2>Link this browser?</h2>
       <p>Check this code matches the one in the extension. If you didn't just press Connect there, deny it.</p>
