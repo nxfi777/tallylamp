@@ -44,3 +44,26 @@ asks for no new permissions.
 
 See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
 backups and deployment settings.
+
+## Release validation
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/42612248821)
+passed application, headed Chrome, and running-container checks before
+publishing the tested image. Its anonymous registry access, digest, version and
+source-revision labels were verified, and `tallylamp-link.zip`, whose manifest
+reads 0.12.4, is attached to the release. Pin this Linux amd64 artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:a6310e9730a1d5a141e1a403c893760b9df2f0cae42b83ca86baa2bc6c390b48
+```
+
+Before release, starring was tried on a local build at 1440, 768 and 375 pixels
+wide in the dark theme, and at 1440 in the light one: from a card, from the
+keyboard, and with the server refusing, where the card went back and the error
+showed. The service test suite passed, including new checks that only the
+administrator can star, that starring twice keeps the first time, and that a
+linked browser can be starred.
+
+After the deploy, production served the new dashboard files byte for byte and
+listed the starred route, every browser reported `starred`, and its worker
+reported 0.12.4. Both Railway templates pin the digest above.

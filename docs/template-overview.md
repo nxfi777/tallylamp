@@ -149,10 +149,10 @@ from your connection, never falling back to Railway's. See the
 
 ## Updates are your choice
 
-The current release is `ghcr.io/nxfi777/tallylamp:0.12.3`. Pin this digest:
+The current release is `ghcr.io/nxfi777/tallylamp:0.12.4`. Pin this digest:
 
 ```text
-ghcr.io/nxfi777/tallylamp@sha256:45449ecd9737a893c5fd74496e57d993b4c4aeead7e01d18819f2db63754125b
+ghcr.io/nxfi777/tallylamp@sha256:a6310e9730a1d5a141e1a403c893760b9df2f0cae42b83ca86baa2bc6c390b48
 ```
 
 Automatic image updates are disabled. Neither a source push nor a new release
