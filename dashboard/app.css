@@ -1017,6 +1017,38 @@ body.busy::before {
   border: 1px solid var(--line-strong); border-radius: 99px;
 }
 .kind-tag.warn { color: var(--warn); border-color: var(--warn); }
+
+/* A card's title row: the name and its tags take the room, the star sits at the end. The
+   bottom margin moved here from the h3 so the row keeps the gap the heading had. */
+.card-title { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 4px; }
+.card-title h3 { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+/* Star: a toggle. The fill carries the state and aria-pressed says it, so it never rests on
+   colour alone. Negative margins give it a 28px target without making the 20px title row
+   taller. Amber is --warn's, which clears 3:1 against the card in both themes. */
+.star-btn {
+  flex: none; display: inline-grid; place-items: center;
+  width: 28px; height: 28px; margin: -4px -6px -4px 0; padding: 0;
+  border: 0; border-radius: var(--radius-sm); background: none; cursor: pointer;
+  color: var(--muted);
+  transition: color var(--d-fast), background-color var(--d-fast), opacity var(--d-fast);
+}
+.star-btn .icon { width: 16px; height: 16px; }
+.star-btn:hover { color: var(--text); background: var(--hover); }
+.star-btn[aria-pressed="true"] { color: var(--warn); }
+.star-btn[aria-pressed="true"] svg { fill: currentColor; }
+/* Twelve outlined stars on twelve cards is noise for an action taken once in a while, so with
+   a mouse an unstarred card shows its star only under the pointer or focus. The ⋯ menu has Star
+   as well. Touch has no hover, so there it stays visible. */
+@media (hover: hover) {
+  .card .star-btn[aria-pressed="false"] { opacity: 0; }
+  .card:hover .star-btn, .card:focus-within .star-btn { opacity: 1; }
+}
+@media (pointer: coarse) {
+  .star-btn { width: 40px; height: 40px; margin: -10px -10px -10px 0; }
+}
+/* On the browser's page it follows the name, and is always shown: it is the page's only star. */
+.star-btn.in-title { width: 32px; height: 32px; margin: 0 -4px; }
+.star-btn.in-title .icon { width: 18px; height: 18px; }
 .steps { margin: 16px 0 12px; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
 .copyrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .copyrow code { flex: 1; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); overflow-wrap: anywhere; }

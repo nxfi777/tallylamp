@@ -101,6 +101,11 @@ export const openApiSpec = {
         requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["pinned"], properties: { pinned: { type: "boolean" } } } } } },
         responses: { "200": { description: "updated" }, "400": { description: "invalid input or a linked browser" }, "403": { description: "administrator required" } } },
     },
+    "/browsers/{id}/starred": {
+      put: { summary: "Star or unstar a browser (administrator only). Starred browsers are listed first in the dashboard. Ordering only: unlike pinning, starring holds no room and never stops another browser. Managed and linked browsers can both be starred.",
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["starred"], properties: { starred: { type: "boolean" } } } } } },
+        responses: { "200": { description: "updated" }, "400": { description: "invalid input" }, "403": { description: "administrator required" }, "404": { description: "no such browser" } } },
+    },
     "/browsers/{id}/threads/reset": {
       post: { summary: "Forget a managed browser's measured thread counts, launchThreads and peakThreads (administrator only). Works on a stopped browser. A running browser is measured again from now; its launch is measured on its next start, and until then a start is assumed to need TALLYLAMP_BROWSER_THREADS (startThreads). Use it when a browser was sized from an unusually heavy run and is refused starts it would fit.",
         responses: { "200": { description: "reset" }, "400": { description: "a linked browser" }, "403": { description: "administrator required" } } },

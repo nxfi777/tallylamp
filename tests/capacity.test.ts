@@ -169,6 +169,36 @@ describe("host capacity", () => {
     assert.equal(ctx.browsers.row(own.id).pinned, 0);
   });
 
+  it("stars a browser for the dashboard's order without pinning it, administrator only", async () => {
+    const b = (await browser("starred"));
+    const put = (id: string, body: unknown, auth: Record<string, string> = { Cookie: ctx.cookie }) =>
+      json(`${ctx.url}/api/v1/browsers/${id}/starred`, {
+        method: "PUT", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+    const on = await put(b.id, { starred: true });
+    assert.equal(on.status, 200);
+    assert.equal(on.body.browser.starred, true);
+    assert.equal(on.body.browser.pinned, false, "a star holds no room on the host");
+    const first = ctx.browsers.row(b.id).starred_at;
+    assert.ok(first);
+    // Re-sending the same request keeps the first time, so a retried click is harmless.
+    await put(b.id, { starred: true });
+    assert.equal(ctx.browsers.row(b.id).starred_at, first);
+    assert.equal((await put(b.id, { starred: "yes" })).status, 400);
+    assert.equal((await put("nope", { starred: true })).status, 404);
+    const { token } = createAgent({ name: "Starrer", scopes: DEFAULT_AGENT_SCOPES, maxBrowsers: 1 });
+    const refused = await put(b.id, { starred: false }, { Authorization: `Bearer ${token}` });
+    assert.ok(refused.status === 401 || refused.status === 403, `status ${refused.status}`);
+    assert.equal(ctx.browsers.row(b.id).starred_at, first);
+    const off = await put(b.id, { starred: false });
+    assert.equal(off.body.browser.starred, false);
+    assert.equal(ctx.browsers.row(b.id).starred_at, null);
+    // Pinning refuses a linked browser; starring is only ordering, so it takes one.
+    const linked = (await browser("starred-linked"));
+    getDb().prepare(`UPDATE browsers SET kind = 'linked' WHERE id = ?`).run(linked.id);
+    assert.equal((await put(linked.id, { starred: true })).body.browser.starred, true);
+  });
+
   it("stops an idle unpinned browser to start a pinned one, and tells its owner why", async () => {
     const test = (await browser("idle test"));
     pids(100);

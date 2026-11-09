@@ -572,6 +572,11 @@ export function mountApi(app: Express, browsers: BrowserManager): void {
     res.json({ browser: browsers.publicView(browsers.setPinned(req.params.id, req.body.pinned, req.principal!)) });
   });
 
+  api.put("/api/v1/browsers/:id/starred", requireAdmin, (req, res) => {
+    if (typeof req.body?.starred !== "boolean") throw Err.invalid("starred must be a boolean");
+    res.json({ browser: browsers.publicView(browsers.setStarred(req.params.id, req.body.starred, req.principal!)) });
+  });
+
   api.post("/api/v1/browsers/:id/threads/reset", requireAdmin, (req, res) => {
     res.json({ browser: browsers.publicView(browsers.resetThreads(req.params.id, req.principal!)) });
   });

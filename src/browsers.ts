@@ -73,6 +73,8 @@ export type BrowserRow = {
   kind: string;
   /** Room is held for it on a host with a process ceiling, and it is never stopped to make room. */
   pinned: number;
+  /** When the administrator starred it, or null. Dashboard ordering only; no effect on capacity. */
+  starred_at: string | null;
   /** Threads its process tree reached in the first minute of its last start, and over its last run. */
   launch_threads: number | null;
   peak_threads: number | null;
@@ -387,6 +389,25 @@ export class BrowserManager {
     if (pinned) this.assertManaged(id, "pinning");
     getDb().prepare(`UPDATE browsers SET pinned = ? WHERE id = ?`).run(pinned ? 1 : 0, id);
     audit({ actorType: principal.type, actorId: principal.id, action: pinned ? "browser.pinned" : "browser.unpinned",
+      targetType: "browser", targetId: id });
+    hub.emitEvent("browser.updated", {}, id);
+    return this.row(id);
+  }
+
+  /**
+   * Star a browser so the dashboard lists it first. The operator's own view of the fleet, so the
+   * administrator's alone, and deliberately nothing more than ordering: "pinned" was already
+   * taken by the capacity hold above, which can stop other browsers. Any kind can be starred,
+   * including a linked one, which pinning refuses.
+   */
+  setStarred(id: string, starred: boolean, principal: Principal): BrowserRow {
+    this.assertNoExport();
+    if (principal.type !== "admin") throw Err.unauthorized("only the administrator can star a browser");
+    const row = this.row(id);
+    // Starring twice keeps the first time, so re-sending the same request is harmless.
+    if (starred === (row.starred_at != null)) return row;
+    getDb().prepare(`UPDATE browsers SET starred_at = ? WHERE id = ?`).run(starred ? new Date().toISOString() : null, id);
+    audit({ actorType: principal.type, actorId: principal.id, action: starred ? "browser.starred" : "browser.unstarred",
       targetType: "browser", targetId: id });
     hub.emitEvent("browser.updated", {}, id);
     return this.row(id);
@@ -1588,6 +1609,8 @@ export class BrowserManager {
       moving: this.movingNow.get(row.id) ?? null,
       health: sick ? { state: "unhealthy", reason: sick.reason, since: sick.since } : null,
       pinned: row.pinned === 1,
+      // The administrator starred it, so the dashboard lists it first. Ordering only.
+      starred: row.starred_at != null,
       // Null when its Chrome runs on this instance. Otherwise the worker that has it.
       worker: this.workerView(row),
       // Processes and threads this browser's whole tree holds against the host's ceiling. Null

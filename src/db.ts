@@ -483,6 +483,9 @@ const COLUMN_MIGRATIONS: ReadonlyArray<readonly [table: string, column: string, 
   ["browsers", "worker_id", "TEXT"],
   // Null: it reaches the web from the host its Chrome runs on. Otherwise the gateway it uses.
   ["browsers", "gateway_id", "TEXT"],
+  // When the administrator starred it, or null. Starred browsers lead the dashboard's fleet
+  // list. Ordering only: unlike pinned, it holds no room and changes nothing about capacity.
+  ["browsers", "starred_at", "TEXT"],
   // Lending gained an access level. 'control' is the right default for both: it is what every
   // grant and request written before the column existed meant, so an upgrade changes nobody's
   // standing access.

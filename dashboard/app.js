@@ -701,6 +701,7 @@ function browserMenu(b) {
       running && { label: "Hand back its shared tabs", onSelect: () => call(`/api/v1/browsers/${b.id}/stop`) },
       b.link && { label: "Revoke link…", danger: true, onSelect: () => revokeLink(b) },
       "-",
+      { label: b.starred ? "Unstar" : "Star", onSelect: () => toggleStar(b) },
       { label: "Edit browser details…", onSelect: () => editBrowser(b) },
       { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
       { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name, true) },
@@ -714,6 +715,7 @@ function browserMenu(b) {
       { label: "Open", onSelect: () => go(`/browsers/${b.id}`) },
       human && { label: "Return to agent", onSelect: () => returnControl(b.id) },
       "-",
+      { label: b.starred ? "Unstar" : "Star", onSelect: () => toggleStar(b) },
       { label: "Edit browser details…", onSelect: () => editBrowser(b) },
       canMove(b) && { label: "Move to…", onSelect: () => moveBrowser(b) },
       !b.worker && { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
@@ -733,6 +735,7 @@ function browserMenu(b) {
       : { label: "Start", onSelect: () => call(`/api/v1/browsers/${b.id}/start`) },
     running && { label: "Restart", onSelect: () => call(`/api/v1/browsers/${b.id}/restart`) },
     "-",
+    { label: b.starred ? "Unstar" : "Star", onSelect: () => toggleStar(b) },
     { label: "Edit browser details…", onSelect: () => editBrowser(b) },
     canMove(b) && { label: "Move to…", onSelect: () => moveBrowser(b) },
     !b.worker && { label: "Save profile…", onSelect: () => saveProfileTemplate(b) },
@@ -740,6 +743,43 @@ function browserMenu(b) {
     { label: "Copy browser ID", onSelect: () => copyBrowserId(b) },
     { label: "Delete…", danger: true, onSelect: () => destroyBrowser(b.id, b.name) },
   ];
+}
+
+/**
+ * Starred browsers lead the fleet list. Not "pinned": that word already means the capacity hold
+ * on the Settings tab, which can stop other browsers, and this only changes the order.
+ *
+ * Optimistic, because the only visible effect is where the card sits: waiting a round trip to
+ * move it read as a click that did nothing. Put back if the server refuses. The card leaves the
+ * spot the operator was looking at, so the toast says where it went. Keyboard focus follows it
+ * to its new place: paintBrowsers carries a focused star across every repaint, including the one
+ * the server's own update event triggers a moment later.
+ */
+async function toggleStar(b) {
+  const on = !b.starred;
+  const apply = (value) => {
+    b.starred = value;
+    for (const x of state.browsers) if (x.id === b.id) x.starred = value;
+    if (browsersHost?.isConnected) paintBrowsers();
+    for (const el of document.querySelectorAll(`[data-star="${b.id}"]`)) paintStar(el, b);
+  };
+  apply(on);
+  const ok = await act(() => api(`/api/v1/browsers/${b.id}/starred`, { method: "PUT", body: { starred: on } }));
+  if (!ok) return apply(!on);
+  flash(on ? `${b.name} is starred and listed first.` : `${b.name} is no longer starred.`, true);
+}
+
+function paintStar(el, b) {
+  el.setAttribute("aria-pressed", String(Boolean(b.starred)));
+  el.title = b.starred ? "Starred: listed first. Click to unstar." : "Star: list it first";
+}
+
+/** A toggle with a fixed name; aria-pressed carries the state, the fill shows it. */
+function starButton(b, extra = "") {
+  const el = h("button", { type: "button", class: `star-btn ${extra}`.trim(), "data-star": b.id,
+    "aria-label": `Star ${b.name}`, onClick: (e) => { e.stopPropagation(); void toggleStar(b); } }, icon(ICON_STAR));
+  paintStar(el, b);
+  return el;
 }
 
 /** Cut a linked browser off: its extension disconnects and every shared tab is handed back. */
@@ -905,6 +945,7 @@ const ICON_GLOBE = '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0
 const ICON_COPY = '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>';
 const ICON_MORE = '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>';
 const ICON_CHEVRON = '<path d="m9 18 6-6-6-6"/>';
+const ICON_STAR = '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>';
 const ICON_GEAR = '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>';
 const ICON_SLIDERS = '<path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/>';
 const ICON_USER = '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
@@ -1400,10 +1441,13 @@ function card(b) {
       // DOM is the detail page, and a fleet card that cannot tell you whose project it is makes
       // you open it to find out. Full value in the title, because the line is clamped.
       project ? h("div", { class: "card-project", title: project }, project) : null,
-      h("h3", {}, b.name,
-        b.kind === "linked" ? h("span", { class: "kind-tag", title: "A person's own browser, linked through the Tallylamp extension" }, "linked") : null,
-        b.pinned ? h("span", { class: "kind-tag", title: "Room is held for it on this host, and it is never stopped to make room for another browser" }, "pinned") : null,
-        b.worker ? h("span", { class: "kind-tag" + (b.worker.online ? "" : " warn"), title: b.worker.online ? `Its Chrome runs on the worker ${b.worker.name}` : `Its worker, ${b.worker.name}, is not answering` }, b.worker.name) : null),
+      // The star sits on the title row, at the end, where the eye finishes reading the name.
+      h("div", { class: "card-title" },
+        h("h3", {}, b.name,
+          b.kind === "linked" ? h("span", { class: "kind-tag", title: "A person's own browser, linked through the Tallylamp extension" }, "linked") : null,
+          b.pinned ? h("span", { class: "kind-tag", title: "Room is held for it on this host, and it is never stopped to make room for another browser" }, "pinned") : null,
+          b.worker ? h("span", { class: "kind-tag" + (b.worker.online ? "" : " warn"), title: b.worker.online ? `Its Chrome runs on the worker ${b.worker.name}` : `Its worker, ${b.worker.name}, is not answering` }, b.worker.name) : null),
+        starButton(b)),
       // Six identical grey lines was most of what made this card hard to scan. Owner and
       // reported source moved to the detail page; what stays is what tells you whether to click.
       agentLine(b),
@@ -1728,11 +1772,22 @@ function paintBrowsers() {
     // empty track to the right of every one, and the live browser sat wherever its project fell.
     // The project moved onto the card instead; this heading keeps the outline h1 > h2 > h3
     // intact now that the per-project ones are gone, and doubles as the count while filtering.
-    nodes.push(h("h2", { class: "group-h" }, list.length === 1 ? "1 browser" : `${list.length} browsers`));
-    nodes.push(
-      h("div", { class: "grid", role: "list", "aria-label": "Browsers, running first" },
-        ...list.map(card)),
-    );
+    //
+    // Starred browsers are the one exception: the operator chose them, so they get their own
+    // grid at the top, in the same running-first order, with the rest under a second heading.
+    // A filter applies to both, so a starred browser that does not match is not shown.
+    const starred = list.filter((b) => b.starred);
+    const rest = list.filter((b) => !b.starred);
+    const count = (n, what) => `${n} ${what}${n === 1 ? "" : "s"}`;
+    if (starred.length) {
+      nodes.push(h("h2", { class: "group-h" }, `${starred.length} starred`));
+      nodes.push(h("div", { class: "grid", role: "list", "aria-label": "Starred browsers, running first" }, ...starred.map(card)));
+    }
+    if (rest.length) {
+      nodes.push(h("h2", { class: "group-h" }, count(rest.length, starred.length ? "other browser" : "browser")));
+      nodes.push(h("div", { class: "grid", role: "list", "aria-label": starred.length ? "Other browsers, running first" : "Browsers, running first" },
+        ...rest.map(card)));
+    }
   }
   if (list.length === 0 && state.data.browsers.loadedAt) {
     // Branch on the fleet, not the filtered list: "No browsers yet" while eight are running
@@ -1752,6 +1807,9 @@ function paintBrowsers() {
   // Not while filtering (the row would describe capacity the filter is hiding), and not on an
   // empty fleet, where the empty state already says the same thing.
   const free = state.filter || state.browsers.length === 0 || state.data.status.error ? 0 : freeSlots();
+  // Every card is about to be rebuilt. A focused star would drop focus to the page, and a star
+  // is the one control here whose click moves its own card, so take focus to the new one.
+  const focusedStar = browsersHost.contains(document.activeElement) ? document.activeElement.getAttribute("data-star") : null;
   if (free > 0) {
     const ghosts = [
       h("button", {
@@ -1766,6 +1824,7 @@ function paintBrowsers() {
     nodes.push(h("div", { class: "grid" }, ...ghosts));
   }
   browsersHost.replaceChildren(...nodes);
+  if (focusedStar) browsersHost.querySelector(`[data-star="${focusedStar}"]`)?.focus();
 }
 
 async function homeView() {
@@ -2920,7 +2979,7 @@ async function browserView(id, seq) {
   const stop = linked || stoppedish || b.status === "moving" ? null
     : h("button", { class: "btn", title: b.persistent ? "Stop Chrome. Its logins and data are kept." : false,
         onClick: (e) => stopBrowser(b, e.currentTarget) }, "Stop");
-  const inHeader = new Set(["Watch", "Open", "Start", "Stop browser", "Take control", human && !stoppedish ? "Return to agent" : null]);
+  const inHeader = new Set(["Watch", "Open", "Start", "Stop browser", "Take control", "Star", "Unstar", human && !stoppedish ? "Return to agent" : null]);
   const more = h("button", {
     class: "btn icon-only", "aria-label": `More actions for ${b.name}`, title: "More actions", "aria-haspopup": "menu",
     onClick: (e) => {
@@ -2963,7 +3022,7 @@ async function browserView(id, seq) {
         icon(ICON_CHEVRON), crumbName),
       h("div", { class: "dhead-row" },
         h("div", { class: "dhead-main" },
-          h("div", { class: "dtitle" }, h("h1", {}, nameButton), statusPill(b), agentPill(b)),
+          h("div", { class: "dtitle" }, h("h1", {}, nameButton), starButton(b, "in-title"), statusPill(b), agentPill(b)),
           h("div", { class: "dmeta" }, ...meta)),
         h("div", { class: "dactions" }, stop, more, primary))),
     b.status === "running" && b.gateway && !b.gateway.online ? h("div", { class: "banner gateway", role: "status" },
