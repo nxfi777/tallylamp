@@ -43,3 +43,25 @@ The fix for idle shares is on the server, so it applies to every Link version.
 
 See the [Railway upgrade instructions](railway.md#releasing-and-upgrading) for
 backups and deployment settings.
+
+## Release validation
+
+The [release workflow](https://github.com/nxfi777/tallylamp/actions/runs/43791123940)
+passed application, headed Chrome, and running-container checks before
+publishing the tested image. Its anonymous registry access, digest, version and
+source-revision labels were verified, and `tallylamp-link.zip`, whose manifest
+reads 0.12.5, is attached to the release. Pin this Linux amd64 artifact:
+
+```text
+ghcr.io/nxfi777/tallylamp@sha256:0f276a5f79eeedd0ce36f353061f03f23252feb6b190ef8904341c6e760813b7
+```
+
+Before release, a new test marked a linked browser as last used an hour ago,
+far past the idle limit. On 0.12.4 the reaper stopped it; with this release it
+stays running with its tab still shared. The full service suite passed in the
+workflow, including the existing checks that idle browsers the server runs are
+still stopped.
+
+After the deploy, production served the new dashboard files byte for byte, both
+linked browsers reconnected within 20 seconds of the restart, and its worker
+reported 0.12.5. Both Railway templates pin the digest above.
