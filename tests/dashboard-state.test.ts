@@ -113,7 +113,7 @@ test("success goes to a toast; an error holds the banner until a new navigation 
   let renders = 0;
   const toasts: string[] = [];
   const actions = runInNewContext(`${fn("flash")}\n${fn("go")}; ({flash,go})`, { state: current,
-    document: { querySelector: () => null }, history: { pushState() {} }, render: () => { renders++; },
+    document: { querySelector: () => null }, history: { pushState() {} }, navigate: () => { renders++; },
     toast: (message: string) => toasts.push(message) });
   actions.flash("Saved", true);
   assert.deepEqual(toasts, ["Saved"]);

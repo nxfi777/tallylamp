@@ -614,7 +614,7 @@ function closeMenu() {
  * step and no client dependencies, so a React/Radix menu would mean adopting a bundler for one
  * widget.
  */
-function showMenu(x, y, items, label, { align = "start" } = {}) {
+function showMenu(x, y, items, label, { align = "start", above } = {}) {
   closeMenu();
   const restoreFocus = document.activeElement;
   const entries = items.filter(Boolean);
@@ -650,10 +650,16 @@ function showMenu(x, y, items, label, { align = "start" } = {}) {
   const r = { width: menu.offsetWidth, height: menu.offsetHeight };
   const pad = 8;
   // `end` hangs it from a button's right edge, for a ⋯ at the end of a row.
-  const left = align === "end" || x + r.width + pad > window.innerWidth ? Math.max(pad, x - r.width) : x;
-  const top = y + r.height + pad > window.innerHeight ? Math.max(pad, y - r.height) : y;
+  const flipX = align === "end" || x + r.width + pad > window.innerWidth;
+  const flipY = y + r.height + pad > window.innerHeight;
+  const left = flipX ? Math.max(pad, x - r.width) : x;
+  // `above` is the button's top edge. Flipping from `y`, its bottom edge, laid the menu over the
+  // button that opened it.
+  const top = flipY ? Math.max(pad, (above ?? y) - r.height) : y;
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
+  // It grows out of the corner nearest what opened it, and shrinks back into that corner.
+  menu.style.transformOrigin = `${flipX ? "right" : "left"} ${flipY ? "bottom" : "top"}`;
 
   const onKey = (e) => {
     const i = focusable.indexOf(document.activeElement);
@@ -681,7 +687,16 @@ function showMenu(x, y, items, label, { align = "start" } = {}) {
       document.removeEventListener("contextmenu", onDown, true);
       window.removeEventListener("resize", onMove);
       window.removeEventListener("scroll", onMove, true);
-      menu.remove();
+      // Out of reach at once, then out of sight: inert while it fades, so neither a click nor a
+      // screen reader lands on a menu that is already closed.
+      if (reducedMotion.matches) menu.remove();
+      else {
+        menu.inert = true;
+        menu.classList.add("out");
+        const gone = (e) => { if (!e || e.target === menu) menu.remove(); };
+        menu.addEventListener("animationend", gone);
+        setTimeout(gone, 250);
+      }
       if (restoreFocus && restoreFocus.isConnected) restoreFocus.focus();
     },
   };
@@ -970,8 +985,7 @@ function lamp(state) {
   });
 }
 
-function route() {
-  const p = location.pathname;
+function route(p = location.pathname) {
   if (p.startsWith("/browsers/") && p.split("/").length >= 3) return { name: "browser", id: p.split("/")[2] };
   if (p.startsWith("/requests")) return { name: "requests" };
   if (p.startsWith("/agents")) return { name: "agents" };
@@ -990,7 +1004,127 @@ function route() {
 function go(path, { preserveFlash = false } = {}) {
   if (!preserveFlash) flash("");
   history.pushState({}, "", path);
-  void render();
+  navigate();
+}
+
+/*
+ * Sense of place between the fleet and one of its browsers. Opening a card grows its picture
+ * into the live view; going back shrinks the view into the same card, scrolled to where it was.
+ * The operator never has to find their place again. These two routes are the only pair that
+ * shares an element, so every other navigation stays the cut it was.
+ */
+const LIVE_NAME = "browser-live";
+// A view transition holds the old page on screen while the new one is built, and the detail
+// page needs a round trip first. A click that shows nothing for longer than this reads as a
+// missed click, so past it the old page cross-fades into the loading screen instead, which is
+// no worse than the cut this replaces.
+const TRANSITION_WAIT_MS = 300;
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+// Restored by hand. The browser's own restoration runs before the page it belongs to has been
+// fetched, so it applied the offset to the old page and the new one kept whatever was left.
+history.scrollRestoration = "manual";
+const scrolls = new Map();
+let shownPath = location.pathname;
+let navSeq = 0;
+let onPageShown = null;
+// Set from the moment the fleet is drawn for a transition until its animation ends.
+let liveTransition = null;
+let repaintAfterTransition = false;
+
+/** Resolves true when layout() draws a real page rather than the loading screen, false after `ms`. */
+function pageShown(ms) {
+  onPageShown?.(false);
+  return new Promise((resolve) => {
+    const done = (shown) => {
+      clearTimeout(timer);
+      if (onPageShown === done) onPageShown = null;
+      resolve(shown);
+    };
+    const timer = setTimeout(() => done(false), ms);
+    onPageShown = done;
+  });
+}
+
+/** What scrolls: the main column beside the sidebar, or the whole page once the two stack. */
+function scroller() {
+  const main = document.getElementById("main");
+  return main && getComputedStyle(main).overflowY !== "visible" ? main : document.scrollingElement;
+}
+
+function onScreen(el) {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth ? el : null;
+}
+
+/** What carries across: a browser's picture on its card, or its live view on its own page. */
+function sharedElement(r, id) {
+  if (r.name === "home") return onScreen(document.querySelector(`.card[data-browser-id="${CSS.escape(id)}"] .thumb`));
+  if (r.name === "browser" && r.id === id) return onScreen(document.querySelector("#main .stage, #main .stage-empty"));
+  return null;
+}
+
+/** Every route change: go(), and the browser's own Back and Forward. */
+function navigate({ restore = false, uaTransition = false } = {}) {
+  const seq = ++navSeq;
+  const from = route(shownPath);
+  const to = route();
+  scrolls.set(shownPath, scroller().scrollTop);
+  shownPath = location.pathname;
+  // Back and Forward land where that page was, and so does the fleet when you leave one of its
+  // browsers by the breadcrumb. Anything else is a new page and starts at the top.
+  const top = restore || (from.name === "browser" && to.name === "home") ? scrolls.get(location.pathname) || 0 : 0;
+  const settle = (ms) => pageShown(ms).then((shown) => {
+    // Asked again: layout() has just replaced the column, and the width may have changed.
+    if (shown && seq === navSeq) scroller().scrollTop = top;
+    return shown && seq === navSeq;
+  });
+  const pair = (from.name === "home" && to.name === "browser") || (from.name === "browser" && to.name === "home");
+  const id = to.name === "browser" ? to.id : from.id;
+  const old = pair ? sharedElement(from, id) : null;
+  // uaTransition: a trackpad swipe back already animated the page itself, and a second
+  // animation on top of the browser's would play the same move twice.
+  if (!old || typeof document.startViewTransition !== "function" || reducedMotion.matches || uaTransition || document.visibilityState !== "visible") {
+    // Listening before render(): the login screen is drawn without waiting for anything.
+    void settle(10_000);
+    void render();
+    return;
+  }
+  old.style.viewTransitionName = LIVE_NAME;
+  let next = null;
+  const transition = document.startViewTransition(async () => {
+    old.style.viewTransitionName = "";
+    const started = performance.now();
+    const shown = settle(TRANSITION_WAIT_MS);
+    void render();
+    if (!(await shown)) {
+      // Ran out of time: animate into the loading screen, and still restore the scroll once the
+      // page arrives.
+      if (seq === navSeq) void settle(10_000);
+      return;
+    }
+    next = sharedElement(to, id);
+    if (!next) return;
+    next.style.viewTransitionName = LIVE_NAME;
+    if (to.name === "home") liveTransition = transition;
+    // The card's picture may still be loading after a long visit. Waiting for it, inside the
+    // same budget, keeps the view from shrinking into an empty frame.
+    const img = to.name === "home" ? next.querySelector("img") : null;
+    const left = TRANSITION_WAIT_MS - (performance.now() - started);
+    if (img && !img.complete && left > 0) {
+      img.loading = "eager";
+      await Promise.race([img.decode().catch(() => {}), new Promise((resolve) => setTimeout(resolve, left))]);
+    }
+  });
+  // A newer navigation skips this one; that is not an error.
+  transition.ready.catch(() => {});
+  const clear = () => {
+    if (next) next.style.viewTransitionName = "";
+    if (liveTransition !== transition) return;
+    liveTransition = null;
+    if (repaintAfterTransition) { repaintAfterTransition = false; paintBrowsers(); }
+  };
+  transition.finished.then(clear, clear);
 }
 
 /**
@@ -1121,7 +1255,7 @@ function navItem([href, name, label, paths]) {
     : name === "requests" ? requestBadge() : null);
 }
 
-function layout(main) {
+function layout(main, { placeholder = false } = {}) {
   const r = route().name;
   const current = [...NAV_PAGES, ...NAV_INFRA, NAV_SETTINGS].find(([, name]) => name === r || (name === "home" && r === "browser"));
   app.replaceChildren(
@@ -1159,6 +1293,7 @@ function layout(main) {
         main),
     ),
   );
+  if (!placeholder) onPageShown?.(true);
 }
 
 /**
@@ -1429,6 +1564,8 @@ function card(b) {
   return h("article", {
     class: "card",
     role: "listitem",
+    // How a navigation finds the card to grow out of, and to shrink back into.
+    "data-browser-id": b.id,
     // Right-click anywhere on the card. The menu key and Shift+F10 raise this same event from
     // whatever has focus, so the "⋯" button below inherits the behaviour by bubbling — no extra
     // tab stop per card.
@@ -1487,7 +1624,7 @@ function card(b) {
           "aria-haspopup": "menu",
           onClick: (e) => {
             const r = e.currentTarget.getBoundingClientRect();
-            showMenu(r.left, r.bottom + 4, browserMenu(b), `Actions for ${b.name}`);
+            showMenu(r.left, r.bottom + 4, browserMenu(b), `Actions for ${b.name}`, { above: r.top - 4 });
           },
         }, "⋯"),
       ),
@@ -1751,6 +1888,10 @@ async function requestsView() {
 }
 
 function paintBrowsers() {
+  // The fleet's data lands a frame or two after the cards are drawn from cache, mid-way through a
+  // view shrinking back into its card. Rebuilding the cards then pulls that element out from
+  // under the animation and the browser abandons it, so the repaint waits the 320ms out.
+  if (liveTransition) { repaintAfterTransition = true; return; }
   syncRequestBadges();
   paintRequests();
   // Repainted on the same tick as the fleet, so an SSE event lands a new request in front of
@@ -2673,10 +2814,28 @@ function tabBar(label, items, selected, onSelect) {
 /** Which tab each browser's page was left on, so an action that repaints the page stays there. */
 const detailTabs = new Map();
 const viewerSurfaces = new Map();
-async function browserView(id, seq) {
+/**
+ * The card's last picture, shown in the stage until the first live frame lands. Opening a card
+ * grows that picture into this spot, and without it the picture dissolved into an empty stage
+ * and the page came back a moment later. A copy, so the card's own image and its refresh timer
+ * are left alone; the same URL is already decoded, so the copy paints at once. Dimmed by CSS,
+ * because it is not live.
+ */
+function stagePoster(id) {
+  const kept = thumbs.get(id);
+  if (!kept || !kept.img.complete || !kept.img.naturalWidth) return null;
+  const poster = kept.img.cloneNode();
+  poster.className = "poster";
+  poster.loading = "eager";
+  poster.decoding = "sync";
+  poster.setAttribute("aria-hidden", "true");
+  return poster;
+}
+
+async function browserView(id, seq, pending) {
   let data;
   try {
-    data = await api(`/api/v1/browsers/${id}`);
+    data = await (pending || api(`/api/v1/browsers/${id}`));
   } catch (e) {
     if (seq !== undefined && seq !== renderSeq) return;
     layout([h("h1", {}, "Browser unavailable"), h("div", { class: "err", role: "alert" }, e.message),
@@ -2780,6 +2939,9 @@ async function browserView(id, seq) {
     status,
     img,
   );
+  // Only the tab view: Full browser shows Chrome's whole display, which the card never pictured.
+  const poster = b.status === "running" && surface === "tab" ? stagePoster(id) : null;
+  if (poster) stage.append(poster);
 
   // Chrome's own tab strip is browser UI, and Page.startScreencast only ever captures page
   // content — so the tabs were not hidden by a layout bug, they were never in the stream at
@@ -2986,7 +3148,7 @@ async function browserView(id, seq) {
       const items = browserMenu(b).filter((it) => it && (it === "-" || !inHeader.has(it.label)));
       const tidy = items.filter((it, i) => it !== "-" || (i > 0 && i < items.length - 1 && items[i - 1] !== "-"));
       const r = e.currentTarget.getBoundingClientRect();
-      showMenu(Math.round(r.right), Math.round(r.bottom + 4), tidy, `Actions for ${b.name}`, { align: "end" });
+      showMenu(Math.round(r.right), Math.round(r.bottom + 4), tidy, `Actions for ${b.name}`, { align: "end", above: Math.round(r.top - 4) });
     },
   }, icon(ICON_MORE));
   const crumbName = h("span", { "aria-current": "page" }, b.name);
@@ -3178,6 +3340,10 @@ function keyMessage(e, up) {
  */
 async function connectViewer(id, mode, img, leaseToken, status, ui) {
   let stopped = false;
+  // stagePoster's stand-in. Gone with the first real frame, and on a failure, where a picture of
+  // the page under an error would read as the page still being there.
+  let poster = ui?.stage?.querySelector(":scope > .poster") || null;
+  const dropPoster = () => { if (poster) { poster.remove(); poster = null; } };
   let ws = null;
   let beat = 0;
   let retry = 0;
@@ -3369,6 +3535,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
     // screencast frame cleared the overlay: releasing the lease restarts the stream server
     // side, so "your control lease expired" was painted and erased within a frame.
     if (!retryable) terminal = true;
+    dropPoster();
     img.classList.add("stale");
     const kids = [h("div", {}, text)];
     if (retryable) {
@@ -3406,6 +3573,7 @@ async function connectViewer(id, mode, img, leaseToken, status, ui) {
           img.height = bitmap.height;
         }
         ctx.drawImage(bitmap, 0, 0);
+        dropPoster();
         // Explicit: an ImageBitmap holds decoded pixels, and at 15fps waiting for the collector
         // is megabytes of garbage a second.
         bitmap.close();
@@ -3758,7 +3926,7 @@ function moreButton(label, items) {
     onClick: (e) => {
       e.stopPropagation();
       const r = e.currentTarget.getBoundingClientRect();
-      showMenu(r.right, r.bottom + 4, items(), label, { align: "end" });
+      showMenu(r.right, r.bottom + 4, items(), label, { align: "end", above: r.top - 4 });
     },
   }, icon(ICON_MORE));
 }
@@ -5161,7 +5329,13 @@ async function render() {
   document.title = r.name === "browser" ? "Browser · Tallylamp" : `${TITLES[r.name] || "Tallylamp"} · Tallylamp`;
   if (r.name === "login") return loginView();
   layout([h("h1", {}, TITLES[r.name] || "Browser"),
-    h("div", { class: "data-notice sub", role: "status" }, "Loading your dashboard…")]);
+    h("div", { class: "data-notice sub", role: "status" }, "Loading your dashboard…")], { placeholder: true });
+  // Asked for alongside /me rather than after it. On the way into a browser it was the second of
+  // two round trips between the click and the page, and the page is what a transition waits for.
+  const detail = r.name === "browser" ? api(`/api/v1/browsers/${r.id}`) : null;
+  // Read by browserView, which reports its own failures; this only keeps a request nobody reads,
+  // because /me said to log in, from surfacing as an unhandled rejection.
+  detail?.catch(() => {});
   busy(true);
   let ok;
   let detailStarted = false;
@@ -5180,7 +5354,7 @@ async function render() {
     } else if (r.name === "browser") {
       if (!detailStarted) {
         detailStarted = true;
-        void browserView(r.id, seq);
+        void browserView(r.id, seq, detail);
       } else detailMetadataRefresh?.();
     } else if (r.name === "pair") {
       if (!detailStarted && !state.data.agents.loading) { detailStarted = true; void pairView(r.code); }
@@ -5206,7 +5380,7 @@ async function render() {
     h("button", { class: "btn primary", onClick: () => void render() }, "Retry")]);
 }
 
-window.addEventListener("popstate", () => void render());
+window.addEventListener("popstate", (e) => navigate({ restore: true, uaTransition: e.hasUAVisualTransition }));
 void render();
 
 // /api/v1/events is admin-guarded. This used to run at module load, which on a cold visit is
