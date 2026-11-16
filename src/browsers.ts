@@ -1769,6 +1769,10 @@ export class BrowserManager {
       // A pinned browser is one the operator wants kept up, like a dashboard an agent reads
       // now and then. Idleness is not a reason to stop it.
       if (row.pinned === 1) continue;
+      // Nor for a linked browser. Its Chrome is the person's own, so idling costs this host
+      // nothing, and stopping it would hand back every tab they shared. A share ends when they
+      // stop it or the link drops (linkDropped), not on a timer.
+      if (row.kind === "linked") continue;
       const last = row.last_activity_at ? Date.parse(row.last_activity_at) : Date.parse(row.created_at);
       const watched = this.viewerCount(id) > 0 || this.controlState(id).controllerType === "human";
       const ttl = watched

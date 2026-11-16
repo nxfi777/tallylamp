@@ -71,7 +71,7 @@ Each client that connects over OAuth gets its own agent, so one app can appear s
 
 Linked browsers from 0.6.0 were owned by the one agent picked at approval. Upgrading to 0.6.1 moves them to the administrator and puts that agent on the list, so nothing loses access.
 
-Start and restart mean nothing for it. **Hand back its shared tabs** in the dashboard menu stops the agent and detaches from every tab. **Revoke link** disconnects the extension at once and kills its token. Deleting it from Tallylamp changes nothing in the browser itself.
+Start and restart mean nothing for it, and it is never stopped for being idle. **Hand back its shared tabs** in the dashboard menu stops the agent and detaches from every tab. **Revoke link** disconnects the extension at once and kills its token. Deleting it from Tallylamp changes nothing in the browser itself.
 
 Watching it from the dashboard works like any other browser. The live view shows the shared tab at whatever size your real window is.
 

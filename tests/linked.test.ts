@@ -236,6 +236,25 @@ describe("linked browsers", () => {
     await ext.closed;
   });
 
+  it("is never stopped for being idle: the person ends a share, not the clock", async () => {
+    const { token, browserId } = await pair();
+    const ext = await FakeExtension.connect(token, [[1, "https://example.test/", "Example"]]);
+    await ctx.browsers.ensureRunning(browserId);
+    // Last used an hour ago, past every idle limit. (A limit of 0 turns the reaper off, so 1 s.)
+    getDb().prepare(`UPDATE browsers SET last_activity_at = ? WHERE id = ?`).run(new Date(Date.now() - 3_600_000).toISOString(), browserId);
+    process.env.TALLYLAMP_IDLE_TTL_SEC = "1";
+    try {
+      await ctx.browsers.reapIdle();
+      assert.equal((await view(browserId)).status, "running");
+      assert.equal(ext.calls.some((c) => c.method === "unshare.all"), false, "an idle sweep must not hand back the person's tabs");
+      assert.equal(ext.tabs.size, 1);
+    } finally {
+      delete process.env.TALLYLAMP_IDLE_TTL_SEC;
+    }
+    ext.close();
+    await ext.closed;
+  });
+
   it("gives each CDP client its own session on one shared attachment, and tears down on unshare", async () => {
     const { token, browserId } = await pair();
     const ext = await FakeExtension.connect(token, [[1, "https://example.test/a", "A"]]);
