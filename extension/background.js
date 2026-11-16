@@ -40,6 +40,7 @@ let noticeAbout = null; // { kind, tabId }: which kind of thing, so the panel ca
 let fixIn = null; // { id, site, kind } when the fix is in another extension's settings. `id` if Chrome gave it away.
 let lastServer = null; // The address last connected to, so a person connecting again types nothing.
 let sharedOnce = false; // The panel walks a first share through its steps, and stops once there has been one.
+let groupShares = true; // Dragging a tab into the Tallylamp group shares it. The person can turn this off.
 let releaseAt = null; // When shared tabs are handed back if the server stays unreachable.
 let pingTimer, retryTimer, graceTimer, pollTimer;
 /** tabId -> { tabId, info: {targetId,url,title}, sites: string[] | null, byAgent: boolean, since: number, activity: [] } */
@@ -73,6 +74,7 @@ function snapshot() {
     extensions: fixIn,
     releaseAt,
     sharedOnce,
+    groupShares,
   };
 }
 
@@ -581,6 +583,39 @@ async function group(tabId) {
   }
 }
 
+/**
+ * A tab the person drags into the Tallylamp group is shared, kept to its site as the shortcut
+ * does. Only a drag counts. Chrome files a tab that a page opens (a target=_blank link,
+ * window.open, even with noopener) straight into its opener's group and reports it through
+ * onCreated alone, never as a groupId change, so a shared page can't use the group to hand the
+ * agent a new tab on another site (checked on Chrome for Testing 1243). A drag that can't become
+ * a share is put back out of the group, so the group never shows a tab as shared when it isn't.
+ */
+const joining = new Set();
+async function joinedGroup(tabId, groupId) {
+  if (joining.has(tabId)) return;
+  joining.add(tabId);
+  try {
+    await ready;
+    if (!groupShares || !conn || shared.has(tabId)) return;
+    const group = await chrome.tabGroups?.get(groupId).catch(() => null);
+    if (group?.title !== GROUP_TITLE) return;
+    try {
+      if (link !== "online") throw new Error("Not connected to your server yet, so there is nobody to share with.");
+      const tab = await chrome.tabs.get(tabId);
+      const site = siteOf(tab.url || tab.pendingUrl || "");
+      await share(tabId, { sites: site ? [site] : null });
+    } catch (e) {
+      if (shared.has(tabId)) return;
+      chrome.tabs.ungroup(tabId).catch(() => {});
+      tell("group", String(e?.message ?? e), tabId);
+      changed();
+    }
+  } finally {
+    joining.delete(tabId);
+  }
+}
+
 async function unshare(tabId, reason, { detach = true } = {}) {
   const tab = shared.get(tabId);
   if (!tab) return;
@@ -678,6 +713,7 @@ async function explainDetach(tabId) {
 chrome.tabs.onRemoved.addListener((tabId) => unshare(tabId, "tab closed", { detach: false }));
 
 chrome.tabs.onUpdated.addListener((tabId, change, tabNow) => {
+  if (change.groupId > -1 && !shared.has(tabId)) return void joinedGroup(tabId, change.groupId);
   const tab = shared.get(tabId);
   if (!tab || (change.url === undefined && change.title === undefined)) return;
   if (change.url && !shareable(change.url, true)) {
@@ -716,6 +752,11 @@ const actions = {
     await share(tabId, { sites: site ? [site] : null });
   },
   unshareTab: ({ tabId }) => unshare(tabId, "stopped by the person"),
+  setGroupShares: async ({ on }) => {
+    groupShares = Boolean(on);
+    await chrome.storage.local.set({ groupShares });
+    changed();
+  },
   stopAll: () => unshareAll("stopped by the person"),
   retry: async () => {
     attempts = 0;
@@ -768,11 +809,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
 // The worker is torn down whenever Chrome likes. Debugger attachments outlive it, so what was
 // shared has to be read back and checked against reality before anything is claimed.
 async function boot() {
-  const stored = await chrome.storage.local.get(["conn", "pairing", "lastServer", "sharedOnce"]);
+  const stored = await chrome.storage.local.get(["conn", "pairing", "lastServer", "sharedOnce", "groupShares"]);
   conn = stored.conn ?? null;
   pairing = stored.pairing ?? null;
   lastServer = stored.lastServer ?? conn?.server ?? null;
   sharedOnce = Boolean(stored.sharedOnce);
+  groupShares = stored.groupShares !== false;
   const { shared: was = [], releaseAt: deadline } = await chrome.storage.session.get(["shared", "releaseAt"]);
   releaseAt = Number.isFinite(deadline) ? deadline : null;
   // Check independent attachments four at a time. Keep the persisted tab order, and publish

@@ -392,6 +392,7 @@ const NOTICES = {
   detached: ["warn", "alert", "Chrome stopped sharing a tab"],
   flagged: ["warn", "puzzle", "Your agent was kept out of another extension's frame"],
   disconnected: ["info", "info", "This browser was disconnected"],
+  group: ["warn", "alert", "That tab wasn't shared"],
 };
 
 /** What happened while nobody was looking, titled by kind, with the way back to the tab when there is one. */
@@ -692,7 +693,7 @@ function closeMenu(refocus = false) {
 }
 const outside = (e) => menu && !menu.contains(e.target) && !trigger()?.contains(e.target) && closeMenu();
 
-/** Everything that is not the job itself: the dashboard, the browser's name, the shortcut, the policy, and Disconnect. */
+/** Everything that is not the job itself: the dashboard, the browser's name, the shortcut, sharing by drag, the policy, and Disconnect. */
 function openMenu() {
   if (menu) return closeMenu(true);
   const paired = state.link !== "unpaired" && state.link !== "pairing";
@@ -700,10 +701,16 @@ function openMenu() {
     class: `mi${danger ? " danger" : ""}`, role: "menuitem", tabindex: "-1",
     onclick: () => { closeMenu(); run(); },
   }, icon(ico), label, kbds(keys));
+  const dragShares = state.groupShares !== false;
   const items = [
     state.server && paired ? item("ext", "Open dashboard", openDashboard) : null,
     paired && state.browserName ? item("copy", "Copy browser name", copyName) : null,
     item("keyboard", shortcut ? "Keyboard shortcut" : "Set a keyboard shortcut", () => openTab(SHORTCUTS), { keys: shortcut }),
+    paired ? h("button", {
+      class: "mi", role: "menuitemcheckbox", tabindex: "-1", "aria-checked": String(dragShares),
+      title: "A tab you drag into the Tallylamp tab group is shared, kept to its site",
+      onclick: () => { closeMenu(true); ask("setGroupShares", { on: !dragShares }); },
+    }, icon(dragShares ? "check" : "none"), "Share tabs dragged into the group") : null,
     item("lock", "Privacy policy", () => openTab(PRIVACY)),
     paired ? h("div", { class: "msep", role: "separator" }) : null,
     paired ? item("logout", "Disconnect…", confirmDisconnect, { danger: true }) : null,

@@ -17,7 +17,7 @@ const workerSource = readFileSync(new URL("../extension/background.js", import.m
 const tabIds = [11, 22, 33];
 
 /** Run the shipped worker with virtual time; no browser, network, or real timers. */
-async function worker(session: { releaseAt?: number } = {}) {
+async function worker(session: { releaseAt?: number } = {}, local: Record<string, unknown> = {}) {
   let now = 100_000;
   let timerId = 0;
   const timers = new Map<number, { at: number; period: number; fn: () => unknown }>();
@@ -42,6 +42,13 @@ async function worker(session: { releaseAt?: number } = {}) {
     shared: tabIds.map((tabId) => ({ tabId, sites: null, byAgent: false })), ...session,
   };
   const noopEvent = { addListener: () => {} };
+  /** Tabs Chrome knows about beyond the restored shares, and the groups in the tab strip. */
+  const tabsById = new Map<number, { id: number; url: string; windowId: number }>();
+  const groups = new Map<number, { id: number; title: string }>();
+  const ungrouped: number[] = [];
+  const storedLocal: Record<string, unknown> = {
+    conn: { server: "https://tallylamp.example", token: "test-token", browserId: "browser", browserName: "Test browser" }, ...local,
+  };
   class Socket {
     static CONNECTING = 0;
     static OPEN = 1;
@@ -84,8 +91,8 @@ async function worker(session: { releaseAt?: number } = {}) {
     commands: { onCommand: { addListener: (fn: typeof shortcut) => { shortcut = fn; } } },
     storage: {
       local: {
-        get: async () => ({ conn: { server: "https://tallylamp.example", token: "test-token", browserId: "browser", browserName: "Test browser" } }),
-        set: async () => {}, remove: async () => {},
+        get: async () => ({ ...storedLocal }),
+        set: async (value: object) => { Object.assign(storedLocal, value); }, remove: async () => {},
       },
       session: { get: async () => storedSession, set: async (value: object) => { publications.storage++; Object.assign(storedSession, value); } },
     },
@@ -99,10 +106,21 @@ async function worker(session: { releaseAt?: number } = {}) {
         if (method === "Target.getTargetInfo") return { targetInfo: { targetId: `TARGET${tabId}`, url: `https://example.test/${tabId}`, title: `Tab ${tabId}` } };
         return command ? command(method) : {};
       },
+      attach: async () => {},
       detach: async ({ tabId }: { tabId: number }) => { detached.push(tabId); await detach?.(); },
       onEvent: noopEvent, onDetach: { addListener: (fn: typeof detachedByChrome) => { detachedByChrome = fn; } },
     },
-    tabs: { onRemoved: noopEvent, onUpdated: { addListener: (fn: typeof updated) => { updated = fn; } }, ungroup: async () => {} },
+    tabs: {
+      onRemoved: noopEvent, onUpdated: { addListener: (fn: typeof updated) => { updated = fn; } },
+      get: async (id: number) => tabsById.get(id) ?? Promise.reject(new Error(`No tab with id: ${id}.`)),
+      group: async ({ groupId }: { groupId?: number }) => groupId ?? 1,
+      ungroup: async (id: number) => { ungrouped.push(id); },
+    },
+    tabGroups: {
+      get: async (id: number) => groups.get(id) ?? Promise.reject(new Error(`No group with id: ${id}.`)),
+      query: async ({ title }: { title: string }) => [...groups.values()].filter((g) => g.title === title),
+      update: async () => {},
+    },
     alarms: { create() {}, onAlarm: noopEvent },
     sidePanel: { setPanelBehavior: async () => {}, open: async ({ tabId }: { tabId: number }) => { panelOpened.push(tabId); } },
   };
@@ -119,7 +137,8 @@ async function worker(session: { releaseAt?: number } = {}) {
   });
   await state();
   return {
-    sockets: Socket.instances, detached, debuggerCalls, state, storedSession, flush, publications, badge, panelOpened,
+    sockets: Socket.instances, detached, debuggerCalls, state, storedSession, storedLocal, flush, publications, badge, panelOpened, tabsById, groups, ungrouped,
+    send: (msg: Frame) => new Promise<{ ok: boolean; state: State }>(resolve => receive(msg, {}, resolve as (value: unknown) => void)),
     shortcut: (name: string, tab: Frame) => shortcut(name, tab),
     detachByChrome: (tabId: number, reason: string) => detachedByChrome({ tabId }, reason),
     update: (tabId: number, change: Frame, tab: Frame) => updated(tabId, change, tab),
@@ -355,6 +374,61 @@ describe("Tallylamp Link worker, what the panel is told", () => {
     assert.equal(state.noticeKind, "cancel");
     assert.equal(state.noticeTabId, 22);
     assert.ok(state.shared.every((t) => Number.isFinite(t.since)));
+  });
+});
+
+describe("Tallylamp Link sharing by dragging into the group", () => {
+  /** Tab 44 on news.test, dragged into group 7 named `title`, in a worker that is `online` or not. */
+  async function dragIn({ title = "Tallylamp", url = "https://news.test/today", online = true, local = {} } = {}) {
+    const ext = await worker({}, local);
+    if (online) ext.sockets[0].welcome();
+    await ext.flush();
+    ext.tabsById.set(44, { id: 44, url, windowId: 1 });
+    ext.groups.set(7, { id: 7, title });
+    ext.update(44, { groupId: 7 }, { id: 44, url, groupId: 7 });
+    await ext.flush();
+    await ext.flush();
+    return { ext, state: await ext.state() as State & { shared: Array<{ tabId: number; sites: string[] | null }>; groupShares: boolean } };
+  }
+
+  it("shares a tab dragged into the Tallylamp group, kept to its site", async () => {
+    const { ext, state } = await dragIn();
+    assert.deepEqual(state.shared.find((t) => t.tabId === 44)?.sites, ["news.test"]);
+    assert.ok(ext.sockets[0].sent.some((f) => f.event === "tab.shared" && (f.tab as { tabId: number }).tabId === 44));
+    assert.deepEqual(ext.ungrouped, []);
+  });
+
+  it("leaves tabs in other groups alone", async () => {
+    const { ext, state } = await dragIn({ title: "Reading" });
+    assert.ok(!state.shared.some((t) => t.tabId === 44));
+    assert.deepEqual(ext.ungrouped, []);
+    assert.equal(state.notice, null);
+  });
+
+  it("puts a page Chrome keeps to itself back out of the group and says why", async () => {
+    const { ext, state } = await dragIn({ url: "chrome://settings" });
+    assert.ok(!state.shared.some((t) => t.tabId === 44));
+    assert.deepEqual(ext.ungrouped, [44]);
+    assert.equal(state.noticeKind, "group");
+    assert.equal(state.noticeTabId, 44);
+  });
+
+  it("puts the tab back out while the server is unreachable", async () => {
+    const { ext, state } = await dragIn({ online: false });
+    assert.ok(!state.shared.some((t) => t.tabId === 44));
+    assert.deepEqual(ext.ungrouped, [44]);
+    assert.match(state.notice ?? "", /Not connected/);
+  });
+
+  it("does nothing when the person turned it off, and remembers the choice", async () => {
+    const off = await dragIn({ local: { groupShares: false } });
+    assert.equal(off.state.groupShares, false);
+    assert.ok(!off.state.shared.some((t) => t.tabId === 44));
+    assert.deepEqual(off.ext.ungrouped, []);
+    const { ext } = await dragIn();
+    const res = await ext.send({ type: "setGroupShares", on: false });
+    assert.equal((res.state as unknown as { groupShares: boolean }).groupShares, false);
+    assert.equal(ext.storedLocal.groupShares, false);
   });
 });
 
